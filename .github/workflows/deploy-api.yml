@@ -1,0 +1,40 @@
+name: Deploy API to VPS
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - 'docker-compose.yml'
+      - 'server/Caddyfile'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy files to VPS and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          script: |
+            set -e
+            if [ ! -d "${{ secrets.VPS_DIR }}" ]; then sudo mkdir -p "${{ secrets.VPS_DIR }}" && sudo chown $USER:$USER "${{ secrets.VPS_DIR }}"; fi
+            cd "${{ secrets.VPS_DIR }}"
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin ${{ github.server_url }}/${{ github.repository }}.git
+              git fetch origin
+              git checkout -t origin/${{ github.ref_name }}
+            else
+              git fetch origin
+              git reset --hard origin/${{ github.ref_name }}
+            fi
+            docker compose pull || true
+            docker compose up -d --build
+            docker system prune -f
+

@@ -1,0 +1,22 @@
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="clip">
+      <rect width="400" height="400" rx="24"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="400" height="400" fill="#00247D"/>
+    <!-- White diagonals -->
+    <polygon points="0,40 40,0 400,360 360,400" fill="#FFFFFF"/>
+    <polygon points="360,0 400,40 40,400 0,360" fill="#FFFFFF"/>
+    <!-- Red diagonals -->
+    <polygon points="0,80 80,0 400,320 320,400" fill="#CF142B"/>
+    <polygon points="320,0 400,80 80,400 0,320" fill="#CF142B"/>
+    <!-- White cross -->
+    <rect x="0" y="170" width="400" height="60" fill="#FFFFFF"/>
+    <rect x="170" y="0" width="60" height="400" fill="#FFFFFF"/>
+    <!-- Red cross -->
+    <rect x="0" y="185" width="400" height="30" fill="#CF142B"/>
+    <rect x="185" y="0" width="30" height="400" fill="#CF142B"/>
+  </g>
+</svg>

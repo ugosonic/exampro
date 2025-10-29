@@ -1,0 +1,91 @@
+import 'package:exampro/core/config/env_loader.dart';
+import 'package:exampro/features/admin/data/admin_repository.dart';
+import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+// ignore: unused_import
+import 'package:url_launcher/url_launcher.dart';
+import 'package:exampro/features/payments/presentation/checkout_webview.dart';
+
+class UpgradeScreen extends ConsumerStatefulWidget {
+  const UpgradeScreen({super.key});
+  @override
+  ConsumerState<UpgradeScreen> createState() => _UpgradeScreenState();
+}
+
+class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
+  String currency = 'GBP';
+  bool loading = false;
+
+  Future<void> _pay() async {
+    setState(() => loading = true);
+    final env = await ref.read(envLoaderProvider.future);
+    final url = currency == 'GBP' ? env.stripeCheckoutUrlGbp : env.stripeCheckoutUrlUsd;
+    if (url.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Checkout not configured')));
+      }
+      setState(() => loading = false);
+      return;
+    }
+
+    final result = await Navigator.of(context).push<CheckoutWebViewResult>(
+      MaterialPageRoute(builder: (_) => CheckoutWebView(checkoutUrl: url)),
+    );
+
+    if (result?.success == true) {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        final repo = ref.read(adminRepositoryProvider);
+        final amountMinor = await _priceMinor(currency) ?? (currency == 'GBP' ? 1999 : 1999);
+        await repo.addPayment(email: user.email, amountMinor: amountMinor, currency: currency, intentId: result?.finalUrl?.queryParameters['session_id'] ?? '');
+        await repo.setUserPro(user.email, true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgraded to Pro')));
+          Navigator.of(context).pop();
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment not completed')));
+      }
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<int?> _priceMinor(String cur) async {
+    final repo = ref.read(adminRepositoryProvider);
+    final key = cur == 'GBP' ? 'price_gbp_minor' : 'price_usd_minor';
+    final v = await repo.getSetting(key);
+    return int.tryParse(v ?? '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Upgrade to Pro')),
+      body: FutureBuilder(
+        future: Future.wait([_priceMinor('GBP'), _priceMinor('USD')]),
+        builder: (context, snap) {
+          final prices = snap.data ?? const [1999, 1999];
+          final gbp = prices[0] ?? 1999;
+          final usd = prices[1] ?? 1999;
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Lifetime access unlocks all locked content.'),
+              const SizedBox(height: 12),
+              RadioListTile<String>(value: 'GBP', groupValue: currency, title: Text('£${(gbp / 100).toStringAsFixed(2)} GBP'), onChanged: (v) => setState(() => currency = v ?? 'GBP')),
+              RadioListTile<String>(value: 'USD', groupValue: currency, title: Text('4${(usd / 100).toStringAsFixed(2)} USD'), onChanged: (v) => setState(() => currency = v ?? 'USD')),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(onPressed: loading ? null : _pay, child: loading ? const CircularProgressIndicator() : const Text('Pay')),
+              )
+            ]),
+          );
+        },
+      ),
+    );
+  }
+}
