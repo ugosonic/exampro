@@ -9,6 +9,7 @@ services:
       - PORT=8000
       - DATABASE_URL=${DATABASE_URL}
       - SYNC_ADMIN_TOKEN=${SYNC_ADMIN_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
     networks: [web]
   caddy:
     image: caddy:2-alpine
@@ -29,4 +30,3 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
-

@@ -16,6 +16,40 @@ import 'package:exampro/features/sync/data/sync_api.dart';
 import 'package:exampro/features/sync/data/sync_repository.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
 
+// Top-level helper widget for category thumbnails (supports file or https URLs)
+class _CategoryImage extends StatelessWidget {
+  final String src;
+  const _CategoryImage({required this.src});
+  @override
+  Widget build(BuildContext context) {
+    final isHttp = src.startsWith('http://') || src.startsWith('https://');
+    const w = 90.0, h = 60.0;
+    final border = BorderRadius.circular(10);
+    if (isHttp) {
+      return ClipRRect(
+        borderRadius: border,
+        child: Image.network(
+          src,
+          width: w,
+          height: h,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallback(w, h),
+        ),
+      );
+    }
+    final f = File(src);
+    if (!f.existsSync()) return _fallback(w, h);
+    return Image.file(f, width: w, height: h, fit: BoxFit.cover);
+  }
+
+  Widget _fallback(double w, double h) => Container(
+        width: w,
+        height: h,
+        color: Colors.white.withValues(alpha: 0.06),
+        child: const Icon(Icons.image_not_supported, color: Colors.white70),
+      );
+}
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -118,28 +152,6 @@ class DashboardScreen extends ConsumerWidget {
       ),
     );
   }
-
-class _CategoryImage extends StatelessWidget {
-  final String src;
-  const _CategoryImage({required this.src});
-  @override
-  Widget build(BuildContext context) {
-    final isHttp = src.startsWith('http://') || src.startsWith('https://');
-    final w = 90.0, h = 60.0;
-    final border = BorderRadius.circular(10);
-    if (isHttp) {
-      return ClipRRect(
-        borderRadius: border,
-        child: Image.network(src, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h)),
-      );
-    }
-    final f = File(src);
-    if (!f.existsSync()) return _fallback(w, h);
-    return Image.file(f, width: w, height: h, fit: BoxFit.cover);
-  }
-
-  Widget _fallback(double w, double h) => Container(width: w, height: h, color: Colors.white.withValues(alpha: 0.06), child: const Icon(Icons.image_not_supported, color: Colors.white70));
-}
 
   Widget _homeCategoriesGrid(BuildContext context) {
     return Consumer(builder: (context, ref, _) {
