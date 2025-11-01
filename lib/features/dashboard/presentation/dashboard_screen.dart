@@ -15,13 +15,14 @@ import 'package:exampro/common/widgets/neon_glass.dart';
 import 'package:exampro/features/sync/data/sync_api.dart';
 import 'package:exampro/features/sync/data/sync_repository.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:exampro/core/config/env_loader.dart';
 
 // Top-level helper widget for category thumbnails (supports file or https URLs)
-class _CategoryImage extends StatelessWidget {
+class _CategoryImage extends ConsumerWidget {
   final String src;
   const _CategoryImage({required this.src});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isHttp = src.startsWith('http://') || src.startsWith('https://');
     const w = 90.0, h = 60.0;
     final border = BorderRadius.circular(10);
@@ -35,6 +36,14 @@ class _CategoryImage extends StatelessWidget {
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => _fallback(w, h),
         ),
+      );
+    }
+    if (src.startsWith('/')) {
+      final env = ref.watch(envLoaderProvider).requireValue;
+      final url = '${env.apiBaseUrl}$src';
+      return ClipRRect(
+        borderRadius: border,
+        child: Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h)),
       );
     }
     final f = File(src);

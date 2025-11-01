@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:exampro/core/config/env_loader.dart';
 
 class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
@@ -107,15 +108,21 @@ class CategoriesScreen extends ConsumerWidget {
   }
 }
 
-class _CategoryImage extends StatelessWidget {
+class _CategoryImage extends ConsumerWidget {
   final String src;
   const _CategoryImage({required this.src});
   @override
-  Widget build(BuildContext context) {
-    final isHttp = src.startsWith('http://') || src.startsWith('https://');
+  Widget build(BuildContext context, WidgetRef ref) {
     final w = 90.0, h = 60.0;
+    final isHttp = src.startsWith('http://') || src.startsWith('https://');
     if (isHttp) {
       return Image.network(src, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h));
+    }
+    // Resolve server-relative paths like "/files/..." using API_BASE_URL
+    if (src.startsWith('/')) {
+      final env = ref.watch(envLoaderProvider).requireValue;
+      final url = '${env.apiBaseUrl}$src';
+      return Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h));
     }
     final f = File(src);
     if (!f.existsSync()) return _fallback(w, h);

@@ -197,6 +197,23 @@ app.post('/admin/import-snapshot', auth, async (req, res) => {
   try {
     if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
     const snap = req.body || {};
+    // Prepare media (category/subcategory images) from snapshot for hosting on VPS
+    // Snapshot may contain: media_files: [{ entity: 'categories'|'subcategories', entity_id: <id>, filename, content_base64 }]
+    const media = Array.isArray(snap.media_files) ? snap.media_files : [];
+    const mediaMap = new Map(); // key: `${entity}:${id}` => '/files/<name>'
+    try {
+      for (const m of media) {
+        const entity = m.entity;
+        const id = m.entity_id;
+        const b64 = m.content_base64 || '';
+        if (!entity || !id || !b64) continue;
+        const safeName = `${entity}_${id}_${(m.filename || 'file').replace(/[^\w.\-]+/g, '_')}`;
+        const dest = path.join(UPLOAD_DIR, safeName);
+        try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
+        fs.writeFileSync(dest, Buffer.from(b64, 'base64'));
+        mediaMap.set(`${entity}:${id}`, `/files/${safeName}`);
+      }
+    } catch (_) { /* non-fatal */ }
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -215,15 +232,20 @@ app.post('/admin/import-snapshot', auth, async (req, res) => {
 
       const cats = snap.categories || [];
       for (const c of cats) {
-        await client.query('INSERT INTO categories(id, name, "order", pass_percent, image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, "order"=EXCLUDED."order", pass_percent=EXCLUDED.pass_percent, image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [c.id, c.name, c.order || 0, c.pass_percent || 60, c.image_url || '', c.locked || false]);
+        // Prefer uploaded media URL if provided; otherwise keep HTTP(S) URLs; ignore device-local paths
+        const hosted = mediaMap.get(`categories:${c.id}`);
+        const img = hosted || ((c.image_url && /^https?:/i.test(c.image_url)) ? c.image_url : '');
+        await client.query('INSERT INTO categories(id, name, "order", pass_percent, image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, "order"=EXCLUDED."order", pass_percent=EXCLUDED.pass_percent, image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [c.id, c.name, c.order || 0, c.pass_percent || 60, img, c.locked || false]);
       }
       const subs = snap.subcategories || [];
       for (const s of subs) {
-        await client.query('INSERT INTO subcategories(id, category_id, name, "order", image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET category_id=EXCLUDED.category_id, name=EXCLUDED.name, "order"=EXCLUDED."order", image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [s.id, s.category_id, s.name, s.order || 0, s.image_url || '', s.locked || false]);
+        const hosted = mediaMap.get(`subcategories:${s.id}`);
+        const img = hosted || ((s.image_url && /^https?:/i.test(s.image_url)) ? s.image_url : '');
+        await client.query('INSERT INTO subcategories(id, category_id, name, "order", image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET category_id=EXCLUDED.category_id, name=EXCLUDED.name, "order"=EXCLUDED."order", image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [s.id, s.category_id, s.name, s.order || 0, img, s.locked || false]);
       }
       const exams = snap.exams || [];
       for (const e of exams) {
-        await client.query('INSERT INTO exams(id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, pdf_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, '''')) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, category_id=EXCLUDED.category_id, subcategory_id=EXCLUDED.subcategory_id, question_count=EXCLUDED.question_count, published=EXCLUDED.published, time_limit_minutes=EXCLUDED.time_limit_minutes, shuffle_options=EXCLUDED.shuffle_options, negative_marking=EXCLUDED.negative_marking, pass_percent=EXCLUDED.pass_percent, theme_key=EXCLUDED.theme_key, pdf_url=EXCLUDED.pdf_url', [e.id, e.title, e.description || '', e.category_id, e.subcategory_id, e.question_count || 0, e.published || false, e.time_limit_minutes || 0, e.shuffle_options ?? true, e.negative_marking || false, e.pass_percent || 60, e.theme_key || 0, e.pdf_url || '']);
+        await client.query('INSERT INTO exams(id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, pdf_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, \'\')) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, category_id=EXCLUDED.category_id, subcategory_id=EXCLUDED.subcategory_id, question_count=EXCLUDED.question_count, published=EXCLUDED.published, time_limit_minutes=EXCLUDED.time_limit_minutes, shuffle_options=EXCLUDED.shuffle_options, negative_marking=EXCLUDED.negative_marking, pass_percent=EXCLUDED.pass_percent, theme_key=EXCLUDED.theme_key, pdf_url=EXCLUDED.pdf_url', [e.id, e.title, e.description || '', e.category_id, e.subcategory_id, e.question_count || 0, e.published || false, e.time_limit_minutes || 0, e.shuffle_options ?? true, e.negative_marking || false, e.pass_percent || 60, e.theme_key || 0, e.pdf_url || '']);
       }
       const qs = snap.questions || [];
       for (const q of qs) {
