@@ -19,7 +19,10 @@ class AuthRepository {
   Future<auth_models.User> signIn(String email, String password) async {
     if (_remote != null) {
       final tokens = await _remote!.signIn(email: email, password: password);
+      // Save tokens first so /auth/me can authorize
+      await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
       final me = await _remote!.me();
+      // Re-save with identity details
       await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh, userId: me.id, email: me.email));
       // Respect local admin override for same email
       final local = await (_db.select(_db.users)..where((u) => u.email.equals(me.email))).getSingleOrNull();
@@ -53,7 +56,10 @@ class AuthRepository {
   Future<auth_models.User> register(String email, String password) async {
     if (_remote != null) {
       final tokens = await _remote!.register(email: email, password: password);
+      // Save tokens first so /auth/me can authorize
+      await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
       final me = await _remote!.me();
+      // Re-save with identity details
       await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh, userId: me.id, email: me.email));
       // Persist local row so role/is_pro checks work
       final envAdmins = _adminEmailsCsv.split(',').map((e) => e.trim().toLowerCase()).toSet();

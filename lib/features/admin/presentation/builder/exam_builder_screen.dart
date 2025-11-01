@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io' show File;
 
@@ -6,6 +6,11 @@ import 'package:exampro/features/admin/data/admin_repository.dart';
 import 'package:exampro/features/admin/utils/import_parser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
+import 'package:exampro/core/i18n/translation_populator.dart';
+import 'package:exampro/core/i18n/locale_controller.dart';
+import 'package:exampro/core/network/dio_client.dart';
+import 'package:exampro/core/config/env_loader.dart';
 
 class ExamBuilderScreen extends ConsumerStatefulWidget {
   const ExamBuilderScreen({super.key});
@@ -18,6 +23,8 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
   int _step = 0;
   final _title = TextEditingController();
   final _desc = TextEditingController();
+  final _pdf = TextEditingController();
+  bool isPdfExam = false;
   bool shuffle = true;
   bool negativeMarking = false;
   int timeLimit = 60;
@@ -41,6 +48,64 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
             content: Column(children: [
               TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
               TextField(controller: _desc, decoration: const InputDecoration(labelText: 'Description')),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                title: const Text('Use PDF instead of MCQ questions'),
+                value: isPdfExam,
+                onChanged: (v) => setState(() {
+                  isPdfExam = v;
+                  if (v) questions.clear();
+                }),
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: _pdf,
+                decoration: const InputDecoration(
+                  labelText: 'PDF URL (optional)',
+                  hintText: 'https://.../your-exam.pdf',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.upload_file),
+                  onPressed: () async {
+                    final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
+                    final path = res?.files.single.path;
+                    if (path != null) setState(() => _pdf.text = path);
+                  },
+                  label: const Text('Pick PDF file'),
+                ),
+              ),
+              if (_pdf.text.trim().isNotEmpty && !_pdf.text.trim().startsWith('http'))
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.cloud_upload),
+                    onPressed: () async {
+                      try {
+                        final path = _pdf.text.trim();
+                        final dio = ref.read(dioProvider);
+                        final form = FormData.fromMap({'file': await MultipartFile.fromFile(path)});
+                        final res = await dio.post('/admin/upload/pdf', data: form);
+                        final url = (res.data['url'] as String?) ?? '';
+                        if (url.isEmpty) throw Exception('Invalid response');
+                        final env = ref.read(envLoaderProvider).requireValue;
+                        final absolute = url.startsWith('/') ? '${env.apiBaseUrl}$url' : url;
+                        setState(() => _pdf.text = absolute);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF uploaded')));
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+                        }
+                      }
+                    },
+                    label: const Text('Upload picked PDF'),
+                  ),
+                ),
               const SizedBox(height: 12),
               _CategoryPickers(
                 onSelected: (cat, sub) async {
@@ -105,37 +170,41 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
           Step(
             title: const Text('Questions'),
             content: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    icon: const Icon(Icons.add),
-                    onPressed: _addQuestionDialog,
-                    label: const Text('Add Question'),
+              if (!isPdfExam) ...[
+                Row(children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.add),
+                      onPressed: _addQuestionDialog,
+                      label: const Text('Add Question'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.file_upload),
-                    onPressed: _importQuestions,
-                    label: const Text('Import CSV/JSON'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.file_upload),
+                      onPressed: _importQuestions,
+                      label: const Text('Import CSV/JSON'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.upload_file),
-                    onPressed: _pickCsvFile,
-                    label: const Text('Upload CSV File'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.upload_file),
+                      onPressed: _pickCsvFile,
+                      label: const Text('Upload CSV File'),
+                    ),
                   ),
-                ),
-              ]),
-              const SizedBox(height: 8),
-              _CsvFormatInfo(),
-              const SizedBox(height: 8),
-              Text('Items: ${questions.length}'),
-              const SizedBox(height: 8),
-              ...List.generate(questions.length, (i) => _questionTile(i)),
+                ]),
+                const SizedBox(height: 8),
+                _CsvFormatInfo(),
+                const SizedBox(height: 8),
+                Text('Items: ${questions.length}'),
+                const SizedBox(height: 8),
+                ...List.generate(questions.length, (i) => _questionTile(i)),
+              ] else ...[
+                const Text('PDF exam selected: MCQ steps hidden.'),
+              ],
             ]),
           ),
           Step(
@@ -172,7 +241,7 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
   return Card(
     child: ListTile(
       title: Text(((q['body'] as String?) ?? '').isNotEmpty ? q['body'] : 'Untitled question'),
-      subtitle: Text('${opts.length} options • $correctCount correct'),
+      subtitle: Text('${opts.length} options â€¢ $correctCount correct'),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(icon: const Icon(Icons.edit), onPressed: onEdit),
         IconButton(icon: const Icon(Icons.delete), onPressed: onDelete),
@@ -361,9 +430,16 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
       }
       return;
     }
+    if (isPdfExam && _pdf.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please pick or enter a PDF for this exam')));
+      }
+      return;
+    }
     final examId = await repo.createExam(
       title: _title.text,
       description: _desc.text,
+      pdfUrl: isPdfExam ? _pdf.text.trim() : '',
       categoryId: categoryId!,
       subcategoryId: subcategoryId,
       timeLimitMinutes: timeLimit,
@@ -373,25 +449,36 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
       published: published,
       themeKey: themeKey,
     );
-    for (var i = 0; i < questions.length; i++) {
-      final q = questions[i];
-      final opts = (q['options'] as List).cast<Map>();
-      await repo.addQuestionWithOptions(
-        examId: examId,
-        text: (q['body'] as String?)?.trim().isNotEmpty == true ? q['body'] : 'Question ${i + 1}',
-        explanation: (q['explanation'] as String?) ?? '',
-        options: [
-          for (final o in opts) (text: (o['label'] as String?) ?? '', correct: (o['correct'] as bool?) ?? false)
-        ],
-        points: 1,
-        order: i,
-      );
+    if (!isPdfExam) {
+      for (var i = 0; i < questions.length; i++) {
+        final q = questions[i];
+        final opts = (q['options'] as List).cast<Map>();
+        await repo.addQuestionWithOptions(
+          examId: examId,
+          text: (q['body'] as String?)?.trim().isNotEmpty == true ? q['body'] : 'Question ${i + 1}',
+          explanation: (q['explanation'] as String?) ?? '',
+          options: [
+            for (final o in opts) (text: (o['label'] as String?) ?? '', correct: (o['correct'] as bool?) ?? false)
+          ],
+          points: 1,
+          order: i,
+        );
+      }
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(published ? 'Exam published' : 'Draft saved')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(published ? 'Exam published' : 'Draft saved')));
       Navigator.of(context).pop();
     }
+    // auto-translate new content for current language
+    try {
+      final lang = ref.read(localeProvider).languageCode;
+      if (lang != 'en') {
+        await ref.read(translationPopulatorProvider).populateAll(lang);
+      }
+    } catch (_) {}
   }
+
 }
 
 class _CategoryPickers extends ConsumerStatefulWidget {
@@ -519,4 +606,7 @@ Gradient? _themeGradient(BuildContext context, int key) {
       return null;
   }
 }
+
+
+
 

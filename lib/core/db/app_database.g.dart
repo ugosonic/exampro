@@ -953,6 +953,16 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _pdfUrlMeta = const VerificationMeta('pdfUrl');
+  @override
+  late final GeneratedColumn<String> pdfUrl = GeneratedColumn<String>(
+    'pdf_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -967,6 +977,7 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
     negativeMarking,
     passPercent,
     themeKey,
+    pdfUrl,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1074,6 +1085,12 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
         themeKey.isAcceptableOrUnknown(data['theme_key']!, _themeKeyMeta),
       );
     }
+    if (data.containsKey('pdf_url')) {
+      context.handle(
+        _pdfUrlMeta,
+        pdfUrl.isAcceptableOrUnknown(data['pdf_url']!, _pdfUrlMeta),
+      );
+    }
     return context;
   }
 
@@ -1131,6 +1148,10 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
         DriftSqlType.int,
         data['${effectivePrefix}theme_key'],
       )!,
+      pdfUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pdf_url'],
+      )!,
     );
   }
 
@@ -1153,6 +1174,7 @@ class Exam extends DataClass implements Insertable<Exam> {
   final bool negativeMarking;
   final int passPercent;
   final int themeKey;
+  final String pdfUrl;
   const Exam({
     required this.id,
     required this.title,
@@ -1166,6 +1188,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     required this.negativeMarking,
     required this.passPercent,
     required this.themeKey,
+    required this.pdfUrl,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1184,6 +1207,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     map['negative_marking'] = Variable<bool>(negativeMarking);
     map['pass_percent'] = Variable<int>(passPercent);
     map['theme_key'] = Variable<int>(themeKey);
+    map['pdf_url'] = Variable<String>(pdfUrl);
     return map;
   }
 
@@ -1203,6 +1227,7 @@ class Exam extends DataClass implements Insertable<Exam> {
       negativeMarking: Value(negativeMarking),
       passPercent: Value(passPercent),
       themeKey: Value(themeKey),
+      pdfUrl: Value(pdfUrl),
     );
   }
 
@@ -1224,6 +1249,7 @@ class Exam extends DataClass implements Insertable<Exam> {
       negativeMarking: serializer.fromJson<bool>(json['negativeMarking']),
       passPercent: serializer.fromJson<int>(json['passPercent']),
       themeKey: serializer.fromJson<int>(json['themeKey']),
+      pdfUrl: serializer.fromJson<String>(json['pdfUrl']),
     );
   }
   @override
@@ -1242,6 +1268,7 @@ class Exam extends DataClass implements Insertable<Exam> {
       'negativeMarking': serializer.toJson<bool>(negativeMarking),
       'passPercent': serializer.toJson<int>(passPercent),
       'themeKey': serializer.toJson<int>(themeKey),
+      'pdfUrl': serializer.toJson<String>(pdfUrl),
     };
   }
 
@@ -1258,6 +1285,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     bool? negativeMarking,
     int? passPercent,
     int? themeKey,
+    String? pdfUrl,
   }) => Exam(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -1273,6 +1301,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     negativeMarking: negativeMarking ?? this.negativeMarking,
     passPercent: passPercent ?? this.passPercent,
     themeKey: themeKey ?? this.themeKey,
+    pdfUrl: pdfUrl ?? this.pdfUrl,
   );
   Exam copyWithCompanion(ExamsCompanion data) {
     return Exam(
@@ -1304,6 +1333,7 @@ class Exam extends DataClass implements Insertable<Exam> {
           ? data.passPercent.value
           : this.passPercent,
       themeKey: data.themeKey.present ? data.themeKey.value : this.themeKey,
+      pdfUrl: data.pdfUrl.present ? data.pdfUrl.value : this.pdfUrl,
     );
   }
 
@@ -1321,7 +1351,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           ..write('shuffleOptions: $shuffleOptions, ')
           ..write('negativeMarking: $negativeMarking, ')
           ..write('passPercent: $passPercent, ')
-          ..write('themeKey: $themeKey')
+          ..write('themeKey: $themeKey, ')
+          ..write('pdfUrl: $pdfUrl')
           ..write(')'))
         .toString();
   }
@@ -1340,6 +1371,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     negativeMarking,
     passPercent,
     themeKey,
+    pdfUrl,
   );
   @override
   bool operator ==(Object other) =>
@@ -1356,7 +1388,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           other.shuffleOptions == this.shuffleOptions &&
           other.negativeMarking == this.negativeMarking &&
           other.passPercent == this.passPercent &&
-          other.themeKey == this.themeKey);
+          other.themeKey == this.themeKey &&
+          other.pdfUrl == this.pdfUrl);
 }
 
 class ExamsCompanion extends UpdateCompanion<Exam> {
@@ -1372,6 +1405,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
   final Value<bool> negativeMarking;
   final Value<int> passPercent;
   final Value<int> themeKey;
+  final Value<String> pdfUrl;
   const ExamsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -1385,6 +1419,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.negativeMarking = const Value.absent(),
     this.passPercent = const Value.absent(),
     this.themeKey = const Value.absent(),
+    this.pdfUrl = const Value.absent(),
   });
   ExamsCompanion.insert({
     this.id = const Value.absent(),
@@ -1399,6 +1434,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.negativeMarking = const Value.absent(),
     this.passPercent = const Value.absent(),
     this.themeKey = const Value.absent(),
+    this.pdfUrl = const Value.absent(),
   }) : title = Value(title),
        categoryId = Value(categoryId);
   static Insertable<Exam> custom({
@@ -1414,6 +1450,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     Expression<bool>? negativeMarking,
     Expression<int>? passPercent,
     Expression<int>? themeKey,
+    Expression<String>? pdfUrl,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1428,6 +1465,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       if (negativeMarking != null) 'negative_marking': negativeMarking,
       if (passPercent != null) 'pass_percent': passPercent,
       if (themeKey != null) 'theme_key': themeKey,
+      if (pdfUrl != null) 'pdf_url': pdfUrl,
     });
   }
 
@@ -1444,6 +1482,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     Value<bool>? negativeMarking,
     Value<int>? passPercent,
     Value<int>? themeKey,
+    Value<String>? pdfUrl,
   }) {
     return ExamsCompanion(
       id: id ?? this.id,
@@ -1458,6 +1497,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       negativeMarking: negativeMarking ?? this.negativeMarking,
       passPercent: passPercent ?? this.passPercent,
       themeKey: themeKey ?? this.themeKey,
+      pdfUrl: pdfUrl ?? this.pdfUrl,
     );
   }
 
@@ -1500,6 +1540,9 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     if (themeKey.present) {
       map['theme_key'] = Variable<int>(themeKey.value);
     }
+    if (pdfUrl.present) {
+      map['pdf_url'] = Variable<String>(pdfUrl.value);
+    }
     return map;
   }
 
@@ -1517,7 +1560,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
           ..write('shuffleOptions: $shuffleOptions, ')
           ..write('negativeMarking: $negativeMarking, ')
           ..write('passPercent: $passPercent, ')
-          ..write('themeKey: $themeKey')
+          ..write('themeKey: $themeKey, ')
+          ..write('pdfUrl: $pdfUrl')
           ..write(')'))
         .toString();
   }
@@ -3552,6 +3596,18 @@ class $AttemptsTable extends Attempts with TableInfo<$AttemptsTable, Attempt> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _userEmailMeta = const VerificationMeta(
+    'userEmail',
+  );
+  @override
+  late final GeneratedColumn<String> userEmail = GeneratedColumn<String>(
+    'user_email',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('guest@local'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3563,6 +3619,7 @@ class $AttemptsTable extends Attempts with TableInfo<$AttemptsTable, Attempt> {
     scorePercent,
     gradeLabel,
     synced,
+    userEmail,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3636,6 +3693,12 @@ class $AttemptsTable extends Attempts with TableInfo<$AttemptsTable, Attempt> {
         synced.isAcceptableOrUnknown(data['synced']!, _syncedMeta),
       );
     }
+    if (data.containsKey('user_email')) {
+      context.handle(
+        _userEmailMeta,
+        userEmail.isAcceptableOrUnknown(data['user_email']!, _userEmailMeta),
+      );
+    }
     return context;
   }
 
@@ -3681,6 +3744,10 @@ class $AttemptsTable extends Attempts with TableInfo<$AttemptsTable, Attempt> {
         DriftSqlType.bool,
         data['${effectivePrefix}synced'],
       )!,
+      userEmail: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_email'],
+      )!,
     );
   }
 
@@ -3700,6 +3767,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
   final int scorePercent;
   final String gradeLabel;
   final bool synced;
+  final String userEmail;
   const Attempt({
     required this.id,
     required this.examId,
@@ -3710,6 +3778,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
     required this.scorePercent,
     required this.gradeLabel,
     required this.synced,
+    required this.userEmail,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3727,6 +3796,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
     map['score_percent'] = Variable<int>(scorePercent);
     map['grade_label'] = Variable<String>(gradeLabel);
     map['synced'] = Variable<bool>(synced);
+    map['user_email'] = Variable<String>(userEmail);
     return map;
   }
 
@@ -3745,6 +3815,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
       scorePercent: Value(scorePercent),
       gradeLabel: Value(gradeLabel),
       synced: Value(synced),
+      userEmail: Value(userEmail),
     );
   }
 
@@ -3763,6 +3834,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
       scorePercent: serializer.fromJson<int>(json['scorePercent']),
       gradeLabel: serializer.fromJson<String>(json['gradeLabel']),
       synced: serializer.fromJson<bool>(json['synced']),
+      userEmail: serializer.fromJson<String>(json['userEmail']),
     );
   }
   @override
@@ -3778,6 +3850,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
       'scorePercent': serializer.toJson<int>(scorePercent),
       'gradeLabel': serializer.toJson<String>(gradeLabel),
       'synced': serializer.toJson<bool>(synced),
+      'userEmail': serializer.toJson<String>(userEmail),
     };
   }
 
@@ -3791,6 +3864,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
     int? scorePercent,
     String? gradeLabel,
     bool? synced,
+    String? userEmail,
   }) => Attempt(
     id: id ?? this.id,
     examId: examId ?? this.examId,
@@ -3801,6 +3875,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
     scorePercent: scorePercent ?? this.scorePercent,
     gradeLabel: gradeLabel ?? this.gradeLabel,
     synced: synced ?? this.synced,
+    userEmail: userEmail ?? this.userEmail,
   );
   Attempt copyWithCompanion(AttemptsCompanion data) {
     return Attempt(
@@ -3817,6 +3892,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
           ? data.gradeLabel.value
           : this.gradeLabel,
       synced: data.synced.present ? data.synced.value : this.synced,
+      userEmail: data.userEmail.present ? data.userEmail.value : this.userEmail,
     );
   }
 
@@ -3831,7 +3907,8 @@ class Attempt extends DataClass implements Insertable<Attempt> {
           ..write('score: $score, ')
           ..write('scorePercent: $scorePercent, ')
           ..write('gradeLabel: $gradeLabel, ')
-          ..write('synced: $synced')
+          ..write('synced: $synced, ')
+          ..write('userEmail: $userEmail')
           ..write(')'))
         .toString();
   }
@@ -3847,6 +3924,7 @@ class Attempt extends DataClass implements Insertable<Attempt> {
     scorePercent,
     gradeLabel,
     synced,
+    userEmail,
   );
   @override
   bool operator ==(Object other) =>
@@ -3860,7 +3938,8 @@ class Attempt extends DataClass implements Insertable<Attempt> {
           other.score == this.score &&
           other.scorePercent == this.scorePercent &&
           other.gradeLabel == this.gradeLabel &&
-          other.synced == this.synced);
+          other.synced == this.synced &&
+          other.userEmail == this.userEmail);
 }
 
 class AttemptsCompanion extends UpdateCompanion<Attempt> {
@@ -3873,6 +3952,7 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
   final Value<int> scorePercent;
   final Value<String> gradeLabel;
   final Value<bool> synced;
+  final Value<String> userEmail;
   const AttemptsCompanion({
     this.id = const Value.absent(),
     this.examId = const Value.absent(),
@@ -3883,6 +3963,7 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
     this.scorePercent = const Value.absent(),
     this.gradeLabel = const Value.absent(),
     this.synced = const Value.absent(),
+    this.userEmail = const Value.absent(),
   });
   AttemptsCompanion.insert({
     this.id = const Value.absent(),
@@ -3894,6 +3975,7 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
     this.scorePercent = const Value.absent(),
     this.gradeLabel = const Value.absent(),
     this.synced = const Value.absent(),
+    this.userEmail = const Value.absent(),
   }) : examId = Value(examId),
        mode = Value(mode),
        startedAt = Value(startedAt);
@@ -3907,6 +3989,7 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
     Expression<int>? scorePercent,
     Expression<String>? gradeLabel,
     Expression<bool>? synced,
+    Expression<String>? userEmail,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3918,6 +4001,7 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
       if (scorePercent != null) 'score_percent': scorePercent,
       if (gradeLabel != null) 'grade_label': gradeLabel,
       if (synced != null) 'synced': synced,
+      if (userEmail != null) 'user_email': userEmail,
     });
   }
 
@@ -3931,6 +4015,7 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
     Value<int>? scorePercent,
     Value<String>? gradeLabel,
     Value<bool>? synced,
+    Value<String>? userEmail,
   }) {
     return AttemptsCompanion(
       id: id ?? this.id,
@@ -3942,6 +4027,7 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
       scorePercent: scorePercent ?? this.scorePercent,
       gradeLabel: gradeLabel ?? this.gradeLabel,
       synced: synced ?? this.synced,
+      userEmail: userEmail ?? this.userEmail,
     );
   }
 
@@ -3975,6 +4061,9 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
     if (synced.present) {
       map['synced'] = Variable<bool>(synced.value);
     }
+    if (userEmail.present) {
+      map['user_email'] = Variable<String>(userEmail.value);
+    }
     return map;
   }
 
@@ -3989,7 +4078,8 @@ class AttemptsCompanion extends UpdateCompanion<Attempt> {
           ..write('score: $score, ')
           ..write('scorePercent: $scorePercent, ')
           ..write('gradeLabel: $gradeLabel, ')
-          ..write('synced: $synced')
+          ..write('synced: $synced, ')
+          ..write('userEmail: $userEmail')
           ..write(')'))
         .toString();
   }
@@ -7804,6 +7894,7 @@ typedef $$ExamsTableCreateCompanionBuilder =
       Value<bool> negativeMarking,
       Value<int> passPercent,
       Value<int> themeKey,
+      Value<String> pdfUrl,
     });
 typedef $$ExamsTableUpdateCompanionBuilder =
     ExamsCompanion Function({
@@ -7819,6 +7910,7 @@ typedef $$ExamsTableUpdateCompanionBuilder =
       Value<bool> negativeMarking,
       Value<int> passPercent,
       Value<int> themeKey,
+      Value<String> pdfUrl,
     });
 
 final class $$ExamsTableReferences
@@ -7991,6 +8083,11 @@ class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
 
   ColumnFilters<int> get themeKey => $composableBuilder(
     column: $table.themeKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pdfUrl => $composableBuilder(
+    column: $table.pdfUrl,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8200,6 +8297,11 @@ class $$ExamsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get pdfUrl => $composableBuilder(
+    column: $table.pdfUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$CategoriesTableOrderingComposer get categoryId {
     final $$CategoriesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -8297,6 +8399,9 @@ class $$ExamsTableAnnotationComposer
 
   GeneratedColumn<int> get themeKey =>
       $composableBuilder(column: $table.themeKey, builder: (column) => column);
+
+  GeneratedColumn<String> get pdfUrl =>
+      $composableBuilder(column: $table.pdfUrl, builder: (column) => column);
 
   $$CategoriesTableAnnotationComposer get categoryId {
     final $$CategoriesTableAnnotationComposer composer = $composerBuilder(
@@ -8492,6 +8597,7 @@ class $$ExamsTableTableManager
                 Value<bool> negativeMarking = const Value.absent(),
                 Value<int> passPercent = const Value.absent(),
                 Value<int> themeKey = const Value.absent(),
+                Value<String> pdfUrl = const Value.absent(),
               }) => ExamsCompanion(
                 id: id,
                 title: title,
@@ -8505,6 +8611,7 @@ class $$ExamsTableTableManager
                 negativeMarking: negativeMarking,
                 passPercent: passPercent,
                 themeKey: themeKey,
+                pdfUrl: pdfUrl,
               ),
           createCompanionCallback:
               ({
@@ -8520,6 +8627,7 @@ class $$ExamsTableTableManager
                 Value<bool> negativeMarking = const Value.absent(),
                 Value<int> passPercent = const Value.absent(),
                 Value<int> themeKey = const Value.absent(),
+                Value<String> pdfUrl = const Value.absent(),
               }) => ExamsCompanion.insert(
                 id: id,
                 title: title,
@@ -8533,6 +8641,7 @@ class $$ExamsTableTableManager
                 negativeMarking: negativeMarking,
                 passPercent: passPercent,
                 themeKey: themeKey,
+                pdfUrl: pdfUrl,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -11333,6 +11442,7 @@ typedef $$AttemptsTableCreateCompanionBuilder =
       Value<int> scorePercent,
       Value<String> gradeLabel,
       Value<bool> synced,
+      Value<String> userEmail,
     });
 typedef $$AttemptsTableUpdateCompanionBuilder =
     AttemptsCompanion Function({
@@ -11345,6 +11455,7 @@ typedef $$AttemptsTableUpdateCompanionBuilder =
       Value<int> scorePercent,
       Value<String> gradeLabel,
       Value<bool> synced,
+      Value<String> userEmail,
     });
 
 final class $$AttemptsTableReferences
@@ -11437,6 +11548,11 @@ class $$AttemptsTableFilterComposer
 
   ColumnFilters<bool> get synced => $composableBuilder(
     column: $table.synced,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userEmail => $composableBuilder(
+    column: $table.userEmail,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11538,6 +11654,11 @@ class $$AttemptsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get userEmail => $composableBuilder(
+    column: $table.userEmail,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ExamsTableOrderingComposer get examId {
     final $$ExamsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -11598,6 +11719,9 @@ class $$AttemptsTableAnnotationComposer
 
   GeneratedColumn<bool> get synced =>
       $composableBuilder(column: $table.synced, builder: (column) => column);
+
+  GeneratedColumn<String> get userEmail =>
+      $composableBuilder(column: $table.userEmail, builder: (column) => column);
 
   $$ExamsTableAnnotationComposer get examId {
     final $$ExamsTableAnnotationComposer composer = $composerBuilder(
@@ -11685,6 +11809,7 @@ class $$AttemptsTableTableManager
                 Value<int> scorePercent = const Value.absent(),
                 Value<String> gradeLabel = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
+                Value<String> userEmail = const Value.absent(),
               }) => AttemptsCompanion(
                 id: id,
                 examId: examId,
@@ -11695,6 +11820,7 @@ class $$AttemptsTableTableManager
                 scorePercent: scorePercent,
                 gradeLabel: gradeLabel,
                 synced: synced,
+                userEmail: userEmail,
               ),
           createCompanionCallback:
               ({
@@ -11707,6 +11833,7 @@ class $$AttemptsTableTableManager
                 Value<int> scorePercent = const Value.absent(),
                 Value<String> gradeLabel = const Value.absent(),
                 Value<bool> synced = const Value.absent(),
+                Value<String> userEmail = const Value.absent(),
               }) => AttemptsCompanion.insert(
                 id: id,
                 examId: examId,
@@ -11717,6 +11844,7 @@ class $$AttemptsTableTableManager
                 scorePercent: scorePercent,
                 gradeLabel: gradeLabel,
                 synced: synced,
+                userEmail: userEmail,
               ),
           withReferenceMapper: (p0) => p0
               .map(

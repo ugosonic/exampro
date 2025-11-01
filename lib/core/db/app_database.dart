@@ -36,6 +36,8 @@ class Exams extends Table {
   BoolColumn get negativeMarking => boolean().withDefault(const Constant(false))();
   IntColumn get passPercent => integer().withDefault(const Constant(60))();
   IntColumn get themeKey => integer().withDefault(const Constant(0))();
+  // Optional URL to a reference PDF for the exam
+  TextColumn get pdfUrl => text().withDefault(const Constant(''))();
 }
 
 class Questions extends Table {
@@ -184,10 +186,10 @@ class Payments extends Table {
     Payments,
   ],
 )
-class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(openConnection());
-  @override
-  int get schemaVersion => 11;
+  class AppDatabase extends _$AppDatabase {
+    AppDatabase() : super(openConnection());
+    @override
+    int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -265,6 +267,32 @@ class AppDatabase extends _$AppDatabase {
           if (from < 11) {
             if (!await _columnExists('attempts', 'user_email')) {
               await customStatement("ALTER TABLE attempts ADD COLUMN user_email TEXT NOT NULL DEFAULT 'guest@local'");
+            }
+          }
+          if (from < 12) {
+            if (!await _tableExists('translations')) {
+              await customStatement('CREATE TABLE IF NOT EXISTS translations (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL, entity_id INTEGER NOT NULL, lang TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL)');
+            }
+          }
+          if (from < 13) {
+            // Add pdf_url column to exams if missing (idempotent)
+            if (!await _columnExists('exams', 'pdf_url')) {
+              await m.addColumn(exams, exams.pdfUrl);
+            }
+          }
+          if (from < 14) {
+            // Create pdf_progress table for per-user PDF reading progress
+            if (!await _tableExists('pdf_progress')) {
+              await customStatement(
+                'CREATE TABLE IF NOT EXISTS pdf_progress ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                'exam_id INTEGER NOT NULL, '
+                'user_email TEXT NOT NULL, '
+                'page INTEGER NOT NULL DEFAULT 0, '
+                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'UNIQUE(user_email, exam_id)'
+                ')',
+              );
             }
           }
         },

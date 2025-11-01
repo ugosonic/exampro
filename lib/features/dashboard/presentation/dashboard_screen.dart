@@ -1,4 +1,4 @@
-import 'package:exampro/app/theme/theme_controller.dart';
+﻿import 'package:exampro/app/theme/theme_controller.dart';
 import 'package:exampro/common/widgets/tap_scale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,6 +55,7 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
     final updateBanner = FutureBuilder<String?>(
       future: () async {
         try {
@@ -86,7 +87,7 @@ class DashboardScreen extends ConsumerWidget {
     );
     final mode = ref.watch(themeModeProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('ExamPro'), actions: [
+      appBar: AppBar(title: const Text('Citizenship Test'), actions: [
         IconButton(
           tooltip: 'Theme',
           onPressed: () {
@@ -98,7 +99,9 @@ class DashboardScreen extends ConsumerWidget {
       ]),
       body: NeonBackground(
         child: SafeArea(
-          child: ListView(
+          child: user == null
+              ? _signedOutHome(context)
+              : ListView(
             padding: const EdgeInsets.all(16),
             children: [
               if (updateBanner != null)
@@ -114,7 +117,10 @@ class DashboardScreen extends ConsumerWidget {
               const SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: Text('Select Country', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white.withOpacity(0.95), fontWeight: FontWeight.w700)),
+                child: Text('Select Country', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                  fontWeight: FontWeight.w700,
+                )),
               ),
               const SizedBox(height: 10),
               NeonGlassCard(child: _homeCategoriesGrid(context)),
@@ -123,7 +129,10 @@ class DashboardScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Your Progress', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white.withOpacity(0.95), fontWeight: FontWeight.w700)),
+                    Text('Your Progress', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                      fontWeight: FontWeight.w700,
+                    )),
                     const SizedBox(height: 8),
                     _progressChart(context),
                   ],
@@ -136,7 +145,10 @@ class DashboardScreen extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Recent attempts', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white.withOpacity(0.95), fontWeight: FontWeight.w700)),
+                        Text('Recent attempts', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                          fontWeight: FontWeight.w700,
+                        )),
                         TextButton(onPressed: () => context.go('/attempts'), child: const Text('View all')),
                       ],
                     ),
@@ -153,11 +165,39 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
+  Widget _signedOutHome(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        NeonGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Welcome', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85), fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('Sign in to sync progress across devices, or explore categories without an account.', style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.75))),
+                const SizedBox(height: 12),
+                Row(children: [
+                  FilledButton(onPressed: () => GoRouter.of(context).go('/auth'), child: const Text('Sign in')),
+                  const SizedBox(width: 8),
+                  OutlinedButton(onPressed: () => GoRouter.of(context).go('/categories'), child: const Text('Explore')),
+                ])
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _homeCategoriesGrid(BuildContext context) {
     return Consumer(builder: (context, ref, _) {
       final catsAsync = ref.watch(categoriesProvider);
       final db = ref.watch(dbProvider);
       final user = ref.watch(currentUserProvider);
+      final isDark = Theme.of(context).brightness == Brightness.dark;
       return catsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, st) => Text('Failed to load categories: $e'),
@@ -223,7 +263,7 @@ class DashboardScreen extends ConsumerWidget {
                             else
                               CircleAvatar(radius: 22, child: Icon(icon, size: 24)),
                             const SizedBox(height: 10),
-                            Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+                            Text(c.name, style: TextStyle(fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
                           ])),
                         ]),
                       ),
@@ -263,7 +303,7 @@ class DashboardScreen extends ConsumerWidget {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('Daily Goal', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black.withValues(alpha: 0.85))),
                     const SizedBox(height: 4),
-                    Text('$target mins • Notifications: ${notify ? 'On' : 'Off'}', style: TextStyle(color: Colors.black.withValues(alpha: 0.6)))
+                    Text('$target mins â€¢ Notifications: ${notify ? 'On' : 'Off'}', style: TextStyle(color: Colors.black.withValues(alpha: 0.6)))
                   ]),
                 ),
                 FilledButton(
@@ -410,11 +450,13 @@ class DashboardScreen extends ConsumerWidget {
                         if (i < 0 || i >= items.length) return const SizedBox.shrink();
                         final d = items[i].startedAt;
                         final label = '${d.month}/${d.day}';
-                        return Padding(padding: const EdgeInsets.only(top: 6), child: Text(label, style: const TextStyle(fontSize: 10)));
+                        final isDark = Theme.of(context).brightness == Brightness.dark;
+                        return Padding(padding: const EdgeInsets.only(top: 6), child: Text(label, style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54)));
                       })),
                       leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, meta) {
                         if (v % 25 != 0) return const SizedBox.shrink();
-                        return Text('${v.toInt()}', style: const TextStyle(fontSize: 10));
+                        final isDark = Theme.of(context).brightness == Brightness.dark;
+                        return Text('${v.toInt()}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54));
                       })),
                       rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                       topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -524,6 +566,7 @@ class DashboardScreen extends ConsumerWidget {
                         negativeMarking: false,
                         passPercent: 0,
                         themeKey: 0,
+                        pdfUrl: '',
                       ));
                       final cat = cats.firstWhere((c) => c.id == ex.categoryId, orElse: () => Category(id: ex.categoryId, name: 'Category', order: 0, passPercent: 0, imageUrl: '', locked: false));
                       final sub = (ex.subcategoryId != null)
@@ -539,10 +582,10 @@ class DashboardScreen extends ConsumerWidget {
                               ),
                             )
                           : null;
-                      final label = sub == null ? cat.name : '${cat.name} • ${sub.name}';
-                      return Text('${ex.title} • $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w600));
+                      final label = sub == null ? cat.name : '${cat.name} â€¢ ${sub.name}';
+                      return Text('${ex.title} â€¢ $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w600));
                     }(),
-                    subtitle: Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} • ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black.withValues(alpha: 0.6))),
+                    subtitle: Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} â€¢ ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black.withValues(alpha: 0.6))),
                     onTap: () {
                       final a = attempts[i];
                       if (a.endedAt == null) {
@@ -642,3 +685,5 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 }
+
+

@@ -21,6 +21,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     final state = ref.watch(signUpControllerProvider);
     final controller = ref.read(signUpControllerProvider.notifier);
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Scaffold(
       body: NeonBackground(
         child: SafeArea(
@@ -49,19 +50,19 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                         ),
                       ),
                       const SizedBox(height: 22),
-                      Text('Create account', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white.withOpacity(0.95), fontWeight: FontWeight.w700)),
+                      Text('Create account', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: isDark ? Colors.white.withOpacity(0.95) : const Color(0xFF0B2540), fontWeight: FontWeight.w700)),
                       const SizedBox(height: 16),
-                      TextField(
+              TextField(
                 keyboardType: TextInputType.emailAddress,
                 enabled: !state.loading,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                 decoration: InputDecoration(
                   labelText: 'Email',
-                  prefixIcon: const Icon(Icons.email_outlined, color: Colors.white70),
-                  labelStyle: const TextStyle(color: Colors.white70),
+                  prefixIcon: Icon(Icons.email_outlined, color: isDark ? Colors.white70 : Colors.black45),
+                  labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withOpacity(0.12))),
+                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black12)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4DA3FF))),
                   errorText: state.emailError,
                 ),
@@ -71,18 +72,18 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               TextField(
                 obscureText: _obscure1,
                 enabled: !state.loading,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
-                  labelStyle: const TextStyle(color: Colors.white70),
+                  prefixIcon: Icon(Icons.lock_outline, color: isDark ? Colors.white70 : Colors.black45),
+                  labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withOpacity(0.12))),
+                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black12)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4DA3FF))),
                   errorText: state.passwordError,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure1 ? Icons.visibility_off : Icons.visibility, color: Colors.white70),
+                    icon: Icon(_obscure1 ? Icons.visibility_off : Icons.visibility, color: isDark ? Colors.white70 : Colors.black45),
                     onPressed: () => setState(() => _obscure1 = !_obscure1),
                   ),
                 ),
@@ -92,18 +93,18 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               TextField(
                 obscureText: _obscure2,
                 enabled: !state.loading,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                 decoration: InputDecoration(
                   labelText: 'Confirm password',
-                  prefixIcon: const Icon(Icons.lock_person_outlined, color: Colors.white70),
-                  labelStyle: const TextStyle(color: Colors.white70),
+                  prefixIcon: Icon(Icons.lock_person_outlined, color: isDark ? Colors.white70 : Colors.black45),
+                  labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withOpacity(0.12))),
+                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black12)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4DA3FF))),
                   errorText: state.confirmError,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility, color: Colors.white70),
+                    icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility, color: isDark ? Colors.white70 : Colors.black45),
                     onPressed: () => setState(() => _obscure2 = !_obscure2),
                   ),
                 ),

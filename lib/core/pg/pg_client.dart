@@ -1,4 +1,5 @@
 import 'package:exampro/core/config/env_loader.dart';
+import 'package:exampro/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:postgres/postgres.dart';
 
@@ -32,11 +33,22 @@ class PgClient {
   }
 }
 
-final pgClientProvider = Provider<PgClient>((ref) {
-  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
-  if (env == null || env.databaseUrl.isEmpty) {
-    throw StateError('DATABASE_URL not configured');
-  }
-  return PgClient(env.databaseUrl);
+// Resolve DATABASE_URL from app_settings (key = 'database_url') with fallback to .env
+final databaseUrlProvider = FutureProvider<String>((ref) async {
+  final db = ref.read(dbProvider);
+  try {
+    final row = await (db.select(db.appSettings)..where((s) => s.key.equals('database_url'))).getSingleOrNull();
+    final v = row?.value.trim() ?? '';
+    if (v.isNotEmpty) return v;
+  } catch (_) {}
+  final env = await ref.watch(envLoaderProvider.future);
+  return env.databaseUrl;
 });
 
+final pgClientProvider = FutureProvider<PgClient>((ref) async {
+  final url = await ref.watch(databaseUrlProvider.future);
+  if (url.isEmpty) {
+    throw StateError('DATABASE_URL not configured');
+  }
+  return PgClient(url);
+});

@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 import pkg from 'pg';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 const { Pool } = pkg;
@@ -12,7 +15,20 @@ if (!DATABASE_URL) { throw new Error('DATABASE_URL not set'); }
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: DATABASE_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined });
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+
+// File uploads (PDFs)
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
+try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, UPLOAD_DIR); },
+  filename: function (req, file, cb) {
+    const safe = `${Date.now()}_${(file.originalname || 'file').replace(/[^\w.\-]+/g, '_')}`;
+    cb(null, safe);
+  }
+});
+const upload = multer({ storage });
+app.use('/files', express.static(UPLOAD_DIR));
 
 // JWT helpers
 const signTokens = (user) => {
@@ -174,6 +190,86 @@ app.post('/admin/bump-version', async (req, res) => {
     await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
     return res.json({ ok: true });
   } finally { client.release(); }
+});
+
+// Admin: import snapshot into Neon via server (uses DATABASE_URL of API)
+app.post('/admin/import-snapshot', auth, async (req, res) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
+    const snap = req.body || {};
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Clear existing content tables in dependency order
+      await client.query('DELETE FROM exam_grade_bands');
+      await client.query('DELETE FROM exam_questions');
+      await client.query('DELETE FROM choices');
+      await client.query('DELETE FROM questions');
+      await client.query('DELETE FROM exams');
+      await client.query('DELETE FROM question_categories');
+      await client.query('DELETE FROM question_subcategories');
+      await client.query('DELETE FROM subcategories');
+      await client.query('DELETE FROM categories');
+      await client.query('CREATE TABLE IF NOT EXISTS translations (id BIGSERIAL PRIMARY KEY, entity TEXT NOT NULL, entity_id BIGINT NOT NULL, lang TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL)');
+      await client.query('DELETE FROM translations');
+
+      const cats = snap.categories || [];
+      for (const c of cats) {
+        await client.query('INSERT INTO categories(id, name, "order", pass_percent, image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, "order"=EXCLUDED."order", pass_percent=EXCLUDED.pass_percent, image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [c.id, c.name, c.order || 0, c.pass_percent || 60, c.image_url || '', c.locked || false]);
+      }
+      const subs = snap.subcategories || [];
+      for (const s of subs) {
+        await client.query('INSERT INTO subcategories(id, category_id, name, "order", image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET category_id=EXCLUDED.category_id, name=EXCLUDED.name, "order"=EXCLUDED."order", image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [s.id, s.category_id, s.name, s.order || 0, s.image_url || '', s.locked || false]);
+      }
+      const exams = snap.exams || [];
+      for (const e of exams) {
+        await client.query('INSERT INTO exams(id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, pdf_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, '''')) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, category_id=EXCLUDED.category_id, subcategory_id=EXCLUDED.subcategory_id, question_count=EXCLUDED.question_count, published=EXCLUDED.published, time_limit_minutes=EXCLUDED.time_limit_minutes, shuffle_options=EXCLUDED.shuffle_options, negative_marking=EXCLUDED.negative_marking, pass_percent=EXCLUDED.pass_percent, theme_key=EXCLUDED.theme_key, pdf_url=EXCLUDED.pdf_url', [e.id, e.title, e.description || '', e.category_id, e.subcategory_id, e.question_count || 0, e.published || false, e.time_limit_minutes || 0, e.shuffle_options ?? true, e.negative_marking || false, e.pass_percent || 60, e.theme_key || 0, e.pdf_url || '']);
+      }
+      const qs = snap.questions || [];
+      for (const q of qs) {
+        await client.query('INSERT INTO questions(id, body, explanation, multiple, locked) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET body=EXCLUDED.body, explanation=EXCLUDED.explanation, multiple=EXCLUDED.multiple, locked=EXCLUDED.locked', [q.id, q.body, q.explanation || '', q.multiple || false, q.locked || false]);
+      }
+      const ch = snap.choices || [];
+      for (const c of ch) {
+        await client.query('INSERT INTO choices(id, question_id, label, is_correct, "order") VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET question_id=EXCLUDED.question_id, label=EXCLUDED.label, is_correct=EXCLUDED.is_correct, "order"=EXCLUDED."order"', [c.id, c.question_id, c.label, c.is_correct || false, c.order || 0]);
+      }
+      const eq = snap.exam_questions || [];
+      for (const j of eq) {
+        await client.query('INSERT INTO exam_questions(id, exam_id, question_id, "order", points) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET exam_id=EXCLUDED.exam_id, question_id=EXCLUDED.question_id, "order"=EXCLUDED."order", points=EXCLUDED.points', [j.id, j.exam_id, j.question_id, j.order || 0, j.points || 1]);
+      }
+      const bands = snap.exam_grade_bands || [];
+      for (const b of bands) {
+        await client.query('INSERT INTO exam_grade_bands(id, exam_id, min_percent, label, color) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET exam_id=EXCLUDED.exam_id, min_percent=EXCLUDED.min_percent, label=EXCLUDED.label, color=EXCLUDED.color', [b.id, b.exam_id, b.min_percent, b.label, b.color || '#4CAF50']);
+      }
+      const trans = snap.translations || [];
+      for (const t of trans) {
+        await client.query('INSERT INTO translations(entity, entity_id, lang, k, v) VALUES($1,$2,$3,$4,$5)', [t.entity, t.entity_id, t.lang, t.k, t.v]);
+      }
+      await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+      await client.query('COMMIT');
+      return res.json({ ok: true });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
+      return res.status(500).json({ error: 'failed' });
+    } finally { client.release(); }
+  } catch (e) {
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Admin: upload PDF (JWT required, admin role)
+app.post('/admin/upload/pdf', auth, (req, res) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
+    upload.single('file')(req, res, function (err) {
+      if (err) return res.status(400).json({ error: 'upload_failed' });
+      if (!req.file) return res.status(400).json({ error: 'no_file' });
+      const url = `/files/${req.file.filename}`;
+      return res.json({ url });
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'failed' });
+  }
 });
 
 app.listen(PORT, () => console.log(`API listening on ${PORT}`));

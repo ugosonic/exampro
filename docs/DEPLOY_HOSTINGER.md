@@ -47,8 +47,14 @@ App configuration (production build)
   - DATABASE_URL= (leave empty to disable Neon-direct from app)
   - ADMIN_EMAILS=you@example.com (optional admin override)
 
+Client devices (dev/testing with IP)
+- For emulator/phone builds that point directly to your VPS by IP, set:
+  - API_BASE_URL=http://<YOUR_VPS_IP>:18080
+  - DATABASE_URL= (leave empty)
+- The app uses only HTTP endpoints for content sync and user progress.
+- Admin “Export content” posts a snapshot to the server at `/admin/import-snapshot` (JWT admin), which writes to Neon using the server’s `DATABASE_URL`.
+
 CI/CD from GitHub (optional)
 - Add the workflow .github/workflows/deploy-api.yml and set repo secrets:
   - VPS_HOST, VPS_USER, VPS_KEY (private key), VPS_DIR=/opt/exampro
 - On push to main, the workflow SSHes into VPS and redeploys via docker compose.
-

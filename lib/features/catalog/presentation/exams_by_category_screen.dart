@@ -58,7 +58,15 @@ class ExamsByCategoryScreen extends ConsumerWidget {
           return (exams: list, catLocked: catLocked, subLocked: subLocked, isPro: isPro, subs: subs, completed: completed);
         }(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Failed to load exams: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: Text('No data'));
+          }
           final data = snapshot.data!;
           final exams = data.exams as List;
           final catLocked = data.catLocked as bool;

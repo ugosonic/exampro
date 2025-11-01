@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:exampro/core/network/dio_client.dart';
-import 'package:exampro/core/config/env_loader.dart';
 import 'package:exampro/features/sync/data/pg_content_service.dart';
+import 'package:exampro/core/pg/pg_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class SyncApi {
@@ -61,9 +61,7 @@ class PgSyncApi extends SyncApi {
 }
 
 final syncApiProvider = Provider<SyncApi>((ref) {
-  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
-  if (env != null && env.databaseUrl.isNotEmpty) {
-    return PgSyncApi(ref.watch(pgContentServiceProvider));
-  }
+  // Always use HTTP API hosted on the VPS so client devices don’t need
+  // direct Postgres access or a local DATABASE_URL.
   return SyncApi(ref.watch(dioProvider));
 });

@@ -266,4 +266,7 @@ class PgContentService {
   }
 }
 
-final pgContentServiceProvider = Provider<PgContentService>((ref) => PgContentService(ref.watch(pgClientProvider)));
+final pgContentServiceProvider = FutureProvider<PgContentService>((ref) async {
+  final client = await ref.watch(pgClientProvider.future);
+  return PgContentService(client);
+});

@@ -33,6 +33,7 @@ class SyncRepository {
       await _db.customStatement('DELETE FROM question_subcategories');
       await _db.customStatement('DELETE FROM subcategories');
       await _db.customStatement('DELETE FROM categories');
+      await _db.customStatement('DELETE FROM translations');
 
       // Restore media files (category/subcategory images) if provided
       final media = (snap['media_files'] as List?) ?? const [];
@@ -152,6 +153,20 @@ class SyncRepository {
           label: m['label'] as String,
           color: Value(m['color'] as String? ?? '#4CAF50'),
         ), mode: InsertMode.insertOrReplace);
+      }
+
+      // Optional translations payload
+      final trans = (snap['translations'] as List?) ?? const [];
+      for (final m in trans) {
+        if (m is! Map) continue;
+        final entity = (m['entity'] as String?) ?? '';
+        final entityId = (m['entity_id'] as num?)?.toInt() ?? 0;
+        final lang = (m['lang'] as String?) ?? '';
+        final k = (m['k'] as String?) ?? '';
+        final v = (m['v'] as String?) ?? '';
+        if (entity.isEmpty || entityId == 0 || lang.isEmpty || k.isEmpty || v.isEmpty) continue;
+        await _db.customStatement('INSERT INTO translations(entity, entity_id, lang, k, v) VALUES (?,?,?,?,?)',
+            [entity, entityId, lang, k, v]);
       }
 
       // Optionally sync user attributes (role, is_pro) if provided in snapshot

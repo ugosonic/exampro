@@ -1,22 +1,31 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const _primary = Color(0xFF6750A4); // vibrant purple
-  static const _secondary = Color(0xFF00BFA6); // mint/teal
-  static const _tertiary = Color(0xFFFF8A65); // coral accent
+  // Sky blue palette for light mode
+  static const _primary = Color(0xFF2C69C9); // sky blue
+  static const _secondary = Color(0xFF7AC3FF); // light aqua
+  static const _tertiary = Color(0xFFFFB74D); // warm accent
 
   static ThemeData get light {
     final scheme = ColorScheme.fromSeed(seedColor: _primary, primary: _primary, secondary: _secondary, tertiary: _tertiary);
     return ThemeData(useMaterial3: true, colorScheme: scheme).copyWith(
-      scaffoldBackgroundColor: const Color(0xFFF9FAFE),
-      appBarTheme: const AppBarTheme(elevation: 0, foregroundColor: Color(0xFF101213)),
+      scaffoldBackgroundColor: const Color(0xFFF6FAFF),
+      appBarTheme: const AppBarTheme(elevation: 0, foregroundColor: Color(0xFF0B2540)),
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      navigationBarTheme: const NavigationBarThemeData(indicatorColor: Color(0xFFEDE7F6)),
-      chipTheme: ChipThemeData(backgroundColor: const Color(0xFFE0F2F1), selectedColor: const Color(0xFFFFE0B2)),
+      navigationBarTheme: const NavigationBarThemeData(indicatorColor: Color(0xFFDDEEFF)),
+      chipTheme: ChipThemeData(backgroundColor: const Color(0xFFE1F2FF), selectedColor: const Color(0xFFFFF0DA)),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStatePropertyAll(Color(0xFF0B2540)),
+          backgroundColor: WidgetStatePropertyAll(_primary.withOpacity(0.92)),
+          overlayColor: WidgetStatePropertyAll(_primary.withOpacity(0.12)),
+          shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+        ),
+      ),
     );
   }
 

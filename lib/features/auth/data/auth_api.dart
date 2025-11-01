@@ -3,6 +3,7 @@ import 'package:exampro/core/network/dio_client.dart';
 import 'package:exampro/core/config/env_loader.dart';
 import 'package:exampro/features/auth/domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:exampro/core/auth/token_store.dart';
 
 abstract class AuthApi {
   Future<Tokens> signIn({required String email, required String password});
@@ -14,7 +15,8 @@ abstract class AuthApi {
 
 class AuthApiImpl implements AuthApi {
   final Dio _dio;
-  AuthApiImpl(this._dio);
+  final TokenStore _store;
+  AuthApiImpl(this._dio, this._store);
 
   @override
   Future<Tokens> signIn({required String email, required String password}) async {
@@ -24,7 +26,13 @@ class AuthApiImpl implements AuthApi {
 
   @override
   Future<User> me() async {
-    final res = await _dio.get('/auth/me');
+    final token = await _store.getAccessToken();
+    final res = await _dio.get(
+      '/auth/me',
+      options: token == null
+          ? null
+          : Options(headers: {'Authorization': 'Bearer $token'}),
+    );
     return User.fromJson(res.data as Map<String, dynamic>);
   }
 
@@ -95,5 +103,6 @@ final authApiProvider = Provider<AuthApi>((ref) {
   }
   // Use separate raw dio to avoid interceptor cycles
   final dio = ref.watch(authDioProvider);
-  return AuthApiImpl(dio);
+  final store = ref.watch(tokenStoreProvider);
+  return AuthApiImpl(dio, store);
 });

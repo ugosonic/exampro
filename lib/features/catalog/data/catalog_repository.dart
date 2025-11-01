@@ -8,6 +8,26 @@ class CatalogRepository {
   final db.AppDatabase _db;
   CatalogRepository(this._db);
 
+  Future<String> _lang() async {
+    try {
+      final row = await (_db.select(_db.appSettings)..where((s) => s.key.equals('lang_code'))).getSingleOrNull();
+      return row?.value.isNotEmpty == true ? row!.value : 'en';
+    } catch (_) {
+      return 'en';
+    }
+  }
+
+  Future<String> _translate(String entity, int id, String key, String fallback) async {
+    final lang = await _lang();
+    if (lang == 'en') return fallback;
+    try {
+      final rows = await _db.customSelect('SELECT v FROM translations WHERE entity = ? AND entity_id = ? AND lang = ? AND k = ? LIMIT 1',
+          variables: [drift.Variable(entity), drift.Variable(id), drift.Variable(lang), drift.Variable(key)]).get();
+      if (rows.isNotEmpty) return (rows.first.data['v'] as String?) ?? fallback;
+    } catch (_) {}
+    return fallback;
+  }
+
   Future<List<models.Category>> categories() async {
     final rows = await (_db.select(_db.categories)
           ..orderBy([
@@ -15,15 +35,18 @@ class CatalogRepository {
             (t) => drift.OrderingTerm.asc(t.name),
           ]))
         .get();
-    return rows
-        .map((r) => models.Category(
-              id: r.id,
-              name: r.name,
-              order: r.order,
-              imageUrl: r.imageUrl,
-              locked: r.locked,
-            ))
-        .toList();
+    final out = <models.Category>[];
+    for (final r in rows) {
+      final name = await _translate('categories', r.id, 'name', r.name);
+      out.add(models.Category(
+        id: r.id,
+        name: name,
+        order: r.order,
+        imageUrl: r.imageUrl,
+        locked: r.locked,
+      ));
+    }
+    return out;
   }
 
   Future<List<models.ExamSummary>> exams({int? categoryId}) async {
@@ -32,17 +55,18 @@ class CatalogRepository {
         : (_db.select(_db.exams)..where((tbl) => tbl.categoryId.equals(categoryId)));
     query.where((e) => e.published.equals(true));
     final rows = await query.get();
-    return rows
-        .map((r) => models.ExamSummary(
+    return [
+      for (final r in rows)
+        models.ExamSummary(
               id: r.id,
-              title: r.title,
+              title: await _translate('exams', r.id, 'title', r.title),
               categoryId: r.categoryId,
               subcategoryId: r.subcategoryId,
               questionCount: r.questionCount,
               published: r.published,
               themeKey: r.themeKey,
-            ))
-        .toList();
+            )
+    ];
   }
 
   Stream<List<models.Category>> watchCategories() {
@@ -52,15 +76,20 @@ class CatalogRepository {
             (t) => drift.OrderingTerm.asc(t.name),
           ]))
         .watch()
-        .map((rows) => rows
-            .map((r) => models.Category(
-                  id: r.id,
-                  name: r.name,
-                  order: r.order,
-                  imageUrl: r.imageUrl,
-                  locked: r.locked,
-                ))
-            .toList());
+        .asyncMap((rows) async {
+      final out = <models.Category>[];
+      for (final r in rows) {
+        final name = await _translate('categories', r.id, 'name', r.name);
+        out.add(models.Category(
+          id: r.id,
+          name: name,
+          order: r.order,
+          imageUrl: r.imageUrl,
+          locked: r.locked,
+        ));
+      }
+      return out;
+    });
   }
 
   Future<bool> isCategoryLocked(int id) async {

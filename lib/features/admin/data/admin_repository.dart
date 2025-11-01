@@ -35,6 +35,7 @@ class AdminRepository {
     bool negativeMarking = false,
     bool published = false,
     int themeKey = 0,
+    String pdfUrl = '',
   }) async {
     final id = await _db.into(_db.exams).insert(ExamsCompanion.insert(
           title: title,
@@ -47,6 +48,7 @@ class AdminRepository {
           negativeMarking: drift.Value(negativeMarking),
           published: drift.Value(published),
           themeKey: drift.Value(themeKey),
+          pdfUrl: drift.Value(pdfUrl),
         ));
     // default grade bands
     await _db.batch((b) {
@@ -57,6 +59,34 @@ class AdminRepository {
       ]);
     });
     return id;
+  }
+
+  Future<void> updateExam(int examId, {
+    String? title,
+    String? description,
+    int? categoryId,
+    int? subcategoryId,
+    int? timeLimitMinutes,
+    int? passPercent,
+    bool? shuffleOptions,
+    bool? negativeMarking,
+    bool? published,
+    int? themeKey,
+    String? pdfUrl,
+  }) async {
+    await (_db.update(_db.exams)..where((e) => e.id.equals(examId))).write(ExamsCompanion(
+      title: title != null ? drift.Value(title) : const drift.Value.absent(),
+      description: description != null ? drift.Value(description) : const drift.Value.absent(),
+      categoryId: categoryId != null ? drift.Value(categoryId) : const drift.Value.absent(),
+      subcategoryId: subcategoryId != null ? drift.Value(subcategoryId) : const drift.Value.absent(),
+      timeLimitMinutes: timeLimitMinutes != null ? drift.Value(timeLimitMinutes) : const drift.Value.absent(),
+      passPercent: passPercent != null ? drift.Value(passPercent) : const drift.Value.absent(),
+      shuffleOptions: shuffleOptions != null ? drift.Value(shuffleOptions) : const drift.Value.absent(),
+      negativeMarking: negativeMarking != null ? drift.Value(negativeMarking) : const drift.Value.absent(),
+      published: published != null ? drift.Value(published) : const drift.Value.absent(),
+      themeKey: themeKey != null ? drift.Value(themeKey) : const drift.Value.absent(),
+      pdfUrl: pdfUrl != null ? drift.Value(pdfUrl) : const drift.Value.absent(),
+    ));
   }
 
   Future<int> addQuestionWithOptions({
@@ -203,6 +233,23 @@ class AdminRepository {
 
   // Exams
   Stream<List<Exam>> watchExams() => _db.select(_db.exams).watch();
+
+  // Localized exams stream: reacts to language and translation changes immediately
+  Stream<List<Exam>> watchExamsLocalized() {
+    const sql =
+        'SELECT e.id, '
+        "COALESCE(NULLIF(t.v, ''), e.title) AS title, "
+        'e.description, e.category_id, e.subcategory_id, e.question_count, e.published, '
+        'e.time_limit_minutes, e.shuffle_options, e.negative_marking, e.pass_percent, e.theme_key, e.pdf_url '
+        'FROM exams e '
+        "LEFT JOIN app_settings s ON s.key = 'lang_code' "
+        "LEFT JOIN translations t ON t.entity = 'exams' AND t.entity_id = e.id AND t.k = 'title' AND t.lang = COALESCE(s.value, 'en') "
+        'ORDER BY e.id DESC';
+    return _db
+        .customSelect(sql, readsFrom: { _db.exams, _db.appSettings })
+        .watch()
+        .map((rows) => [for (final r in rows) _db.exams.map(r.data)]);
+  }
   Future<void> setExamPublished(int examId, bool published) async {
     await (_db.update(_db.exams)..where((t) => t.id.equals(examId))).write(ExamsCompanion(published: drift.Value(published)));
   }
@@ -306,6 +353,19 @@ class AdminRepository {
 
   Future<void> setUserPro(String email, bool isPro) async {
     await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(UsersCompanion(isPro: drift.Value(isPro)));
+  }
+
+  // Exam flags stored in app_settings to avoid codegen: key = 'exam_readonly_<id>' value '1'/'0'
+  Future<bool> getExamReadOnly(int examId) async {
+    final key = 'exam_readonly_${examId}';
+    final row = await (_db.select(_db.appSettings)..where((s) => s.key.equals(key))).getSingleOrNull();
+    return row?.value == '1';
+  }
+  Future<void> setExamReadOnly(int examId, bool readOnly) async {
+    final key = 'exam_readonly_${examId}';
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(AppSettingsCompanion(key: drift.Value(key), value: drift.Value(readOnly ? '1' : '0')));
   }
 
   // Reports

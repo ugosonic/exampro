@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:exampro/core/analytics/analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'widgets/language_picker.dart';
 
 class OnboardingScreen extends ConsumerWidget {
   const OnboardingScreen({super.key});
@@ -10,74 +12,85 @@ class OnboardingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final analytics = ref.read(analyticsProvider);
-    final theme = Theme.of(context);
-    return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-            SliverToBoxAdapter(
-              child: _HeroHeader(
-                onCreateAccount: () {
-                  analytics.event('cta_create_account');
-                  context.go('/register');
-                },
-                onSignIn: () {
-                  analytics.event('cta_sign_in');
-                  context.go('/auth');
-                },
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  'Everything you need for the Life in the UK Test',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  'Master the official handbook with practice questions, timed mock exams, and smart progress tracking.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.75),
-                  ),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              sliver: SliverToBoxAdapter(child: _FeatureGrid()),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-              sliver: const SliverToBoxAdapter(child: _HowItWorks()),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                child: Column(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark
+        ? const LinearGradient(colors: [Color(0xFF2A2E79), Color(0xFF161A4F)], begin: Alignment.topCenter, end: Alignment.bottomCenter)
+        : const LinearGradient(colors: [Color(0xFFE6F3FF), Color(0xFFFFFFFF)], begin: Alignment.topCenter, end: Alignment.bottomCenter);
+
+    return Scaffold(
+      body: SafeArea(
+        child: Container(
+          decoration: BoxDecoration(gradient: bg),
+          width: double.infinity,
+          height: double.infinity,
+          child: Stack(children: [
+            const _DotsPattern(top: 24, right: 16),
+            const Positioned(top: 12, left: 12, child: LanguagePicker()),
+            const _DotsPattern(bottom: 24, left: 16),
+            const Positioned(bottom: 20, right: 16, child: _FlagCycler()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+              child: LayoutBuilder(builder: (context, c) {
+                final w = c.maxWidth;
+                final titleSize = w.clamp(280, 720) / 12; // responsive ~ 24-60
+                final subSize = (titleSize * 0.32).clamp(12, 18);
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    FilledButton(
-                      onPressed: () {
-                        analytics.event('cta_get_started');
-                        context.go('/register');
-                      },
-                      child: const Text('Get Started'),
+                    _HeroTitle(isDark: isDark, fontSize: titleSize),
+                    const SizedBox(height: 10),
+                    Opacity(
+                      opacity: 0.85,
+                      child: Text(
+                        'Practice for UK, US, Canada, Australia and more.',
+                        style: TextStyle(color: isDark ? Colors.white : const Color(0xFF0B2540), fontSize: subSize.toDouble(), fontWeight: FontWeight.w500),
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () => context.go('/auth'),
-                      child: const Text('I already have an account'),
+                    const SizedBox(height: 18),
+                    Divider(color: (isDark ? Colors.white : Colors.black).withOpacity(0.25), thickness: 1),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFCC33),
+                          foregroundColor: const Color(0xFF0B2540),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          elevation: 2,
+                        ),
+                        onPressed: () {
+                          analytics.event('cta_sign_in');
+                          context.go('/auth');
+                        },
+                        child: const Text('SIGN IN', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: isDark ? Colors.white : const Color(0xFF0B2540),
+                          side: BorderSide(color: (isDark ? Colors.white : Colors.black).withOpacity(0.2)),
+                          backgroundColor: isDark ? Colors.white.withOpacity(0.08) : Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                        ),
+                        onPressed: () {
+                          analytics.event('cta_create_account');
+                          context.go('/register');
+                        },
+                        child: const Text('CREATE AN ACCOUNT', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                      ),
                     ),
                   ],
-                ),
-              ),
-            ),
-        ],
+                );
+              }),
+            )
+          ]),
+        ),
       ),
     );
   }
@@ -93,56 +106,48 @@ class _HeroHeader extends StatelessWidget {
     final theme = Theme.of(context);
     return LayoutBuilder(builder: (context, constraints) {
       final isNarrow = constraints.maxWidth < 600;
-      final content = [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Life in the UK\nTest Prep',
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Practice questions • Mock tests • Study plan',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.75),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: const [
-                  _Pill(text: 'Timed mocks'),
-                  _Pill(text: 'Official topics'),
-                  _Pill(text: 'Progress insights'),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  FilledButton(onPressed: onCreateAccount, child: const Text('Create Account')),
-                  const SizedBox(width: 12),
-                  OutlinedButton(onPressed: onSignIn, child: const Text('Sign In')),
-                ],
-              )
-            ],
+      final left = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Discover the best\nCitizenship tests',
+            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
           ),
-        ),
-        const SizedBox(width: 12, height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: SvgPicture.asset(
-              'assets/images/uk_hero.svg',
-              fit: BoxFit.cover,
-              placeholderBuilder: (context) => Container(color: Colors.white),
+          const SizedBox(height: 8),
+          Text('Study smart. Practice more. Sure pass.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.75),
             ),
           ),
+          const SizedBox(height: 16),
+          const Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _Pill(text: 'Timed mocks'),
+              _Pill(text: 'Official topics'),
+              _Pill(text: 'Progress insights'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            FilledButton(onPressed: onCreateAccount, child: const Text('Create Account')),
+            const SizedBox(width: 12),
+            OutlinedButton(onPressed: onSignIn, child: const Text('Sign In')),
+          ])
+        ],
+      );
+      final right = ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: SvgPicture.asset(
+            'assets/images/uk_hero.svg',
+            fit: BoxFit.cover,
+            placeholderBuilder: (context) => Container(color: Colors.white),
+          ),
         ),
-      ];
+      );
 
       return Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -159,8 +164,8 @@ class _HeroHeader extends StatelessWidget {
           ),
         ),
         child: isNarrow
-            ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: content)
-            : Row(crossAxisAlignment: CrossAxisAlignment.center, children: content),
+            ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [left, const SizedBox(height: 12), right])
+            : Row(crossAxisAlignment: CrossAxisAlignment.center, children: [Expanded(child: left), const SizedBox(width: 12), Expanded(child: right)]),
       );
     });
   }
@@ -235,6 +240,124 @@ class _FeatureGrid extends StatelessWidget {
         ],
       );
     });
+  }
+}
+
+// Decorative dotted pattern
+class _DotsPattern extends StatelessWidget {
+  final double? top;
+  final double? right;
+  final double? bottom;
+  final double? left;
+  const _DotsPattern({this.top, this.right, this.bottom, this.left});
+  @override
+  Widget build(BuildContext context) {
+    final color = (Theme.of(context).brightness == Brightness.dark) ? const Color(0xFF69B7FF) : const Color(0xFF9ED7FF);
+    final child = CustomPaint(
+      size: const Size(120, 140),
+      painter: _DotsPainter(color.withOpacity(0.8)),
+    );
+    return Positioned(top: top, right: right, bottom: bottom, left: left, child: child);
+  }
+}
+
+class _DotsPainter extends CustomPainter {
+  final Color c;
+  _DotsPainter(this.c);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = c..style = PaintingStyle.fill;
+    const spacing = 12.0;
+    const r = 2.0;
+    for (double y = 0; y < size.height; y += spacing) {
+      for (double x = 0; x < size.width; x += spacing) {
+        canvas.drawCircle(Offset(x, y), r, paint);
+      }
+    }
+  }
+  @override
+  bool shouldRepaint(covariant _DotsPainter oldDelegate) => false;
+}
+
+// Big title with gradient word, matching the reference layout
+class _HeroTitle extends StatelessWidget {
+  final bool isDark;
+  final double? fontSize;
+  const _HeroTitle({required this.isDark, this.fontSize});
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, height: 1.05, fontSize: fontSize);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Discover the best', style: base?.copyWith(color: isDark ? Colors.white : const Color(0xFF0B2540))),
+        _GradientWord('citizenship', style: base),
+        Text('practice tests', style: base?.copyWith(color: const Color(0xFFFFC107))),
+      ],
+    );
+  }
+}
+
+class _GradientWord extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  const _GradientWord(this.text, {this.style});
+  @override
+  Widget build(BuildContext context) {
+    final gradient = const LinearGradient(colors: [Color(0xFF22D3EE), Color(0xFF2EA5FF)]);
+    return ShaderMask(
+      shaderCallback: (bounds) => gradient.createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
+      child: Text(text, style: (style ?? const TextStyle()).copyWith(color: Colors.white)),
+    );
+  }
+}
+
+// Rotating set of waving flags placed at bottom-right
+class _FlagCycler extends StatefulWidget {
+  const _FlagCycler();
+  @override
+  State<_FlagCycler> createState() => _FlagCyclerState();
+}
+
+class _FlagCyclerState extends State<_FlagCycler> with TickerProviderStateMixin {
+  late final AnimationController _wave;
+  int _index = 0;
+  Timer? _timer;
+  static const _flags = ['🇨🇦', '🇬🇧', '🇦🇺', '🇺🇸'];
+
+  @override
+  void initState() {
+    super.initState();
+    _wave = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      setState(() => _index = (_index + 1) % _flags.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _wave.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = isDark ? Colors.white : const Color(0xFF0B2540);
+    return AnimatedBuilder(
+      animation: _wave,
+      builder: (context, _) {
+        final angle = 0.06 * (2 * (_wave.value - 0.5));
+        return Transform.rotate(
+          angle: angle,
+          child: Text(
+            _flags[_index],
+            style: TextStyle(fontSize: 36, shadows: [Shadow(color: color.withOpacity(0.25), blurRadius: 4)]),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -371,3 +494,4 @@ class _FeatureCard extends StatelessWidget {
     );
   }
 }
+

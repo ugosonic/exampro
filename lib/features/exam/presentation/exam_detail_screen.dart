@@ -1,7 +1,10 @@
+﻿import 'package:exampro/core/i18n/tr_text.dart';
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:exampro/features/exam/data/exam_repository.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:exampro/features/exam/presentation/pdf_viewer_screen.dart';
+import 'package:exampro/core/config/env_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,8 +20,7 @@ class ExamDetailScreen extends ConsumerWidget {
     final repo = ref.watch(examRepositoryProvider);
     final id = int.tryParse(examId) ?? 0;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Exam'),
+      appBar: AppBar(title: const TrText('Exam'),
         actions: [
           IconButton(
             tooltip: 'Report',
@@ -57,7 +59,11 @@ class ExamDetailScreen extends ConsumerWidget {
                   isPro = row?.isPro ?? false;
                 }
                 final locked = (cat.locked) || (sub?.locked ?? false);
-                return (cat: cat, sub: sub, isPro: isPro, locked: locked);
+                // Read-only flag stored in app_settings as exam_readonly_<id>
+                final key = 'exam_readonly_${id}';
+                final ro = await (db.select(db.appSettings)..where((s) => s.key.equals(key))).getSingleOrNull();
+                final readOnly = (ro?.value == '1');
+                return (cat: cat, sub: sub, isPro: isPro, locked: locked, readOnly: readOnly);
               }(),
               builder: (context, gateSnap) {
                 final g = gateSnap.data;
@@ -83,10 +89,54 @@ class ExamDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('#questions: ${ex.questionCount}   •   Time: ${ex.timeLimitMinutes} mins   •   Pass: ${ex.passPercent}%'),
+                  Text('#questions: ${ex.questionCount}   â€¢   Time: ${ex.timeLimitMinutes} mins   â€¢   Pass: ${ex.passPercent}%'),
                   if (ex.description.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(ex.description),
+                  ],
+                  if ((ex.pdfUrl).isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    FutureBuilder<({bool readOnly, int page, String email})>(
+                      future: () async {
+                        final user = ref.read(currentUserProvider);
+                        final email = user?.email ?? 'guest@local';
+                        final key = 'exam_readonly_${id}';
+                        final row = await (db.select(db.appSettings)..where((s) => s.key.equals(key))).getSingleOrNull();
+                        final ro = (row?.value == '1');
+                        final page = await repo.pdfProgress(examId: id, userEmail: email);
+                        return (readOnly: ro, page: page, email: email);
+                      }(),
+                      builder: (context, snap) {
+                        final st = snap.data;
+                        final page = st?.page ?? 0;
+                        final email = st?.email ?? 'guest@local';
+                        return SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.picture_as_pdf),
+                            onPressed: () {
+                              final env = ref.read(envLoaderProvider).requireValue;
+                              final src = ex.pdfUrl.startsWith('http')
+                                  ? ex.pdfUrl
+                                  : ex.pdfUrl.startsWith('/')
+                                      ? '${env.apiBaseUrl}${ex.pdfUrl}'
+                                      : ex.pdfUrl; // local path
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => PdfViewerScreen(
+                                    source: src,
+                                    examId: id,
+                                    userEmail: email,
+                                    initialPage: page,
+                                  ),
+                                ),
+                              );
+                            },
+                            label: Text(page > 0 ? 'Continue reading (page ${page + 1})' : 'Read PDF'),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                   const SizedBox(height: 16),
                   Expanded(
@@ -115,7 +165,7 @@ class ExamDetailScreen extends ConsumerWidget {
                                   final date = ended ?? a.startedAt;
                                   final subtitle = (ended == null)
                                       ? 'In progress'
-                                      : 'Score: ${a.scorePercent}% ${a.gradeLabel.isNotEmpty ? ' • ${a.gradeLabel}' : ''}';
+                                      : 'Score: ${a.scorePercent}% ${a.gradeLabel.isNotEmpty ? ' â€¢ ${a.gradeLabel}' : ''}';
                                   return ListTile(
                                     leading: Icon(ended == null ? Icons.play_circle : Icons.check_circle, color: ended == null ? Colors.orange : Colors.green),
                                     title: Text('${date.toLocal()}'.split('.').first),
@@ -142,7 +192,9 @@ class ExamDetailScreen extends ConsumerWidget {
                                 child: const Text('Upgrade to Pro'),
                               ),
                             )
-                          else
+                          else if (ex.pdfUrl.isNotEmpty && (ex.questionCount == 0 || g.readOnly == true)) ...[
+                            // PDF-only exam: show only PDF button above; hide actions
+                          ] else
                             Column(children: [
                               Row(children: [
                                 Expanded(
@@ -245,4 +297,6 @@ Future<String?> _promptComment(BuildContext context) async {
     ),
   );
 }
+
+
 

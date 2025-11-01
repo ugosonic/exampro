@@ -10,6 +10,7 @@ RUN if [ -f package-lock.json ]; then \
     fi
 
 COPY index.js ./
+RUN mkdir -p /data/uploads
 ENV PORT=8000
 EXPOSE 8000
 CMD ["node", "index.js"]

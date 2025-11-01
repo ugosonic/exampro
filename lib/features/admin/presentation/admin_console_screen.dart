@@ -1,4 +1,4 @@
-import 'package:exampro/features/admin/presentation/builder/exam_builder_screen.dart';
+﻿import 'package:exampro/features/admin/presentation/builder/exam_builder_screen.dart';
 import 'package:exampro/features/admin/presentation/builder/exam_editor_screen.dart';
 import 'package:exampro/features/admin/data/admin_repository.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
@@ -7,10 +7,13 @@ import 'package:exampro/features/admin/data/email_api.dart';
 import 'package:exampro/core/config/env_loader.dart';
 import 'package:exampro/features/payments/presentation/checkout_webview.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:exampro/core/network/dio_client.dart';
+import 'package:exampro/features/exam/presentation/pdf_viewer_screen.dart';
 import 'package:exampro/features/sync/data/sync_repository.dart';
 import 'package:exampro/features/sync/data/pg_content_service.dart';
 import 'dart:io';
@@ -51,7 +54,7 @@ class _AdminConsoleScreenState extends ConsumerState<AdminConsoleScreen> with Si
             width: double.infinity,
             color: Colors.amber.withOpacity(0.2),
             padding: const EdgeInsets.all(8),
-            child: const Text('Admins only — limited view'),
+            child: const Text('Admins only â€” limited view'),
           ),
         _AdminCardsBar(controller: _tabController),
         Expanded(
@@ -525,7 +528,7 @@ class _ExamsTab extends ConsumerWidget {
     return Column(children: [
       Expanded(
         child: StreamBuilder(
-          stream: repo.watchExams(),
+          stream: repo.watchExamsLocalized(),
           builder: (context, snap) {
             final list = snap.data ?? const [];
             if (list.isEmpty) return const Center(child: Text('No exams yet'));
@@ -535,9 +538,11 @@ class _ExamsTab extends ConsumerWidget {
               itemBuilder: (_, i) {
                 final e = list[i];
                 return ListTile(
-                  title: Text(e.title),
-                  subtitle: Text('${e.questionCount} questions • ${e.published ? 'Published' : 'Draft'}'),
+                  title: Text(e.title.isEmpty ? 'Untitled' : e.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${e.questionCount} questions · ${e.published ? 'Published' : 'Draft'}', maxLines: 1, overflow: TextOverflow.ellipsis),
                   trailing: Wrap(spacing: 8, children: [
+                    
+                    
                     IconButton(
                       tooltip: 'Edit',
                       icon: const Icon(Icons.edit),
@@ -561,12 +566,7 @@ class _ExamsTab extends ConsumerWidget {
                         if (ok == true) await repo.deleteExam(e.id);
                       },
                     ),
-                    Switch(
-                      value: e.published,
-                      onChanged: (v) async {
-                        await repo.setExamPublished(e.id, v);
-                      },
-                    ),
+                    
                   ]),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExamEditorScreen(examId: e.id))),
                 );
@@ -643,7 +643,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                     if (v == true) _selected.add(u.id); else _selected.remove(u.id);
                   }),
                   title: Text(u.email),
-                  subtitle: Text('Role: ${u.role} • ${u.isPro ? 'Pro' : 'Free'}'),
+                  subtitle: Text('Role: ${u.role} â€¢ ${u.isPro ? 'Pro' : 'Free'}'),
                   secondary: IconButton(
                     icon: const Icon(Icons.more_vert),
                     tooltip: 'Manage user',
@@ -682,7 +682,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
     final users = await repo.allUsers();
     final emails = users.where((u) => _selected.contains(u.id)).map((u) => u.email).toList();
     if (emails.isEmpty) return;
-    final subject = _template == 1 ? 'Welcome to ExamPro' : 'ExamPro Update';
+    final subject = _template == 1 ? 'Welcome to Citizenship Test' : 'Citizenship Test Update';
     final text = _template == 1 ? _tplWelcome() : _tplUpdate();
     final html = _template == 1 ? _tplWelcomeHtml() : _tplUpdateHtml();
     try {
@@ -698,13 +698,13 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
   }
 
   String _tplWelcome() =>
-      'Hello,\n\nWelcome to ExamPro!\n\nStart practicing by exploring categories and selecting an exam.\n\nBest regards,\nExamPro Team';
+      'Hello,\n\nWelcome to Citizenship Test!\n\nStart practicing by exploring categories and selecting an exam.\n\nBest regards,\nCitizenship Test Team';
   String _tplUpdate() =>
-      'Hello,\n\nWe have added new practice exams and performance analytics.\nLog in to check them out!\n\nBest regards,\nExamPro Team';
+      'Hello,\n\nWe have added new practice exams and performance analytics.\nLog in to check them out!\n\nBest regards,\nCitizenship Test Team';
   String _tplWelcomeHtml() =>
-      '<html><body style="font-family: Arial, sans-serif"><h2>Welcome to ExamPro</h2><p>Start practicing by exploring categories and selecting an exam.</p><p>Best regards,<br/>ExamPro Team</p></body></html>';
+      '<html><body style="font-family: Arial, sans-serif"><h2>Welcome to Citizenship Test</h2><p>Start practicing by exploring categories and selecting an exam.</p><p>Best regards,<br/>Citizenship Test Team</p></body></html>';
   String _tplUpdateHtml() =>
-      '<html><body style="font-family: Arial, sans-serif"><h2>Latest Updates</h2><p>We added new practice exams and performance analytics. Log in to check them out!</p><p>Best regards,<br/>ExamPro Team</p></body></html>';
+      '<html><body style="font-family: Arial, sans-serif"><h2>Latest Updates</h2><p>We added new practice exams and performance analytics. Log in to check them out!</p><p>Best regards,<br/>Citizenship Test Team</p></body></html>';
 }
 
 class _ManageUserSheet extends ConsumerStatefulWidget {
@@ -896,7 +896,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         return Card(
           child: ListTile(
             leading: Icon(r.resolved ? Icons.check_circle : Icons.report, color: r.resolved ? Colors.green : Colors.orange),
-            title: Text(e.title),
+            title: Text(e.title.isEmpty ? 'Untitled' : e.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('From: ${r.userEmail}'),
               const SizedBox(height: 4),
@@ -957,6 +957,7 @@ class _PaymentsTab extends ConsumerStatefulWidget {
 class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
   final gbpCtrl = TextEditingController();
   final usdCtrl = TextEditingController();
+  final dbCtrl = TextEditingController();
   final _controller = ScrollController();
   final List<Payment> _items = [];
   bool _loading = false;
@@ -977,6 +978,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
     final repo = ref.read(adminRepositoryProvider);
     gbpCtrl.text = (await repo.getSetting('price_gbp_minor')) ?? '1999';
     usdCtrl.text = (await repo.getSetting('price_usd_minor')) ?? '1999';
+    dbCtrl.text = (await repo.getSetting('database_url')) ?? '';
     setState(() {});
   }
 
@@ -1018,15 +1020,31 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
             onPressed: () async {
               try {
                 final data = await ref.read(syncRepositoryProvider).dumpLocalSnapshot();
-                // Push to Neon Postgres if DATABASE_URL is configured
-                await ref.read(pgContentServiceProvider).upsertSnapshot(data);
+                final dio = ref.read(dioProvider);
+                await dio.post('/admin/import-snapshot', data: data);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exported to Neon (Postgres)')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exported to server')));
                 }
               } catch (e) {
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
               }
             },
+          )
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Row(children: [
+          Expanded(child: TextField(controller: dbCtrl, decoration: const InputDecoration(labelText: 'DATABASE_URL (postgres://...)'))),
+          const SizedBox(width: 8),
+          OutlinedButton(
+            onPressed: () async {
+              await ref.read(adminRepositoryProvider).setSetting('database_url', dbCtrl.text.trim());
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Database URL saved')));
+              }
+            },
+            child: const Text('Save URL'),
           )
         ]),
       ),
@@ -1044,8 +1062,8 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
             final p = _items[i];
             return Card(
               child: ListTile(
-                title: Text('${p.userEmail} • ${p.currency} ${(p.amountMinor / 100).toStringAsFixed(2)}'),
-                subtitle: Text('${p.status} • ${p.createdAt.toLocal()}'.split('.').first),
+                title: Text('${p.userEmail} â€¢ ${p.currency} ${(p.amountMinor / 100).toStringAsFixed(2)}'),
+                subtitle: Text('${p.status} â€¢ ${p.createdAt.toLocal()}'.split('.').first),
                 trailing: p.refunded ? const Text('Refunded') : TextButton(onPressed: () async {
                   await ref.read(adminRepositoryProvider).markRefunded(p.id);
                   setState(() => _items[i] = p.copyWith(refunded: true, status: 'refunded'));
@@ -1426,3 +1444,10 @@ class _QuestionsTabState extends ConsumerState<_QuestionsTab> {
     }
   }
 }
+
+
+
+
+
+
+

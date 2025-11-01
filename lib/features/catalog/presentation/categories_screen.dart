@@ -1,3 +1,4 @@
+﻿import 'package:exampro/core/i18n/tr_text.dart';
 import 'package:exampro/common/widgets/tap_scale.dart';
 import 'package:exampro/features/catalog/data/catalog_repository.dart';
 import 'dart:io';
@@ -17,7 +18,7 @@ class CategoriesScreen extends ConsumerWidget {
     final db = ref.watch(dbProvider);
     final user = ref.watch(currentUserProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Categories')),
+      appBar: AppBar(title: const TrText('Categories')),
       body: NeonBackground(
         child: SafeArea(
           child: catsAsync.when(
@@ -42,6 +43,7 @@ class CategoriesScreen extends ConsumerWidget {
                   itemBuilder: (context, i) {
                     final c = cats[i];
                     final icon = [Icons.biotech, Icons.science, Icons.bubble_chart, Icons.functions][i % 4];
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
                     return TapScale(
                       onTap: () {
                         if (c.locked && !isPro) {
@@ -82,10 +84,10 @@ class CategoriesScreen extends ConsumerWidget {
                                   child: _CategoryImage(src: c.imageUrl),
                                 )
                               else
-                                CircleAvatar(radius: 22, child: Icon(icon, size: 24)),
-                              const SizedBox(height: 10),
-                              Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
-                            ])),
+                              CircleAvatar(radius: 22, child: Icon(icon, size: 24)),
+                            const SizedBox(height: 10),
+                            Text(c.name, style: TextStyle(fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
+                          ])),
                           ]),
                         ),
                       ),
@@ -122,3 +124,6 @@ class _CategoryImage extends StatelessWidget {
 
   Widget _fallback(double w, double h) => Container(width: w, height: h, color: Colors.white.withValues(alpha: 0.06), child: const Icon(Icons.image_not_supported, color: Colors.white70));
 }
+
+
+

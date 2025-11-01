@@ -1,6 +1,7 @@
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/features/exam/data/exam_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:exampro/core/i18n/tr_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AttemptReviewScreen extends ConsumerWidget {
@@ -12,7 +13,7 @@ class AttemptReviewScreen extends ConsumerWidget {
     final repo = ref.watch(examRepositoryProvider);
     final aid = int.tryParse(attemptId) ?? 0;
     return Scaffold(
-      appBar: AppBar(title: const Text('Review Answers')),
+      appBar: AppBar(title: const TrText('Review Answers')),
       body: FutureBuilder<List<({Question question, List<Choice> options, List<int> selected, bool isCorrect})>>(
         future: repo.attemptReview(aid),
         builder: (context, snap) {
@@ -55,7 +56,7 @@ class AttemptReviewScreen extends ConsumerWidget {
             Text(item.question.body, softWrap: true),
             const SizedBox(height: 6),
             const SizedBox(height: 8),
-            Text('Options', style: Theme.of(context).textTheme.labelLarge),
+            const TrText('Options'),
             const SizedBox(height: 4),
             ...item.options.map((o) {
               final chosen = sel.contains(o.id);
@@ -73,7 +74,7 @@ class AttemptReviewScreen extends ConsumerWidget {
             }),
             if (item.question.explanation.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text('Explanation:', style: Theme.of(context).textTheme.labelLarge),
+              const TrText('Explanation:'),
               const SizedBox(height: 4),
               Text(item.question.explanation),
             ]

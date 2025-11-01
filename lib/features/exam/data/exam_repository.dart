@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:exampro/core/db/app_database.dart';
@@ -21,12 +21,21 @@ class ExamRepository {
     final qIds = joins.map((j) => j.questionId).toSet().toList();
     if (qIds.isEmpty) return [];
     final qRows = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
-    final options = await (_db.select(_db.choices)..where((o) => o.questionId.isIn(qIds))..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).get();
+    final options = await (_db
+            .select(_db.choices)
+          ..where((o) => o.questionId.isIn(qIds))
+          ..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).
+        get();
+    final lang = await _lang();
     return [
       for (final j in joins)
         _QuestionWithOptions(
-          question: qRows.firstWhere((q) => q.id == j.questionId),
-          options: options.where((o) => o.questionId == j.questionId).toList(),
+          question: await _translateQuestion(
+              qRows.firstWhere((q) => q.id == j.questionId), lang),
+          options: [
+            for (final o in options.where((o) => o.questionId == j.questionId))
+              await _translateChoice(o, lang)
+          ],
         )
     ];
   }
@@ -48,13 +57,17 @@ class ExamRepository {
     if (qIds.isEmpty) return [];
     final qs = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
     final opts = await (_db.select(_db.choices)..where((o) => o.questionId.isIn(qIds))..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).get();
+    final lang = await _lang();
     // Return in a stable order by question id
     qIds.sort();
     return [
       for (final id in qIds)
         _QuestionWithOptions(
-          question: qs.firstWhere((q) => q.id == id),
-          options: opts.where((o) => o.questionId == id).toList(),
+          question: await _translateQuestion(qs.firstWhere((q) => q.id == id), lang),
+          options: [
+            for (final o in opts.where((o) => o.questionId == id))
+              await _translateChoice(o, lang)
+          ],
         )
     ];
   }
@@ -85,19 +98,23 @@ class ExamRepository {
       'SELECT id, exam_id, mode, started_at, ended_at, score, score_percent, grade_label, synced FROM attempts WHERE exam_id = ? AND user_email = ? ORDER BY started_at DESC',
       variables: [drift.Variable(examId), drift.Variable(userEmail)],
     ).get();
-    return rows
-        .map((r) => Attempt(
-              id: r.data['id'] as int,
-              examId: r.data['exam_id'] as int,
-              mode: r.data['mode'] as String,
-              startedAt: DateTime.parse(r.data['started_at'] as String),
-              endedAt: r.data['ended_at'] == null ? null : DateTime.parse(r.data['ended_at'] as String),
-              score: r.data['score'] as int?,
-              scorePercent: (r.data['score_percent'] as int?) ?? 0,
-              gradeLabel: (r.data['grade_label'] as String?) ?? '',
-              synced: ((r.data['synced'] as int?) ?? 0) == 1,
-            ))
-        .toList();
+    final list = <Attempt>[];
+    for (final r in rows) {
+      final d = r.data;
+      list.add(Attempt(
+        id: d['id'] as int,
+        examId: d['exam_id'] as int,
+        mode: d['mode'] as String,
+        startedAt: DateTime.parse(d['started_at'] as String),
+        endedAt: d['ended_at'] == null ? null : DateTime.parse(d['ended_at'] as String),
+        score: d['score'] as int?,
+        scorePercent: (d['score_percent'] as int?) ?? 0,
+        gradeLabel: (d['grade_label'] as String?) ?? '',
+        synced: ((d['synced'] as int?) ?? 0) == 1,
+        userEmail: userEmail,
+      ));
+    }
+    return list;
   }
 
   Future<Map<int, List<int>>> loadSelections(int attemptId) async {
@@ -187,6 +204,27 @@ class ExamRepository {
         ));
   }
 
+  // PDF progress persistence (userEmail + examId)
+  Future<int> pdfProgress({required int examId, required String userEmail}) async {
+    try {
+      final row = await _db.customSelect('SELECT page FROM pdf_progress WHERE exam_id = ? AND user_email = ? LIMIT 1',
+          variables: [drift.Variable(examId), drift.Variable(userEmail)]).getSingleOrNull();
+      return (row == null) ? 0 : (((row.data['page'] as num?) ?? 0).toInt());
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> savePdfProgress({required int examId, required String userEmail, required int page}) async {
+    try {
+      await _db.customStatement(
+        'INSERT INTO pdf_progress(exam_id, user_email, page, updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) '
+        'ON CONFLICT(user_email, exam_id) DO UPDATE SET page = excluded.page, updated_at = excluded.updated_at',
+        [examId, userEmail, page],
+      );
+    } catch (_) {}
+  }
+
   Future<bool> isSaved({required int questionId, required String userEmail}) async {
     final res = await (_db.select(_db.savedQuestions)
           ..where((t) => t.questionId.equals(questionId) & t.userEmail.equals(userEmail)))
@@ -209,7 +247,9 @@ class ExamRepository {
     final saved = await (_db.select(_db.savedQuestions)..where((s) => s.userEmail.equals(userEmail))).get();
     if (saved.isEmpty) return [];
     final qIds = saved.map((s) => s.questionId).toList();
-    return await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
+    final qs = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
+    final lang = await _lang();
+    return [for (final q in qs) await _translateQuestion(q, lang)];
   }
 
   Future<List<({Question question, List<Choice> options, List<int> selected, bool isCorrect})>> attemptReview(int attemptId) async {
@@ -227,11 +267,15 @@ class ExamRepository {
     for (final a in ans) {
       latest[a.questionId] = a;
     }
+    final lang = await _lang();
     return [
       for (final j in joins)
         (
-          question: qs.firstWhere((q) => q.id == j.questionId),
-          options: opts.where((o) => o.questionId == j.questionId).toList(),
+          question: await _translateQuestion(qs.firstWhere((q) => q.id == j.questionId), lang),
+          options: [
+            for (final o in opts.where((o) => o.questionId == j.questionId))
+              await _translateChoice(o, lang)
+          ],
           selected: (latest[j.questionId] == null)
               ? <int>[]
               : (List<int>.from((jsonDecode(latest[j.questionId]!.selected) as List).map((e) => (e as num).toInt()))),
@@ -247,4 +291,47 @@ class _QuestionWithOptions {
   const _QuestionWithOptions({required this.question, required this.options});
 }
 
+extension on ExamRepository {
+  Future<String> _lang() async {
+    try {
+      final row = await (_db.select(_db.appSettings)..where((s) => s.key.equals('lang_code'))).getSingleOrNull();
+      return row?.value.isNotEmpty == true ? row!.value : 'en';
+    } catch (_) { return 'en'; }
+  }
+
+  Future<Question> _translateQuestion(Question q, String lang) async {
+    if (lang == 'en') return q;
+    try {
+      final row = await _db.customSelect('SELECT v FROM translations WHERE entity = ? AND entity_id = ? AND lang = ? AND k = ? LIMIT 1',
+          variables: [drift.Variable('questions'), drift.Variable(q.id), drift.Variable(lang), drift.Variable('body')]).getSingleOrNull();
+      final body = row == null ? q.body : ((row.data['v'] as String?) ?? q.body);
+      final expRow = await _db.customSelect('SELECT v FROM translations WHERE entity = ? AND entity_id = ? AND lang = ? AND k = ? LIMIT 1',
+          variables: [drift.Variable('questions'), drift.Variable(q.id), drift.Variable(lang), drift.Variable('explanation')]).getSingleOrNull();
+      final explanation = expRow == null ? q.explanation : ((expRow.data['v'] as String?) ?? q.explanation);
+      return Question(id: q.id, body: body, explanation: explanation, multiple: q.multiple, locked: q.locked);
+    } catch (_) { return q; }
+  }
+
+  Future<Choice> _translateChoice(Choice c, String lang) async {
+    if (lang == 'en') return c;
+    try {
+      final row = await _db.customSelect('SELECT v FROM translations WHERE entity = ? AND entity_id = ? AND lang = ? AND k = ? LIMIT 1',
+          variables: [drift.Variable('choices'), drift.Variable(c.id), drift.Variable(lang), drift.Variable('label')]).getSingleOrNull();
+      final label = row == null ? c.label : ((row.data['v'] as String?) ?? c.label);
+      return Choice(id: c.id, questionId: c.questionId, label: label, isCorrect: c.isCorrect, order: c.order);
+    } catch (_) { return c; }
+  }
+}
+
 final examRepositoryProvider = Provider<ExamRepository>((ref) => ExamRepository(ref.watch(dbProvider)));
+
+
+
+
+
+
+
+
+
+
+

@@ -30,6 +30,7 @@ class _NeonGlassCardState extends State<NeonGlassCard> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (context, _) {
@@ -41,7 +42,9 @@ class _NeonGlassCardState extends State<NeonGlassCard> with SingleTickerProvider
               filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
+                  color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.88),
+                  border: Border.all(color: isDark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
+                  borderRadius: BorderRadius.circular(widget.borderRadius),
                 ),
                 padding: widget.padding,
                 child: widget.child,
@@ -111,26 +114,31 @@ class NeonBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gradient = isDark
+        ? const RadialGradient(
+            radius: 1.2,
+            center: Alignment(-0.6, -0.6),
+            colors: [Color(0xFF0B1B2B), Color(0xFF0A1725), Color(0xFF08121C)],
+          )
+        : const RadialGradient(
+            radius: 1.2,
+            center: Alignment(-0.4, -0.6),
+            colors: [Color(0xFFE6F4FF), Color(0xFFF2F9FF), Color(0xFFFFFFFF)],
+          );
     return Container(
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          radius: 1.2,
-          center: Alignment(-0.6, -0.6),
-          colors: [Color(0xFF0B1B2B), Color(0xFF0A1725), Color(0xFF08121C)],
-        ),
+      decoration: BoxDecoration(
+        gradient: gradient,
       ),
       child: Stack(
         children: [
-          Positioned(
-            top: -60,
-            right: -40,
-            child: _glowBlob(const Color(0xFF3BA4FF)),
-          ),
-          Positioned(
-            bottom: -80,
-            left: -50,
-            child: _glowBlob(const Color(0xFF6A5BE2)),
-          ),
+          if (isDark) ...[
+            Positioned(top: -60, right: -40, child: _glowBlob(const Color(0xFF3BA4FF))),
+            Positioned(bottom: -80, left: -50, child: _glowBlob(const Color(0xFF6A5BE2))),
+          ] else ...[
+            Positioned(top: -60, right: -40, child: _glowBlob(const Color(0xFF9ED7FF))),
+            Positioned(bottom: -80, left: -50, child: _glowBlob(const Color(0xFFBFE5FF))),
+          ],
           child,
         ],
       ),
@@ -149,4 +157,3 @@ class NeonBackground extends StatelessWidget {
         ),
       );
 }
-

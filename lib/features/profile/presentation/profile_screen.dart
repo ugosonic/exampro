@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:exampro/features/profile/data/reset_service.dart';
+import 'package:exampro/features/onboarding/presentation/widgets/language_picker.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -33,6 +34,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             Text(user?.email ?? 'Guest', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text('Role: ${user?.role ?? 'none'}'),
+            const SizedBox(height: 12),
+            const LanguagePicker(),
             const SizedBox(height: 20),
             Card(
               child: Padding(
@@ -77,45 +80,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const Spacer(),
-            FilledButton.icon(
-              onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Erase all local data?'),
-                    content: const Text(
-                      'This will sign you out and permanently delete all local data: users, attempts, saved questions, content, and settings. This cannot be undone.',
-                    ),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-                      FilledButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                        child: const Text('Erase'),
+            if ((user?.role ?? '') == 'admin')
+              FilledButton.icon(
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Erase all local data?'),
+                      content: const Text(
+                        'This will sign you out and permanently delete all local data: users, attempts, saved questions, content, and settings. This cannot be undone.',
                       ),
-                    ],
-                  ),
-                );
-                if (ok == true) {
-                  try {
-                    await ref.read(resetServiceProvider).resetAll();
-                    ref.read(currentUserProvider.notifier).state = null;
-                    if (mounted) {
-                      context.go('/onboarding');
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All local data erased')));
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to erase: $e')));
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                        FilledButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                          child: const Text('Erase'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true) {
+                    try {
+                      await ref.read(resetServiceProvider).resetAll();
+                      ref.read(currentUserProvider.notifier).state = null;
+                      if (mounted) {
+                        context.go('/onboarding');
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All local data erased')));
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to erase: $e')));
+                      }
                     }
                   }
-                }
-              },
-              icon: const Icon(Icons.delete_forever),
-              label: const Text('Erase all local data'),
-              style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.errorContainer, foregroundColor: Theme.of(context).colorScheme.onErrorContainer),
-            ),
-            const SizedBox(height: 8),
+                },
+                icon: const Icon(Icons.delete_forever),
+                label: const Text('Erase all local data'),
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.errorContainer, foregroundColor: Theme.of(context).colorScheme.onErrorContainer),
+              ),
+            if ((user?.role ?? '') == 'admin') const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: () async {
                 await ref.read(tokenStoreProvider).clear();
