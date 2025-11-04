@@ -14,6 +14,7 @@ import 'package:exampro/core/notifications/notifications.dart';
 import 'package:exampro/common/widgets/neon_glass.dart';
 import 'package:exampro/features/sync/data/sync_api.dart';
 import 'package:exampro/features/sync/data/sync_repository.dart';
+import 'package:exampro/features/dashboard/data/progress_repository.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
 import 'package:exampro/core/config/env_loader.dart';
 
@@ -59,11 +60,31 @@ class _CategoryImage extends ConsumerWidget {
       );
 }
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  final _scroll = ScrollController();
+  double _offset = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() => setState(() => _offset = _scroll.offset));
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     final updateBanner = FutureBuilder<String?>(
       future: () async {
@@ -110,65 +131,82 @@ class DashboardScreen extends ConsumerWidget {
         child: SafeArea(
           child: user == null
               ? _signedOutHome(context)
-              : ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (updateBanner != null)
-                NeonGlassCard(
-                  child: updateBanner,
-                ),
-              const SizedBox(height: 16),
-              NeonGlassCard(child: _dailyGoal(context)),
-              const SizedBox(height: 16),
-              NeonGlassCard(child: _quickActionsGrid(context, ref)),
-              const SizedBox(height: 16),
-              NeonGlassCard(child: _maybeUpgradeCard(context, ref)),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: Text('Select Country', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
-                  fontWeight: FontWeight.w700,
-                )),
-              ),
-              const SizedBox(height: 10),
-              NeonGlassCard(child: _homeCategoriesGrid(context)),
-              const SizedBox(height: 20),
-              NeonGlassCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Your Progress', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
-                      fontWeight: FontWeight.w700,
-                    )),
-                    const SizedBox(height: 8),
-                    _progressChart(context),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              NeonGlassCard(
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Recent attempts', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
-                          fontWeight: FontWeight.w700,
-                        )),
-                        TextButton(onPressed: () => context.go('/attempts'), child: const Text('View all')),
-                      ],
+              : Stack(children: [
+                  // Purple gradient header
+                  Container(
+                    height: 260,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF6C63FF), Color(0xFF7286FF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    _recentAttempts(context, ref),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
+                  ),
+                  // Scrollable content
+                  ListView(
+                    controller: _scroll,
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      if (updateBanner != null)
+                        NeonGlassCard(child: updateBanner),
+                      const SizedBox(height: 16),
+                      // Main white card slides subtly with scroll
+                      AnimatedSlide(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        offset: Offset(0, (_offset / 400).clamp(0, 0.25)),
+                        child: NeonGlassCard(child: _greetingAndProgress(context, ref)),
+                      ),
+                      const SizedBox(height: 16),
+                      NeonGlassCard(child: _quickActionsGrid(context, ref)),
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Text('Select Country', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                              fontWeight: FontWeight.w700,
+                            )),
+                      ),
+                      const SizedBox(height: 10),
+                      NeonGlassCard(child: _homeCategoriesGrid(context)),
+                      const SizedBox(height: 20),
+                      NeonGlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Your Progress', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                                  fontWeight: FontWeight.w700,
+                                )),
+                            const SizedBox(height: 8),
+                            _progressChart(context),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      NeonGlassCard(
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Recent attempts', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                                      fontWeight: FontWeight.w700,
+                                    )),
+                                TextButton(onPressed: () => context.go('/attempts'), child: const Text('View all')),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            _recentAttempts(context, ref),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ]),
         ),
       ),
     );
@@ -232,11 +270,7 @@ class DashboardScreen extends ConsumerWidget {
                   final icon = [Icons.biotech, Icons.science, Icons.bubble_chart, Icons.functions][i % 4];
                   return TapScale(
                     onTap: () {
-                      if (c.locked && !isPro) {
-                        context.go('/upgrade');
-                      } else {
-                        context.go('/categories/${c.id}');
-                      }
+                      context.go('/categories/');
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -418,7 +452,73 @@ class DashboardScreen extends ConsumerWidget {
         ),
       );
 
-  Widget _progressChart(BuildContext context) {
+  
+  // New greeting + search + animated category progress pies
+  Widget _greetingAndProgress(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Hello, ${user?.email.split('@').first ?? 'User'}!', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 6),
+      Text('Start a new Course', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 12),
+      _searchBar(context),
+      const SizedBox(height: 16),
+      _categoryProgressBlock(context, ref),
+    ]);
+  }
+
+  Widget _searchBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(40),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(children: [
+        const SizedBox(width: 8),
+        const Icon(Icons.search, color: Colors.black38),
+        const SizedBox(width: 8),
+        const Expanded(
+          child: TextField(
+            decoration: InputDecoration.collapsed(hintText: 'Search a course'),
+          ),
+        ),
+        InkWell(
+          onTap: () => GoRouter.of(context).go('/categories'),
+          borderRadius: BorderRadius.circular(30),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            padding: const EdgeInsets.all(10),
+            child: const Icon(Icons.arrow_forward, color: Colors.white),
+          ),
+        )
+      ]),
+    );
+  }
+
+  Widget _categoryProgressBlock(BuildContext context, WidgetRef ref) {
+    final email = (ref.watch(currentUserProvider)?.email) ?? 'guest@local';
+    final async = ref.watch(categoryProgressProvider(email));
+    return async.when(
+      data: (items) {
+        if (items.isEmpty) return const Text('No categories yet');
+        return SizedBox(
+          height: 160,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (_, i) => _PieCard(item: items[i], color: _piePalette[i % _piePalette.length]),
+          ),
+        );
+      },
+      loading: () => const SizedBox(height: 160, child: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Text('Failed to load progress: $e'),
+    );
+  }Widget _progressChart(BuildContext context) {
     return SizedBox(
       height: 160,
       child: Consumer(builder: (context, ref, _) {
@@ -695,4 +795,91 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
+
+
+
+
+
+
+const List<Color> _piePalette = [
+  Color(0xFF6C63FF),
+  Color(0xFF4CAF50),
+  Color(0xFFFF7043),
+  Color(0xFFFFC107),
+  Color(0xFF26C6DA),
+  Color(0xFFAB47BC),
+];
+
+class _PieCard extends StatelessWidget {
+  final CategoryProgress item;
+  final Color color;
+  const _PieCard({required this.item, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 160,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 6))],
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Expanded(child: _AnimatedPie(completed: item.completed, total: item.total, color: color)),
+          const SizedBox(height: 8),
+          Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _AnimatedPie extends StatefulWidget {
+  final int completed;
+  final int total;
+  final Color color;
+  const _AnimatedPie({required this.completed, required this.total, required this.color});
+  @override
+  State<_AnimatedPie> createState() => _AnimatedPieState();
+}
+
+class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderStateMixin {
+  late final AnimationController _ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..forward();
+  @override
+  void dispose() { _ac.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.total == 0 ? 1 : widget.total;
+    final completed = widget.completed.clamp(0, total);
+    return AnimatedBuilder(
+      animation: _ac,
+      builder: (_, __) {
+        final t = Curves.easeOutCubic.transform(_ac.value);
+        final done = (completed * t).toDouble();
+        final remain = (total.toDouble() - done).clamp(0.0, total.toDouble()).toDouble();
+        return PieChart(PieChartData(
+          sectionsSpace: 2,
+          centerSpaceRadius: 24,
+          sections: [
+            PieChartSectionData(
+              color: widget.color,
+              value: done,
+              title: '${((done/total)*100).round()}%',
+              radius: 34,
+              titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            PieChartSectionData(
+              color: Colors.black12,
+              value: remain,
+              title: '',
+              radius: 28,
+            ),
+          ],
+        ));
+      },
+    );
+  }
+}
 

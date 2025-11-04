@@ -26,21 +26,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: Stack(children: [
+        // Purple header to match dashboard
+        Container(
+          height: 220,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF6C63FF), Color(0xFF7286FF)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        ListView(
+          padding: const EdgeInsets.all(20),
           children: [
-            Text(user?.email ?? 'Guest', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text('Role: ${user?.role ?? 'none'}'),
-            const SizedBox(height: 12),
-            const LanguagePicker(),
-            const SizedBox(height: 20),
             Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(user?.email ?? 'Guest', style: theme.textTheme.titleLarge),
+                  const SizedBox(height: 4),
+                  Text('Role: ${user?.role ?? 'none'}'),
+                  const SizedBox(height: 12),
+                  const LanguagePicker(),
+                  const SizedBox(height: 20),
                   Text('Content update', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   if (_updating) ...[
@@ -51,35 +62,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     FilledButton.icon(
                       icon: const Icon(Icons.sync),
                       label: const Text('Update now'),
-                onPressed: () async {
-                  setState(() { _updating = true; _progress = 0; _label = 'Starting…'; });
-                  try {
-                    final user = ref.read(currentUserProvider);
-                    if (user != null) {
-                      _label = 'Syncing your progress…';
-                      await ref.read(syncRepositoryProvider).pushUserProgress(user.email);
-                      await ref.read(syncRepositoryProvider).pullUserProgress(user.email);
-                    }
-                    await ref.read(syncRepositoryProvider).pullAndImport(onProgress: (p, l) => setState(() { _progress = p; _label = l; }));
-                    // Refresh current user's role from local DB if present
-                    final me = ref.read(currentUserProvider);
-                    if (me != null) {
-                      final row = await (ref.read(dbProvider).select(ref.read(dbProvider).users)..where((u) => u.email.equals(me.email))).getSingleOrNull();
-                      if (row != null) {
-                        ref.read(currentUserProvider.notifier).state = User(id: me.id, email: me.email, role: row.role);
-                      }
-                    }
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Content and progress updated')));
-                  } catch (e) {
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
-                  }
-                  if (mounted) setState(() { _updating = false; });
-                },
+                      onPressed: () async {
+                        setState(() { _updating = true; _progress = 0; _label = 'Starting…'; });
+                        try {
+                          final u = ref.read(currentUserProvider);
+                          if (u != null) {
+                            _label = 'Syncing your progress…';
+                            await ref.read(syncRepositoryProvider).pushUserProgress(u.email);
+                            await ref.read(syncRepositoryProvider).pullUserProgress(u.email);
+                          }
+                          await ref.read(syncRepositoryProvider).pullAndImport(onProgress: (p, l) => setState(() { _progress = p; _label = l; }));
+                          final me = ref.read(currentUserProvider);
+                          if (me != null) {
+                            final row = await (ref.read(dbProvider).select(ref.read(dbProvider).users)..where((usr) => usr.email.equals(me.email))).getSingleOrNull();
+                            if (row != null) {
+                              ref.read(currentUserProvider.notifier).state = User(id: me.id, email: me.email, role: row.role);
+                            }
+                          }
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Content and progress updated')));
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+                          }
+                        }
+                        if (mounted) setState(() { _updating = false; });
+                      },
                     ),
                 ]),
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 16),
             if ((user?.role ?? '') == 'admin')
               FilledButton.icon(
                 onPressed: () async {
@@ -87,16 +101,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Erase all local data?'),
-                      content: const Text(
-                        'This will sign you out and permanently delete all local data: users, attempts, saved questions, content, and settings. This cannot be undone.',
-                      ),
+                      content: const Text('This will sign you out and permanently delete all local data: users, attempts, saved questions, content, and settings. This cannot be undone.'),
                       actions: [
                         TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                          child: const Text('Erase'),
-                        ),
+                        FilledButton(onPressed: () => Navigator.of(ctx).pop(true), style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error), child: const Text('Erase')),
                       ],
                     ),
                   );
@@ -119,23 +127,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 label: const Text('Erase all local data'),
                 style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.errorContainer, foregroundColor: Theme.of(context).colorScheme.onErrorContainer),
               ),
-            if ((user?.role ?? '') == 'admin') const SizedBox(height: 8),
+            const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: () async {
                 await ref.read(tokenStoreProvider).clear();
                 ref.read(currentUserProvider.notifier).state = null;
                 if (mounted) {
-                  // Ensure we land on onboarding after sign-out
-                  // Use go_router so the shell updates correctly
                   context.go('/onboarding');
                 }
               },
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
-            )
+            ),
+            const SizedBox(height: 30),
           ],
         ),
-      ),
+      ]),
     );
   }
 }
+

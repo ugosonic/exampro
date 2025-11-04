@@ -50,6 +50,27 @@ const auth = async (req, res, next) => {
   }
 };
 
+// Allow either: (1) JWT with role=admin, or (2) SYNC_ADMIN_TOKEN bearer
+const adminGuard = async (req, res, next) => {
+  const hdr = req.get('Authorization') || '';
+  if (hdr.startsWith('Bearer ')) {
+    const token = hdr.slice(7);
+    if (SYNC_ADMIN_TOKEN && token === SYNC_ADMIN_TOKEN) {
+      req.user = { role: 'admin' };
+      return next();
+    }
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET, { audience: 'exampro-mobile', issuer: 'exampro-auth' });
+      if ((decoded.role || 'user') !== 'admin') return res.status(403).json({ error: 'forbidden' });
+      req.user = decoded;
+      return next();
+    } catch (_) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+  }
+  return res.status(401).json({ error: 'unauthorized' });
+};
+
 // Auth endpoints
 app.post('/auth/register', async (req, res) => {
   const { email, password } = req.body || {};
@@ -193,7 +214,7 @@ app.post('/admin/bump-version', async (req, res) => {
 });
 
 // Admin: import snapshot into Neon via server (uses DATABASE_URL of API)
-app.post('/admin/import-snapshot', auth, async (req, res) => {
+app.post('/admin/import-snapshot', adminGuard, async (req, res) => {
   try {
     if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
     const snap = req.body || {};
@@ -272,9 +293,11 @@ app.post('/admin/import-snapshot', auth, async (req, res) => {
       return res.json({ ok: true });
     } catch (e) {
       try { await client.query('ROLLBACK'); } catch {}
+      console.error('import-snapshot failed inner:', e);
       return res.status(500).json({ error: 'failed' });
     } finally { client.release(); }
   } catch (e) {
+    console.error('import-snapshot failed outer:', e);
     return res.status(500).json({ error: 'failed' });
   }
 });
