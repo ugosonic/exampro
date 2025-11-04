@@ -5,6 +5,11 @@ Prereqs
 - Neon Postgres project with a DATABASE_URL (Serverless w/ pooled connection recommended)
 - SSH access to VPS
 
+Initialize Neon DB (once)
+- Open the Neon SQL console (or connect with psql) and run the schema in `db/neon_schema.sql` to create the content tables the API expects (categories, subcategories, exams, questions, choices, exam_questions, exam_grade_bands, links, etc.).
+- This schema also includes `exams.pdf_url` which the server uses when importing snapshots. If you created tables earlier, ensure this column exists:
+  - ALTER TABLE exams ADD COLUMN IF NOT EXISTS pdf_url TEXT NOT NULL DEFAULT '';
+
 Install Docker on VPS
 - sudo apt-get update && sudo apt-get install -y ca-certificates curl gnupg
 - sudo install -m 0755 -d /etc/apt/keyrings
@@ -53,6 +58,7 @@ Client devices (dev/testing with IP)
   - DATABASE_URL= (leave empty)
 - The app uses only HTTP endpoints for content sync and user progress.
 - Admin “Export content” posts a snapshot to the server at `/admin/import-snapshot` (JWT admin), which writes to Neon using the server’s `DATABASE_URL`.
+- Be sure the signed-in account has role `admin` in the server’s `users` table, or use the `SYNC_ADMIN_TOKEN` as a bearer token when calling admin endpoints. Non-admin JWTs will get 403 and nothing will be written.
 
 CI/CD from GitHub (optional)
 - Add the workflow .github/workflows/deploy-api.yml and set repo secrets:

@@ -237,6 +237,9 @@ app.post('/admin/import-snapshot', adminGuard, async (req, res) => {
     } catch (_) { /* non-fatal */ }
     const client = await pool.connect();
     try {
+      // Ensure content_meta exists so we can bump version at the end
+      await client.query("CREATE TABLE IF NOT EXISTS content_meta (id INT PRIMARY KEY, version TIMESTAMPTZ NOT NULL DEFAULT now())");
+      await client.query("INSERT INTO content_meta(id) VALUES (1) ON CONFLICT (id) DO NOTHING");
       await client.query('BEGIN');
       // Clear existing content tables in dependency order
       await client.query('DELETE FROM exam_grade_bands');

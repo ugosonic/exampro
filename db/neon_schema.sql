@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS exams (
   shuffle_options BOOLEAN NOT NULL DEFAULT TRUE,
   negative_marking BOOLEAN NOT NULL DEFAULT FALSE,
   pass_percent INT NOT NULL DEFAULT 60,
-  theme_key INT NOT NULL DEFAULT 0
+  theme_key INT NOT NULL DEFAULT 0,
+  -- Optional URL to a reference PDF for the exam (used by server import/export)
+  pdf_url TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS questions (

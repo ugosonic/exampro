@@ -255,6 +255,42 @@ class SyncRepository {
         }
         return out;
       }(),
+      // Also emit a combined payload compatible with the server's import-snapshot
+      // endpoint, which expects media_files with entity and entity_id.
+      'media_files': await () async {
+        final media = <Map<String, dynamic>>[];
+        final cats = await _db.select(_db.categories).get();
+        for (final c in cats) {
+          final pathStr = c.imageUrl;
+          if (pathStr.isEmpty) continue;
+          final f = File(pathStr);
+          if (await f.exists()) {
+            final bytes = await f.readAsBytes();
+            media.add({
+              'entity': 'categories',
+              'entity_id': c.id,
+              'filename': p.basename(pathStr),
+              'content_base64': base64Encode(bytes),
+            });
+          }
+        }
+        final subs = await _db.select(_db.subcategories).get();
+        for (final s in subs) {
+          final pathStr = s.imageUrl;
+          if (pathStr.isEmpty) continue;
+          final f = File(pathStr);
+          if (await f.exists()) {
+            final bytes = await f.readAsBytes();
+            media.add({
+              'entity': 'subcategories',
+              'entity_id': s.id,
+              'filename': p.basename(pathStr),
+              'content_base64': base64Encode(bytes),
+            });
+          }
+        }
+        return media;
+      }(),
     };
   }
 
