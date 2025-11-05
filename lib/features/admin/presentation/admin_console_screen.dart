@@ -957,7 +957,6 @@ class _PaymentsTab extends ConsumerStatefulWidget {
 class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
   final gbpCtrl = TextEditingController();
   final usdCtrl = TextEditingController();
-  final dbCtrl = TextEditingController();
   final _controller = ScrollController();
   final List<Payment> _items = [];
   bool _loading = false;
@@ -978,7 +977,6 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
     final repo = ref.read(adminRepositoryProvider);
     gbpCtrl.text = (await repo.getSetting('price_gbp_minor')) ?? '1999';
     usdCtrl.text = (await repo.getSetting('price_usd_minor')) ?? '1999';
-    dbCtrl.text = (await repo.getSetting('database_url')) ?? '';
     setState(() {});
   }
 
@@ -1013,39 +1011,6 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
           Expanded(child: TextField(controller: usdCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'USD (minor)'))),
           const SizedBox(width: 8),
           FilledButton(onPressed: _savePrices, child: const Text('Save')),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.cloud_upload_outlined),
-            label: const Text('Export content'),
-            onPressed: () async {
-              try {
-                final data = await ref.read(syncRepositoryProvider).dumpLocalSnapshot();
-                final dio = ref.read(dioProvider);
-                await dio.post('/admin/import-snapshot', data: data);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exported to server')));
-                }
-              } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
-              }
-            },
-          )
-        ]),
-      ),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-        child: Row(children: [
-          Expanded(child: TextField(controller: dbCtrl, decoration: const InputDecoration(labelText: 'DATABASE_URL (postgres://...)'))),
-          const SizedBox(width: 8),
-          OutlinedButton(
-            onPressed: () async {
-              await ref.read(adminRepositoryProvider).setSetting('database_url', dbCtrl.text.trim());
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Database URL saved')));
-              }
-            },
-            child: const Text('Save URL'),
-          )
         ]),
       ),
       Expanded(

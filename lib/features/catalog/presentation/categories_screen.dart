@@ -53,16 +53,9 @@ class CategoriesScreen extends ConsumerWidget {
                           context.go('/categories/${c.id}');
                         }
                       },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: c.imageUrl.isEmpty
-                              ? LinearGradient(colors: [
-                                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                                  Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
-                                ], begin: Alignment.topLeft, end: Alignment.bottomRight)
-                              : null,
-                        ),
+                      child: NeonGlassCard(
+                        borderRadius: 16,
+                        padding: const EdgeInsets.all(0),
                         child: Card(
                           elevation: 0,
                           color: Colors.transparent,

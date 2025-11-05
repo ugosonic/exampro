@@ -49,6 +49,8 @@ class OnboardingScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 18),
                     Divider(color: (isDark ? Colors.white : Colors.black).withOpacity(0.25), thickness: 1),
+                    const SizedBox(height: 12),
+                    const _PracticeTestsTicker(),
                     const SizedBox(height: 18),
                     SizedBox(
                       width: double.infinity,
@@ -357,6 +359,114 @@ class _FlagCyclerState extends State<_FlagCycler> with TickerProviderStateMixin 
           ),
         );
       },
+    );
+  }
+}
+
+// Countries & tests ticker with slide-in animation every 2 seconds
+class _PracticeTestsTicker extends StatefulWidget {
+  const _PracticeTestsTicker();
+  @override
+  State<_PracticeTestsTicker> createState() => _PracticeTestsTickerState();
+}
+
+class _PracticeTestsTickerState extends State<_PracticeTestsTicker> with SingleTickerProviderStateMixin {
+  static const _items = [
+    (
+      flag: '🇬🇧',
+      country: 'United Kingdom',
+      test: 'Life in the UK Test',
+      desc: 'A test on British history, culture, and government. Applicants also need a secure English test (e.g., IELTS Life Skills, Trinity GESE).',
+    ),
+    (
+      flag: '🇺🇸',
+      country: 'United States',
+      test: 'American Civics & English',
+      desc: 'Includes an English test (speaking, reading, writing) and an oral civics test on U.S. history and government.',
+    ),
+    (
+      flag: '🇨🇦',
+      country: 'Canada',
+      test: 'Canadian Citizenship Test',
+      desc: 'Assesses knowledge of Canada’s history, geography, government, and citizenship rights and responsibilities.',
+    ),
+    (
+      flag: '🇦🇺',
+      country: 'Australia',
+      test: 'Australian Citizenship Test',
+      desc: 'Covers Australian values, history, and symbols.',
+    ),
+  ];
+
+  late final AnimationController _ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _ac.forward();
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      await _ac.reverse();
+      setState(() => _index = (_index + 1) % _items.length);
+      _ac.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final on = isDark ? Colors.white : const Color(0xFF0B2540);
+    final sub = on.withOpacity(0.75);
+    final item = _items[_index];
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
+          border: Border.all(color: isDark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: AnimatedBuilder(
+          animation: _ac,
+          builder: (context, _) {
+            final dx = (1 - _ac.value) * -16.0;
+            final op = _ac.value;
+            return Opacity(
+              opacity: op,
+              child: Transform.translate(
+                offset: Offset(dx, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.flag, style: const TextStyle(fontSize: 28)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${item.country} • ${item.test}', style: TextStyle(color: on, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 2),
+                          Text(item.desc, style: TextStyle(color: sub)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

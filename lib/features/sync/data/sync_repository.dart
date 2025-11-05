@@ -35,35 +35,15 @@ class SyncRepository {
       await _db.customStatement('DELETE FROM categories');
       await _db.customStatement('DELETE FROM translations');
 
-      // Restore media files (category/subcategory images) if provided
-      final media = (snap['media_files'] as List?) ?? const [];
-      final mediaDir = await getApplicationDocumentsDirectory();
-      final base = Directory(p.join(mediaDir.path, 'media'));
-      if (!await base.exists()) await base.create(recursive: true);
-      String? _restore(String entity, int id) {
-        final m = media.cast<Map>().firstWhere((e) => e['entity'] == entity && (e['entity_id'] as int) == id, orElse: () => {});
-        if (m.isEmpty) return null;
-        try {
-          final filename = (m['filename'] as String?) ?? '${entity}_$id.jpg';
-          final content = (m['content_base64'] as String?) ?? '';
-          if (content.isEmpty) return null;
-          final bytes = base64Decode(content);
-          final folder = Directory(p.join(base.path, entity));
-          if (!folder.existsSync()) folder.createSync(recursive: true);
-          final file = File(p.join(folder.path, filename));
-          file.writeAsBytesSync(bytes, flush: true);
-          return file.path;
-        } catch (_) { return null; }
-      }
+      // Do not persist media files locally; use remote image URLs only.
 
       onProgress?.call(0.15, 'Importing categories…');
       final cats = (snap['categories'] as List?) ?? const [];
       for (final m in cats) {
-        final id = (m['id'] as int);
         final img = (m['image_url'] as String?);
-        final path = (img != null && img.isNotEmpty) ? img : (_restore('categories', id));
+        final path = (img != null && img.isNotEmpty) ? img : null;
         await _db.into(_db.categories).insert(CategoriesCompanion.insert(
-          id: Value(id),
+          id: Value((m['id'] as int)),
           name: m['name'] as String,
           order: Value((m['order'] as num?)?.toInt() ?? 0),
           passPercent: Value((m['pass_percent'] as num?)?.toInt() ?? 60),
@@ -75,11 +55,10 @@ class SyncRepository {
       onProgress?.call(0.30, 'Importing subcategories…');
       final subs = (snap['subcategories'] as List?) ?? const [];
       for (final m in subs) {
-        final id = (m['id'] as int);
         final img = (m['image_url'] as String?);
-        final path = (img != null && img.isNotEmpty) ? img : (_restore('subcategories', id));
+        final path = (img != null && img.isNotEmpty) ? img : null;
         await _db.into(_db.subcategories).insert(SubcategoriesCompanion.insert(
-          id: Value(id),
+          id: Value((m['id'] as int)),
           categoryId: m['category_id'] as int,
           name: m['name'] as String,
           order: Value((m['order'] as num?)?.toInt() ?? 0),

@@ -86,35 +86,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
-    final updateBanner = FutureBuilder<String?>(
-      future: () async {
-        try {
-          final remote = await ref.read(syncApiProvider).version();
-          final local = await ref.read(syncRepositoryProvider).localVersion();
-          if (local == null || local != remote) return remote;
-        } catch (_) {}
-        return null;
-      }(),
-      builder: (context, snap) {
-        final ver = snap.data;
-        if (ver == null) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: Card(
-            color: Colors.amber.withValues(alpha: 0.12),
-            child: ListTile(
-              leading: const Icon(Icons.system_update, color: Colors.amber),
-              title: const Text('New content available'),
-              subtitle: const Text('Tap Update to sync latest questions'),
-              trailing: FilledButton(
-                onPressed: () => context.go('/profile'),
-                child: const Text('Update'),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    // Manual content update banner removed; content now auto-syncs after sign-in.
     final mode = ref.watch(themeModeProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Citizenship Test'), actions: [
@@ -148,9 +120,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     controller: _scroll,
                     padding: const EdgeInsets.all(16),
                     children: [
-                      if (updateBanner != null)
-                        NeonGlassCard(child: updateBanner),
-                      const SizedBox(height: 16),
+                      // Auto-sync enabled: no manual update card
                       // Main white card slides subtly with scroll
                       AnimatedSlide(
                         duration: const Duration(milliseconds: 200),
@@ -518,7 +488,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       loading: () => const SizedBox(height: 160, child: Center(child: CircularProgressIndicator())),
       error: (e, _) => Text('Failed to load progress: $e'),
     );
-  }Widget _progressChart(BuildContext context) {
+  }
+  Widget _progressChart(BuildContext context) {
     return SizedBox(
       height: 160,
       child: Consumer(builder: (context, ref, _) {
@@ -534,24 +505,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           builder: (context, snap) {
             final items = (snap.data ?? const <Attempt>[]).reversed.toList();
             if (items.isEmpty) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: _softSolids[2],
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-                ),
+              return NeonGlassCard(
+                padding: const EdgeInsets.all(12),
                 child: const Center(child: Padding(padding: EdgeInsets.all(12.0), child: Text('No attempts yet'))),
               );
             }
-            return Container(
-              decoration: BoxDecoration(
-                color: _softSolids[0],
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: BarChart(
+            return NeonGlassCard(
+              padding: const EdgeInsets.all(12),
+              child: BarChart(
                   BarChartData(
                     titlesData: FlTitlesData(
                       bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta) {
@@ -579,7 +540,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     maxY: 100,
                   ),
                 ),
-              ),
             );
           },
         );
@@ -651,17 +611,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             final subs = (extras?.subs as List<Subcategory>? ?? const <Subcategory>[]);
             return Column(children: [
               for (var i = 0; i < attempts.length; i++)
-                Container(
-                  decoration: BoxDecoration(
-                    color: _softSolids[i % 2],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-                  ),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    leading: Icon((attempts[i].endedAt == null) ? Icons.play_arrow : Icons.check, color: Theme.of(context).colorScheme.primary),
-                    title: () {
-                      final a = attempts[i];
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: NeonGlassCard(
+                    borderRadius: 12,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: ListTile(
+                      leading: Icon((attempts[i].endedAt == null) ? Icons.play_arrow : Icons.check, color: Theme.of(context).colorScheme.primary),
+                      title: () {
+                        final a = attempts[i];
                       final ex = exams.firstWhere((e) => e.id == a.examId, orElse: () => Exam(
                         id: a.examId,
                         title: 'Exam ${a.examId}',
@@ -692,17 +650,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             )
                           : null;
                       final label = sub == null ? cat.name : '${cat.name} â€¢ ${sub.name}';
-                      return Text('${ex.title} â€¢ $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w600));
-                    }(),
-                    subtitle: Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} â€¢ ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black.withValues(alpha: 0.6))),
-                    onTap: () {
-                      final a = attempts[i];
-                      if (a.endedAt == null) {
-                        context.go('/player/${a.examId}?aid=${a.id}');
-                      } else {
-                        context.go('/result/${a.id}');
-                      }
-                    },
+                      final on = Theme.of(context).colorScheme.onSurface;
+                      return Text('${ex.title} â€¢ $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.92), fontWeight: FontWeight.w600));
+                      }(),
+                    subtitle: Builder(builder: (context) {
+                      final on = Theme.of(context).colorScheme.onSurface;
+                      return Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} â€¢ ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.7)));
+                    }),
+                      onTap: () {
+                        final a = attempts[i];
+                        if (a.endedAt == null) {
+                          context.go('/player/${a.examId}?aid=${a.id}');
+                        } else {
+                          context.go('/result/${a.id}');
+                        }
+                      },
+                    ),
                   ),
                 )
             ]);
@@ -726,31 +689,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ];
 
   Widget _actionCard(BuildContext context, {required IconData icon, required String label, required int index, required VoidCallback onTap}) {
-    final gradient = _softGradients[index % 3];
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      child: Container(
+      child: NeonGlassCard(
+        borderRadius: 16,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 5))],
-        ),
         child: LayoutBuilder(builder: (context, c) {
           final w = c.maxWidth;
           final font = (w * 0.12).clamp(12.0, 16.0);
+          final on = Theme.of(context).colorScheme.onSurface;
           return Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: on.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
                 child: Icon(icon, color: Theme.of(context).colorScheme.primary),
               ),
               const SizedBox(height: 6),
-              Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: TextStyle(color: Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w700, fontSize: font)),
+              Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: TextStyle(color: on.withOpacity(0.92), fontWeight: FontWeight.w700, fontSize: font)),
             ],
           );
         }),
@@ -816,20 +774,16 @@ class _PieCard extends StatelessWidget {
   const _PieCard({required this.item, required this.color});
   @override
   Widget build(BuildContext context) {
+    final on = Theme.of(context).colorScheme.onSurface;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: 160,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 6))],
-        ),
+      child: NeonGlassCard(
+        borderRadius: 16,
         padding: const EdgeInsets.all(12),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Expanded(child: _AnimatedPie(completed: item.completed, total: item.total, color: color)),
           const SizedBox(height: 8),
-          Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, color: on.withOpacity(0.95))),
         ]),
       ),
     );
@@ -871,7 +825,7 @@ class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderSta
               titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
             ),
             PieChartSectionData(
-              color: Colors.black12,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.14),
               value: remain,
               title: '',
               radius: 28,

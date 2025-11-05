@@ -34,6 +34,7 @@ class ExamProApp extends ConsumerWidget {
           themeMode: themeMode,
           locale: locale,
           routerConfig: router,
+          debugShowCheckedModeBanner: false,
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -59,11 +60,13 @@ class ExamProApp extends ConsumerWidget {
         home: Scaffold(
           body: Center(child: Text('Failed to load config: $e')),
         ),
+        debugShowCheckedModeBanner: false,
       ),
       loading: () => const MaterialApp(
         home: Scaffold(
           body: Center(child: CircularProgressIndicator()),
         ),
+        debugShowCheckedModeBanner: false,
       ),
     );
   }

@@ -8,6 +8,7 @@ class LanguagePicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(localeProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final langs = const [
       ('EN', Locale('en')),
       ('ES', Locale('es')),
@@ -20,15 +21,21 @@ class LanguagePicker extends ConsumerWidget {
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
+        color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.92),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.06)),
+        boxShadow: [
+          if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<Locale>(
             value: current,
+            dropdownColor: isDark ? const Color(0xFF172030) : Colors.white,
+            style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.w600),
+            iconEnabledColor: isDark ? Colors.white : Colors.black87,
             items: [
               for (final p in langs)
                 DropdownMenuItem(value: p.$2, child: Text(p.$1)),

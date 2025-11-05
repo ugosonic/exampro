@@ -52,44 +52,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 12),
                   const LanguagePicker(),
                   const SizedBox(height: 20),
-                  Text('Content update', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  if (_updating) ...[
-                    LinearProgressIndicator(value: _progress == 0 ? null : _progress),
-                    const SizedBox(height: 8),
-                    Text(_label.isEmpty ? 'Updating…' : _label),
-                  ] else
-                    FilledButton.icon(
-                      icon: const Icon(Icons.sync),
-                      label: const Text('Update now'),
-                      onPressed: () async {
-                        setState(() { _updating = true; _progress = 0; _label = 'Starting…'; });
-                        try {
-                          final u = ref.read(currentUserProvider);
-                          if (u != null) {
-                            _label = 'Syncing your progress…';
-                            await ref.read(syncRepositoryProvider).pushUserProgress(u.email);
-                            await ref.read(syncRepositoryProvider).pullUserProgress(u.email);
-                          }
-                          await ref.read(syncRepositoryProvider).pullAndImport(onProgress: (p, l) => setState(() { _progress = p; _label = l; }));
-                          final me = ref.read(currentUserProvider);
-                          if (me != null) {
-                            final row = await (ref.read(dbProvider).select(ref.read(dbProvider).users)..where((usr) => usr.email.equals(me.email))).getSingleOrNull();
-                            if (row != null) {
-                              ref.read(currentUserProvider.notifier).state = User(id: me.id, email: me.email, role: row.role);
-                            }
-                          }
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Content and progress updated')));
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
-                          }
-                        }
-                        if (mounted) setState(() { _updating = false; });
-                      },
-                    ),
+                  // Manual content update removed: content and progress sync now happen automatically after sign-in.
                 ]),
               ),
             ),
@@ -146,4 +109,3 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 }
-
