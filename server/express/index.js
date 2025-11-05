@@ -199,6 +199,54 @@ app.get('/sync/user-progress', async (req, res) => {
   } finally { client.release(); }
 });
 
+// Public catalog endpoints (read-only)
+app.get('/catalog/categories', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT id, name, "order", pass_percent, image_url, locked FROM categories ORDER BY "order", name');
+    return res.json(r.rows);
+  } finally { client.release(); }
+});
+
+app.get('/catalog/subcategories', async (req, res) => {
+  const { category_id } = req.query;
+  const client = await pool.connect();
+  try {
+    const sql = 'SELECT id, category_id, name, "order", image_url, locked FROM subcategories' + (category_id ? ' WHERE category_id = $1' : '') + ' ORDER BY "order", name';
+    const params = category_id ? [category_id] : [];
+    const r = await client.query(sql, params);
+    return res.json(r.rows);
+  } finally { client.release(); }
+});
+
+app.get('/catalog/exams', async (req, res) => {
+  const { category_id, subcategory_id } = req.query;
+  const client = await pool.connect();
+  try {
+    const where = [];
+    const params = [];
+    if (category_id) { params.push(category_id); where.push(`category_id = $${params.length}`); }
+    if (subcategory_id) { params.push(subcategory_id); where.push(`subcategory_id = $${params.length}`); }
+    const sql = `SELECT id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key FROM exams ${where.length ? ('WHERE ' + where.join(' AND ')) : ''} ORDER BY id`;
+    const r = await client.query(sql, params);
+    return res.json(r.rows);
+  } finally { client.release(); }
+});
+
+app.get('/catalog/exam/:id/questions', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid_id' });
+  const client = await pool.connect();
+  try {
+    const joins = await client.query('SELECT question_id, "order", points FROM exam_questions WHERE exam_id = $1 ORDER BY "order"', [id]);
+    if (joins.rowCount === 0) return res.json({ order: [], questions: [], choices: [] });
+    const qids = [...new Set(joins.rows.map(r => r.question_id))];
+    const qs = await client.query('SELECT id, body, explanation, multiple, locked FROM questions WHERE id = ANY($1::int[])', [qids]);
+    const cs = await client.query('SELECT id, question_id, label, is_correct, "order" FROM choices WHERE question_id = ANY($1::int[]) ORDER BY question_id, "order"', [qids]);
+    return res.json({ order: joins.rows, questions: qs.rows, choices: cs.rows });
+  } finally { client.release(); }
+});
+
 // Admin: bump content version
 app.post('/admin/bump-version', async (req, res) => {
   if (!SYNC_ADMIN_TOKEN) return res.status(403).json({ error: 'Not configured' });
@@ -318,6 +366,183 @@ app.post('/admin/upload/pdf', auth, (req, res) => {
   } catch (e) {
     return res.status(500).json({ error: 'failed' });
   }
+});
+
+// Admin CRUD for content (create/update/delete)
+app.post('/admin/categories', adminGuard, async (req, res) => {
+  const { name, order = 0, pass_percent = 60, image_url = '' } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const r = await client.query('INSERT INTO categories(name, "order", pass_percent, image_url) VALUES ($1,$2,$3,$4) RETURNING id', [name, order, pass_percent, image_url]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ id: r.rows[0].id });
+  } finally { client.release(); }
+});
+
+app.put('/admin/categories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid_id' });
+  const fields = ['name','order','pass_percent','image_url','locked'];
+  const sets = [];
+  const vals = [];
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
+      vals.push(req.body[f]);
+      sets.push(`${f === 'order' ? '"order"' : f} = $${vals.length}`);
+    }
+  }
+  const client = await pool.connect();
+  try {
+    if (sets.length) await client.query(`UPDATE categories SET ${sets.join(', ')} WHERE id = $${vals.length + 1}`, [...vals, id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/categories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM categories WHERE id=$1', [id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/admin/subcategories', adminGuard, async (req, res) => {
+  const { category_id, name, order = 0, image_url = '' } = req.body || {};
+  if (!category_id || !name) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const r = await client.query('INSERT INTO subcategories(category_id, name, "order", image_url) VALUES ($1,$2,$3,$4) RETURNING id', [category_id, name, order, image_url]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ id: r.rows[0].id });
+  } finally { client.release(); }
+});
+
+app.put('/admin/subcategories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const fields = ['name','order','image_url','locked'];
+  const sets = [];
+  const vals = [];
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
+      vals.push(req.body[f]);
+      sets.push(`${f === 'order' ? '"order"' : f} = $${vals.length}`);
+    }
+  }
+  const client = await pool.connect();
+  try {
+    if (sets.length) await client.query(`UPDATE subcategories SET ${sets.join(', ')} WHERE id = $${vals.length + 1}`, [...vals, id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/subcategories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM subcategories WHERE id=$1', [id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/admin/exams', adminGuard, async (req, res) => {
+  const { title, description = '', category_id, subcategory_id = null, time_limit_minutes = 0, pass_percent = 60, shuffle_options = true, negative_marking = false, published = false, theme_key = 0, pdf_url = '' } = req.body || {};
+  if (!title || !category_id) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const r = await client.query('INSERT INTO exams(title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id', [title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url]);
+    const id = r.rows[0].id;
+    await client.query("INSERT INTO exam_grade_bands(exam_id, min_percent, label) VALUES ($1,90,'Distinction'), ($1,75,'Merit'), ($1,$2,'Pass')", [id, pass_percent]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ id });
+  } finally { client.release(); }
+});
+
+app.put('/admin/exams/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const fields = ['title','description','category_id','subcategory_id','time_limit_minutes','pass_percent','shuffle_options','negative_marking','published','theme_key','pdf_url'];
+  const sets = [];
+  const vals = [];
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) { vals.push(req.body[f]); sets.push(`${f} = $${vals.length}`); }
+  }
+  const client = await pool.connect();
+  try {
+    if (sets.length) await client.query(`UPDATE exams SET ${sets.join(', ')} WHERE id = $${vals.length + 1}`, [...vals, id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/exams/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM exams WHERE id=$1', [id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/admin/exams/:id/questions', adminGuard, async (req, res) => {
+  const examId = Number(req.params.id);
+  const { text, explanation = '', options = [], points = 1, order = 0 } = req.body || {};
+  if (!text || !Array.isArray(options) || options.length === 0) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const q = await client.query('INSERT INTO questions(body, explanation) VALUES ($1,$2) RETURNING id', [text, explanation]);
+    const qid = q.rows[0].id;
+    for (let i = 0; i < options.length; i++) {
+      const o = options[i];
+      await client.query('INSERT INTO choices(question_id, label, is_correct, "order") VALUES ($1,$2,$3,$4)', [qid, (o.text || ''), !!o.correct, i]);
+    }
+    await client.query('INSERT INTO exam_questions(exam_id, question_id, "order", points) VALUES ($1,$2,$3,$4)', [examId, qid, order, points]);
+    await client.query('UPDATE exams SET question_count = (SELECT COUNT(*) FROM exam_questions WHERE exam_id = $1) WHERE id = $1', [examId]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    await client.query('COMMIT');
+    res.json({ id: qid });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+app.put('/admin/questions/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const { body, explanation = '', options = [] } = req.body || {};
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (body != null) await client.query('UPDATE questions SET body=$1, explanation=$2 WHERE id=$3', [body, explanation, id]);
+    await client.query('DELETE FROM choices WHERE question_id = $1', [id]);
+    for (let i = 0; i < options.length; i++) {
+      const o = options[i];
+      await client.query('INSERT INTO choices(question_id, label, is_correct, "order") VALUES ($1,$2,$3,$4)', [id, (o.text || ''), !!o.correct, i]);
+    }
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/exams/:examId/questions/:questionId', adminGuard, async (req, res) => {
+  const examId = Number(req.params.examId); const qid = Number(req.params.questionId);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM exam_questions WHERE exam_id=$1 AND question_id=$2', [examId, qid]);
+    await client.query('UPDATE exams SET question_count = (SELECT COUNT(*) FROM exam_questions WHERE exam_id = $1) WHERE id = $1', [examId]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
 });
 
 app.listen(PORT, () => console.log(`API listening on ${PORT}`));

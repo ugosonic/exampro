@@ -2,12 +2,20 @@ import 'package:drift/drift.dart' as drift;
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:exampro/core/config/env_loader.dart';
+import 'package:exampro/features/admin/data/admin_api.dart';
+import 'package:exampro/features/catalog/data/content_api.dart';
 
 class AdminRepository {
   final AppDatabase _db;
-  AdminRepository(this._db);
+  final AdminApi? _adminApi;
+  final ContentApi? _contentApi;
+  AdminRepository(this._db, [this._adminApi, this._contentApi]);
 
   Future<int> createCategory(String name, {int order = 0, String imageUrl = ''}) async {
+    if (_adminApi != null) {
+      return _adminApi!.createCategory(name: name, order: order, imageUrl: imageUrl);
+    }
     return _db.into(_db.categories).insert(CategoriesCompanion.insert(
           name: name,
           order: drift.Value(order),
@@ -16,6 +24,9 @@ class AdminRepository {
   }
 
   Future<int> createSubcategory(int categoryId, String name, {int order = 0, String imageUrl = ''}) async {
+    if (_adminApi != null) {
+      return _adminApi!.createSubcategory(categoryId: categoryId, name: name, order: order, imageUrl: imageUrl);
+    }
     return _db.into(_db.subcategories).insert(SubcategoriesCompanion.insert(
           categoryId: categoryId,
           name: name,
@@ -37,6 +48,21 @@ class AdminRepository {
     int themeKey = 0,
     String pdfUrl = '',
   }) async {
+    if (_adminApi != null) {
+      return _adminApi!.createExam(
+        title: title,
+        description: description,
+        categoryId: categoryId,
+        subcategoryId: subcategoryId,
+        timeLimitMinutes: timeLimitMinutes,
+        passPercent: passPercent,
+        shuffleOptions: shuffleOptions,
+        negativeMarking: negativeMarking,
+        published: published,
+        themeKey: themeKey,
+        pdfUrl: pdfUrl,
+      );
+    }
     final id = await _db.into(_db.exams).insert(ExamsCompanion.insert(
           title: title,
           description: drift.Value(description),
@@ -74,6 +100,23 @@ class AdminRepository {
     int? themeKey,
     String? pdfUrl,
   }) async {
+    if (_adminApi != null) {
+      await _adminApi!.updateExam(
+        examId,
+        title: title,
+        description: description,
+        categoryId: categoryId,
+        subcategoryId: subcategoryId,
+        timeLimitMinutes: timeLimitMinutes,
+        passPercent: passPercent,
+        shuffleOptions: shuffleOptions,
+        negativeMarking: negativeMarking,
+        published: published,
+        themeKey: themeKey,
+        pdfUrl: pdfUrl,
+      );
+      return;
+    }
     await (_db.update(_db.exams)..where((e) => e.id.equals(examId))).write(ExamsCompanion(
       title: title != null ? drift.Value(title) : const drift.Value.absent(),
       description: description != null ? drift.Value(description) : const drift.Value.absent(),
@@ -97,6 +140,9 @@ class AdminRepository {
     int points = 1,
     int order = 0,
   }) async {
+    if (_adminApi != null) {
+      return _adminApi!.addQuestionWithOptions(examId: examId, text: text, explanation: explanation, options: options, points: points, order: order);
+    }
     return await _db.transaction(() async {
       final qId = await _db
           .into(_db.questions)
@@ -125,9 +171,38 @@ class AdminRepository {
     });
   }
 
-  Stream<List<Category>> watchCategories() => _db.select(_db.categories).watch();
-  Stream<List<Subcategory>> watchSubcategories(int categoryId) =>
-      (_db.select(_db.subcategories)..where((s) => s.categoryId.equals(categoryId))).watch();
+  Stream<List<Category>> watchCategories() {
+    if (_contentApi != null) {
+      return Stream.fromFuture(_contentApi!.categories().then((rows) => [
+            for (final m in rows)
+              Category(
+                id: (m['id'] as num).toInt(),
+                name: m['name'] as String,
+                order: (m['order'] as num?)?.toInt() ?? 0,
+                passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
+                imageUrl: (m['image_url'] as String?) ?? '',
+                locked: (m['locked'] as bool?) ?? false,
+              ),
+          ]));
+    }
+    return _db.select(_db.categories).watch();
+  }
+  Stream<List<Subcategory>> watchSubcategories(int categoryId) {
+    if (_contentApi != null) {
+      return Stream.fromFuture(_contentApi!.subcategories(categoryId: categoryId).then((rows) => [
+            for (final m in rows)
+              Subcategory(
+                id: (m['id'] as num).toInt(),
+                categoryId: (m['category_id'] as num).toInt(),
+                name: m['name'] as String,
+                order: (m['order'] as num?)?.toInt() ?? 0,
+                imageUrl: (m['image_url'] as String?) ?? '',
+                locked: (m['locked'] as bool?) ?? false,
+              ),
+          ]));
+    }
+    return (_db.select(_db.subcategories)..where((s) => s.categoryId.equals(categoryId))).watch();
+  }
   Future<List<Subcategory>> allSubcategories() async => _db.select(_db.subcategories).get();
 
   Future<List<Category>> categories() async {
@@ -139,6 +214,10 @@ class AdminRepository {
   Future<List<DbUser>> allUsers() async => _db.select(_db.users).get();
 
   Future<void> updateCategory(int id, {String? name, int? order, int? passPercent, String? imageUrl}) async {
+    if (_adminApi != null) {
+      await _adminApi!.updateCategory(id, name: name, order: order, passPercent: passPercent, imageUrl: imageUrl);
+      return;
+    }
     await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(
           name: name != null ? drift.Value(name) : const drift.Value.absent(),
           order: order != null ? drift.Value(order) : const drift.Value.absent(),
@@ -148,6 +227,7 @@ class AdminRepository {
   }
 
   Future<void> deleteCategory(int id) async {
+    if (_adminApi != null) return _adminApi!.deleteCategory(id);
     await (_db.delete(_db.categories)..where((c) => c.id.equals(id))).go();
   }
 
@@ -156,6 +236,10 @@ class AdminRepository {
   }
 
   Future<void> updateSubcategory(int id, {String? name, int? order, String? imageUrl, bool? locked}) async {
+    if (_adminApi != null) {
+      await _adminApi!.updateSubcategory(id, name: name, order: order, imageUrl: imageUrl, locked: locked);
+      return;
+    }
     await (_db.update(_db.subcategories)..where((s) => s.id.equals(id))).write(SubcategoriesCompanion(
           name: name != null ? drift.Value(name) : const drift.Value.absent(),
           order: order != null ? drift.Value(order) : const drift.Value.absent(),
@@ -169,6 +253,7 @@ class AdminRepository {
   }
 
   Future<void> deleteSubcategory(int id) async {
+    if (_adminApi != null) return _adminApi!.deleteSubcategory(id);
     await (_db.delete(_db.subcategories)..where((s) => s.id.equals(id))).go();
   }
 
@@ -232,10 +317,49 @@ class AdminRepository {
   }
 
   // Exams
-  Stream<List<Exam>> watchExams() => _db.select(_db.exams).watch();
+  Stream<List<Exam>> watchExams() => _contentApi != null
+      ? Stream.fromFuture(_contentApi!.exams().then((rows) => [
+            for (final m in rows)
+              Exam(
+                id: (m['id'] as num).toInt(),
+                title: m['title'] as String,
+                description: (m['description'] as String?) ?? '',
+                categoryId: (m['category_id'] as num).toInt(),
+                subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
+                questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
+                published: (m['published'] as bool?) ?? false,
+                timeLimitMinutes: (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
+                shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
+                negativeMarking: (m['negative_marking'] as bool?) ?? false,
+                passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
+                themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
+                pdfUrl: (m['pdf_url'] as String?) ?? '',
+              ),
+          ]))
+      : _db.select(_db.exams).watch();
 
   // Localized exams stream: reacts to language and translation changes immediately
   Stream<List<Exam>> watchExamsLocalized() {
+    if (_contentApi != null) {
+      return Stream.fromFuture(_contentApi!.exams().then((rows) => [
+            for (final m in rows)
+              Exam(
+                id: (m['id'] as num).toInt(),
+                title: m['title'] as String,
+                description: (m['description'] as String?) ?? '',
+                categoryId: (m['category_id'] as num).toInt(),
+                subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
+                questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
+                published: (m['published'] as bool?) ?? false,
+                timeLimitMinutes: (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
+                shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
+                negativeMarking: (m['negative_marking'] as bool?) ?? false,
+                passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
+                themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
+                pdfUrl: (m['pdf_url'] as String?) ?? '',
+              ),
+          ]));
+    }
     const sql =
         'SELECT e.id, '
         "COALESCE(NULLIF(t.v, ''), e.title) AS title, "
@@ -254,6 +378,10 @@ class AdminRepository {
     await (_db.update(_db.exams)..where((t) => t.id.equals(examId))).write(ExamsCompanion(published: drift.Value(published)));
   }
   Future<void> deleteExam(int examId) async {
+    if (_adminApi != null) {
+      await _adminApi!.deleteExam(examId);
+      return;
+    }
     await _db.transaction(() async {
       // Remove attempt answers, attempts, joins, grade bands, reports, then exam
       final attemptsForExam = await (_db.select(_db.attempts)..where((a) => a.examId.equals(examId))).get();
@@ -298,6 +426,10 @@ class AdminRepository {
   }
 
   Future<void> removeQuestionFromExam(int examId, int questionId) async {
+    if (_adminApi != null) {
+      await _adminApi!.deleteQuestionFromExam(examId: examId, questionId: questionId);
+      return;
+    }
     await (_db.delete(_db.examQuestions)..where((t) => t.examId.equals(examId) & t.questionId.equals(questionId))).go();
     final count = await _db.customSelect('SELECT COUNT(*) AS c FROM exam_questions WHERE exam_id = ?', variables: [drift.Variable(examId)])
         .getSingle()
@@ -306,6 +438,10 @@ class AdminRepository {
   }
 
   Future<void> updateQuestionAndOptions({required int questionId, required String body, String explanation = '', required List<({String text, bool correct})> options}) async {
+    if (_adminApi != null) {
+      await _adminApi!.updateQuestionAndOptions(questionId: questionId, body: body, explanation: explanation, options: options);
+      return;
+    }
     await _db.transaction(() async {
       await (_db.update(_db.questions)..where((q) => q.id.equals(questionId))).write(QuestionsCompanion(body: drift.Value(body), explanation: drift.Value(explanation)));
       await (_db.delete(_db.choices)..where((o) => o.questionId.equals(questionId))).go();
@@ -319,6 +455,7 @@ class AdminRepository {
   }
 
   Future<void> setCategoryLocked(int id, bool locked) async {
+    if (_adminApi != null) return _adminApi!.updateCategory(id, locked: locked);
     await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(locked: drift.Value(locked)));
   }
 
@@ -492,4 +629,11 @@ class AdminRepository {
   }
 }
 
-final adminRepositoryProvider = Provider<AdminRepository>((ref) => AdminRepository(ref.watch(dbProvider)));
+final adminRepositoryProvider = Provider<AdminRepository>((ref) {
+  final dbi = ref.watch(dbProvider);
+  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  final hasApi = env != null && env!.apiBaseUrl.isNotEmpty;
+  final adminApi = hasApi ? ref.watch(adminApiProvider) : null;
+  final contentApi = hasApi ? ref.watch(contentApiProvider) : null;
+  return AdminRepository(dbi, adminApi, contentApi);
+});

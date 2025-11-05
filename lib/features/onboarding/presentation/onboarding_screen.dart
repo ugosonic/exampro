@@ -34,12 +34,15 @@ class OnboardingScreen extends ConsumerWidget {
                 final w = c.maxWidth;
                 final titleSize = w.clamp(280, 720) / 12; // responsive ~ 24-60
                 final subSize = (titleSize * 0.32).clamp(12, 18);
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _HeroTitle(isDark: isDark, fontSize: titleSize),
-                    const SizedBox(height: 10),
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      _HeroTitle(isDark: isDark, fontSize: titleSize),
+                      const SizedBox(height: 10),
                     Opacity(
                       opacity: 0.85,
                       child: Text(
@@ -49,13 +52,13 @@ class OnboardingScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 18),
                     Divider(color: (isDark ? Colors.white : Colors.black).withOpacity(0.25), thickness: 1),
-                    const SizedBox(height: 12),
-                    const _PracticeTestsTicker(),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
+                      const SizedBox(height: 16),
+                      const _PracticeTestsTicker(),
+                      const SizedBox(height: 22),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFFCC33),
                           foregroundColor: const Color(0xFF0B2540),
@@ -69,11 +72,11 @@ class OnboardingScreen extends ConsumerWidget {
                         child: const Text('SIGN IN', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: OutlinedButton(
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: isDark ? Colors.white : const Color(0xFF0B2540),
                           side: BorderSide(color: (isDark ? Colors.white : Colors.black).withOpacity(0.2)),
@@ -86,8 +89,10 @@ class OnboardingScreen extends ConsumerWidget {
                         },
                         child: const Text('CREATE AN ACCOUNT', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                       ),
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 28),
+                    ],
+                  ),
                 );
               }),
             )

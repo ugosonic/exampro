@@ -4,16 +4,75 @@ import 'package:drift/drift.dart' as drift;
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:exampro/core/config/env_loader.dart';
+import 'package:exampro/features/catalog/data/content_api.dart';
 
 class ExamRepository {
   final AppDatabase _db;
-  ExamRepository(this._db);
+  final ContentApi? _remote;
+  ExamRepository(this._db, [this._remote]);
 
   Future<Exam?> getExam(int id) async {
+    if (_remote != null) {
+      final rows = await _remote!.exams();
+      final m = rows.firstWhere((e) => (e['id'] as num).toInt() == id, orElse: () => {} as Map<String, dynamic>);
+      if (m.isEmpty) return null;
+      return Exam(
+        id: (m['id'] as num).toInt(),
+        title: m['title'] as String,
+        description: (m['description'] as String?) ?? '',
+        categoryId: (m['category_id'] as num).toInt(),
+        subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
+        questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
+        published: (m['published'] as bool?) ?? false,
+        timeLimitMinutes: (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
+        shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
+        negativeMarking: (m['negative_marking'] as bool?) ?? false,
+        passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
+        themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
+        pdfUrl: (m['pdf_url'] as String?) ?? '',
+      );
+    }
     return await (_db.select(_db.exams)..where((e) => e.id.equals(id))).getSingleOrNull();
   }
 
   Future<List<_QuestionWithOptions>> questionsForExam(int examId) async {
+    if (_remote != null) {
+      final data = await _remote!.examQuestions(examId);
+      final order = (data['order'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final qs = (data['questions'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final cs = (data['choices'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final lang = await _lang();
+      Question mapQ(int qid) {
+        final m = qs.firstWhere((q) => (q['id'] as num).toInt() == qid);
+        return Question(
+          id: (m['id'] as num).toInt(),
+          body: m['body'] as String,
+          explanation: (m['explanation'] as String?) ?? '',
+          multiple: (m['multiple'] as bool?) ?? false,
+          locked: (m['locked'] as bool?) ?? false,
+        );
+      }
+      return [
+        for (final j in order)
+          _QuestionWithOptions(
+            question: await _translateQuestion(mapQ((j['question_id'] as num).toInt()), lang),
+            options: [
+              for (final o in cs.where((o) => (o['question_id'] as num).toInt() == (j['question_id'] as num).toInt()).toList()..sort((a,b)=>((a['order'] as num?)?.toInt()??0).compareTo((b['order'] as num?)?.toInt()??0)))
+                await _translateChoice(
+                  Choice(
+                    id: (o['id'] as num).toInt(),
+                    questionId: (o['question_id'] as num).toInt(),
+                    label: o['label'] as String,
+                    isCorrect: (o['is_correct'] as bool?) ?? false,
+                    order: (o['order'] as num?)?.toInt() ?? 0,
+                  ),
+                  lang,
+                )
+            ],
+          ),
+      ];
+    }
     final joins = await (_db.select(_db.examQuestions)
           ..where((e) => e.examId.equals(examId))
           ..orderBy([(t) => drift.OrderingTerm.asc(t.order)]))
@@ -41,6 +100,16 @@ class ExamRepository {
   }
 
   Future<List<_QuestionWithOptions>> questionsForCategory(int categoryId) async {
+    if (_remote != null) {
+      // Load exams, then aggregate questions across them
+      final exs = await _remote!.exams(categoryId: categoryId);
+      final out = <_QuestionWithOptions>[];
+      for (final e in exs) {
+        final part = await questionsForExam((e['id'] as num).toInt());
+        out.addAll(part);
+      }
+      return out;
+    }
     // Collect question ids from all exams in this category (including subcategories)
     final examRows = await (_db.select(_db.exams)..where((e) => e.categoryId.equals(categoryId))).get();
     final subIds = await (_db.select(_db.subcategories)..where((s) => s.categoryId.equals(categoryId))).get().then((l)=>l.map((s)=>s.id).toList());
@@ -323,7 +392,13 @@ extension on ExamRepository {
   }
 }
 
-final examRepositoryProvider = Provider<ExamRepository>((ref) => ExamRepository(ref.watch(dbProvider)));
+final examRepositoryProvider = Provider<ExamRepository>((ref) {
+  final dbi = ref.watch(dbProvider);
+  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  final hasApi = env != null && env!.apiBaseUrl.isNotEmpty;
+  final remote = hasApi ? ref.watch(contentApiProvider) : null;
+  return ExamRepository(dbi, remote);
+});
 
 
 
