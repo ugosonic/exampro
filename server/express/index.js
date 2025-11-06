@@ -368,6 +368,27 @@ app.post('/admin/upload/pdf', auth, (req, res) => {
   }
 });
 
+// Admin: upload generic image (JWT required, admin role)
+app.post('/admin/upload/image', auth, (req, res) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
+    upload.single('file')(req, res, function (err) {
+      if (err) return res.status(400).json({ error: 'upload_failed' });
+      if (!req.file) return res.status(400).json({ error: 'no_file' });
+      const url = `/files/${req.file.filename}`;
+      return res.json({ url });
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Public config (allows toggling upgrade prompts globally)
+app.get('/config', async (req, res) => {
+  const upgradeDisabled = (process.env.UPGRADE_DISABLED || '0') === '1';
+  res.json({ upgrade_disabled: upgradeDisabled });
+});
+
 // Admin CRUD for content (create/update/delete)
 app.post('/admin/categories', adminGuard, async (req, res) => {
   const { name, order = 0, pass_percent = 60, image_url = '' } = req.body || {};

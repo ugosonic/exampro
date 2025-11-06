@@ -157,12 +157,13 @@ class _CategoriesTab extends ConsumerWidget {
                   child: FilledButton.icon(
                     icon: const Icon(Icons.add),
                     label: const Text('Add Category'),
-                    onPressed: () async {
-                      final data = await _promptCategory(context);
-                      if (data != null) {
-                        await repo.createCategory(data.name, imageUrl: data.imageUrl);
-                      }
-                    },
+                      onPressed: () async {
+                        final data = await _promptCategory(context);
+                        if (data != null) {
+                          final url = await _ensureRemoteUrl(context, ref, data.imageUrl);
+                          await repo.createCategory(data.name, imageUrl: url);
+                        }
+                      },
                   ),
                 ),
               ]),
@@ -263,7 +264,8 @@ class _SubcategoriesTabState extends ConsumerState<_SubcategoriesTab> {
                             onPressed: () async {
                               final data = await _promptSubcategory(context);
                               if (data != null && (data.name).isNotEmpty) {
-                                await repo.createSubcategory(selected!, data.name, imageUrl: data.imageUrl);
+                                final url = await _ensureRemoteUrl(context, ref, data.imageUrl);
+                                await repo.createSubcategory(selected!, data.name, imageUrl: url);
                               }
                             },
                           ),
@@ -518,6 +520,21 @@ class _SquareThumb extends StatelessWidget {
   }
 
   Widget _fallback(double w, double h) => Container(width: w, height: h, color: Colors.black26, child: const Icon(Icons.image_not_supported, size: 16));
+}
+
+Future<String> _ensureRemoteUrl(BuildContext context, WidgetRef ref, String input) async {
+  final src = input.trim();
+  if (src.isEmpty) return '';
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('/')) return src;
+  try {
+    final dio = ref.read(dioProvider);
+    final form = FormData.fromMap({'file': await MultipartFile.fromFile(src)});
+    final res = await dio.post('/admin/upload/image', data: form);
+    final url = (res.data['url'] as String?) ?? '';
+    return url.isEmpty ? src : url;
+  } catch (_) {
+    return src;
+  }
 }
 
 

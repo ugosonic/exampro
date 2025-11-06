@@ -72,12 +72,12 @@ class CategoriesScreen extends ConsumerWidget {
                                 ),
                               ),
                             Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                              if (c.imageUrl.isNotEmpty)
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: _CategoryImage(src: c.imageUrl),
-                                )
-                              else
+                            if (c.imageUrl.isNotEmpty)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: _CategoryImage(src: c.imageUrl),
+                              )
+                            else
                               CircleAvatar(radius: 22, child: Icon(icon, size: 24)),
                             const SizedBox(height: 10),
                             Text(c.name, style: TextStyle(fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),

@@ -1,7 +1,9 @@
-﻿import 'package:drift/drift.dart' as drift;
+import 'package:drift/drift.dart' as drift;
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:exampro/core/network/dio_client.dart';
+import 'package:dio/dio.dart';
 
 class CategoryProgress {
   final int categoryId;
@@ -16,20 +18,52 @@ class CategoryProgress {
 
 class ProgressRepository {
   final AppDatabase _db;
-  ProgressRepository(this._db);
+  final Dio _dio;
+  ProgressRepository(this._db, this._dio);
 
   Future<List<CategoryProgress>> categoryProgressForUser(String userEmail) async {
-    // Totals by category
-    final totalsRows = await _db.customSelect(
-      'SELECT e.category_id AS cid, CAST(COUNT(DISTINCT eq.question_id) AS INTEGER) AS total '
-      'FROM exams e JOIN exam_questions eq ON e.id = eq.exam_id '
-      'GROUP BY e.category_id',
-    ).get();
-    final totals = <int, int>{
-      for (final r in totalsRows) (r.data['cid'] as int): (r.data['total'] as int)
-    };
+    // Compute totals from server snapshot when possible to avoid depending on local content
+    Map<int, int> totals = {};
+    List<Map<String, dynamic>> categories = [];
+    try {
+      final snap = await _dio.get('/sync/snapshot');
+      final exams = ((snap.data['exams'] as List?) ?? const [])
+          .cast<Map>()
+          .map((m) => (m as Map).cast<String, dynamic>())
+          .toList();
+      final examQs = ((snap.data['exam_questions'] as List?) ?? const [])
+          .cast<Map>()
+          .map((m) => (m as Map).cast<String, dynamic>())
+          .toList();
+      categories = ((snap.data['categories'] as List?) ?? const [])
+          .cast<Map>()
+          .map((m) => (m as Map).cast<String, dynamic>())
+          .toList();
+      final byExam = <int, Set<int>>{};
+      for (final m in examQs) {
+        final e = (m['exam_id'] as num).toInt();
+        final q = (m['question_id'] as num).toInt();
+        (byExam[e] ??= <int>{}).add(q);
+      }
+      totals = <int, int>{};
+      for (final e in exams) {
+        final cid = (e['category_id'] as num).toInt();
+        final eid = (e['id'] as num).toInt();
+        totals[cid] = (totals[cid] ?? 0) + (byExam[eid]?.length ?? 0);
+      }
+    } catch (_) {
+      // Fallback to local DB for totals and categories
+      final totalsRows = await _db.customSelect(
+        'SELECT e.category_id AS cid, CAST(COUNT(DISTINCT eq.question_id) AS INTEGER) AS total '
+        'FROM exams e JOIN exam_questions eq ON e.id = eq.exam_id '
+        'GROUP BY e.category_id',
+      ).get();
+      totals = <int, int>{ for (final r in totalsRows) (r.data['cid'] as int): (r.data['total'] as int) };
+      final catsRows = await _db.select(_db.categories).get();
+      categories = [for (final c in catsRows) {'id': c.id, 'name': c.name, 'image_url': c.imageUrl}];
+    }
 
-    // Completed distinct questions by category for this user
+    // Completed distinct questions by category for this user (local attempts)
     final doneRows = await _db.customSelect(
       'SELECT e.category_id AS cid, CAST(COUNT(DISTINCT aa.question_id) AS INTEGER) AS completed '
       'FROM attempts a '
@@ -39,29 +73,24 @@ class ProgressRepository {
       'GROUP BY e.category_id',
       variables: [drift.Variable(userEmail)],
     ).get();
-    final done = <int, int>{
-      for (final r in doneRows) (r.data['cid'] as int): (r.data['completed'] as int)
-    };
+    final done = <int, int>{ for (final r in doneRows) (r.data['cid'] as int): (r.data['completed'] as int) };
 
-    // All categories in DB
-    final cats = await _db.select(_db.categories).get();
     return [
-      for (final c in cats)
+      for (final c in categories)
         CategoryProgress(
-          categoryId: c.id,
-          name: c.name,
-          imageUrl: c.imageUrl,
-          completed: done[c.id] ?? 0,
-          total: totals[c.id] ?? 0,
+          categoryId: (c['id'] as num).toInt(),
+          name: c['name'] as String,
+          imageUrl: (c['image_url'] as String?) ?? '',
+          completed: done[(c['id'] as num).toInt()] ?? 0,
+          total: totals[(c['id'] as num).toInt()] ?? 0,
         )
     ];
   }
 }
 
-final progressRepositoryProvider = Provider<ProgressRepository>((ref) => ProgressRepository(ref.watch(dbProvider)));
+final progressRepositoryProvider = Provider<ProgressRepository>((ref) => ProgressRepository(ref.watch(dbProvider), ref.watch(dioProvider)));
 
 final categoryProgressProvider = FutureProvider.family<List<CategoryProgress>, String>((ref, email) async {
   return ref.watch(progressRepositoryProvider).categoryProgressForUser(email);
 });
-
 

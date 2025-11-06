@@ -104,14 +104,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: user == null
               ? _signedOutHome(context)
               : Stack(children: [
-                  // Purple gradient header
+                  // Header gradient (match onboarding dark gradient)
                   Container(
                     height: 260,
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Color(0xFF6C63FF), Color(0xFF7286FF)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF2A2E79), Color(0xFF161A4F)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
                     ),
                   ),
@@ -240,7 +240,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   final icon = [Icons.biotech, Icons.science, Icons.bubble_chart, Icons.functions][i % 4];
                   return TapScale(
                     onTap: () {
-                      context.go('/categories/');
+                      context.go('/categories/${c.id}');
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -429,7 +429,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Hello, ${user?.email.split('@').first ?? 'User'}!', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
       const SizedBox(height: 6),
-      Text('Start a new Course', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+      Text('Start a new Test', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 12),
       _searchBar(context),
       const SizedBox(height: 16),

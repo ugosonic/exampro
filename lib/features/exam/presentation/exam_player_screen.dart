@@ -48,55 +48,68 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
   }
 
   Future<void> _load() async {
-    _mode = (widget.mode ?? 'practice');
-    final repo = ref.read(examRepositoryProvider);
-    // start or resume attempt
-    if (widget.attemptId != null) {
-      attemptId = widget.attemptId;
-      // jump to next unanswered index
-      final answered = await repo.countAnswers(attemptId!);
-      setState(() => index = answered);
-    } else if (widget.categoryId == null && _mode != 'practice') {
-      // Only create attempt for assignment (or exam-bound practice), never for category practice
+    try {
+      _mode = (widget.mode ?? 'practice');
+      final repo = ref.read(examRepositoryProvider);
+      // start or resume attempt
+      if (widget.attemptId != null) {
+        attemptId = widget.attemptId;
+        // jump to next unanswered index
+        final answered = await repo.countAnswers(attemptId!);
+        setState(() => index = answered);
+      } else if (widget.categoryId == null && _mode != 'practice') {
+        // Only create attempt for assignment (or exam-bound practice), never for category practice
+        final user = ref.read(currentUserProvider);
+        final email = user?.email ?? 'guest@local';
+        attemptId = await repo.startAttempt(examId: examId, mode: _mode, userEmail: email);
+      }
+      // load questions and options
+      final list = (widget.categoryId != null)
+          ? await repo.questionsForCategory(widget.categoryId!)
+          : await repo.questionsForExam(examId);
+      if (list.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No questions available for this exam yet')));
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+      // load exam and attempt
+      final db = ref.read(dbProvider);
+      final exam = await repo.getExam(examId);
+      Attempt? att;
+      if (attemptId != null) {
+        att = await (db.select(db.attempts)..where((t) => t.id.equals(attemptId!))).getSingleOrNull();
+      }
+      // determine pro
       final user = ref.read(currentUserProvider);
-      final email = user?.email ?? 'guest@local';
-      attemptId = await repo.startAttempt(examId: examId, mode: _mode, userEmail: email);
+      if (user != null) {
+        final row = await (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull();
+        _isPro = row?.isPro ?? false;
+      } else {
+        _isPro = false;
+      }
+      // load previous selections if resuming
+      if (attemptId != null && widget.attemptId != null) {
+        final saved = await repo.loadSelections(attemptId!);
+        _selections.addAll({for (final e in saved.entries) e.key: e.value.toSet()});
+      }
+      setState(() {
+        _questions = [for (final q in list) q.question];
+        _options = {
+          for (final q in list) q.question.id: q.options,
+        };
+        _exam = exam;
+        _attempt = att;
+      });
+      // If current index points to a locked question and user isn't pro, redirect
+      _ensureUnlockedIndex();
+      _startTimer();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load exam: $e')));
+      Navigator.of(context).pop();
     }
-    // load questions and options
-    final list = (widget.categoryId != null)
-        ? await repo.questionsForCategory(widget.categoryId!)
-        : await repo.questionsForExam(examId);
-    // load exam and attempt
-    final db = ref.read(dbProvider);
-    final exam = await repo.getExam(examId);
-    Attempt? att;
-    if (attemptId != null) {
-      att = await (db.select(db.attempts)..where((t) => t.id.equals(attemptId!))).getSingleOrNull();
-    }
-    // determine pro
-    final user = ref.read(currentUserProvider);
-    if (user != null) {
-      final row = await (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull();
-      _isPro = row?.isPro ?? false;
-    } else {
-      _isPro = false;
-    }
-    // load previous selections if resuming
-    if (attemptId != null && widget.attemptId != null) {
-      final saved = await repo.loadSelections(attemptId!);
-      _selections.addAll({for (final e in saved.entries) e.key: e.value.toSet()});
-    }
-    setState(() {
-      _questions = [for (final q in list) q.question];
-      _options = {
-        for (final q in list) q.question.id: q.options,
-      };
-      _exam = exam;
-      _attempt = att;
-    });
-    // If current index points to a locked question and user isn't pro, redirect
-    _ensureUnlockedIndex();
-    _startTimer();
   }
 
   void _ensureUnlockedIndex() {
