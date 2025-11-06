@@ -17,18 +17,54 @@ import 'package:exampro/features/exam/presentation/attempts_list_screen.dart';
 import 'package:exampro/features/exam/presentation/attempt_review_screen.dart';
 import 'package:exampro/features/payments/presentation/upgrade_screen.dart';
 import 'package:exampro/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:exampro/core/db/db_provider.dart';
+import 'package:drift/drift.dart' as drift;
+import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/features/profile/presentation/profile_screen.dart';
 import 'package:exampro/features/auth/presentation/sign_up_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+class _RouteSaver extends NavigatorObserver {
+  final Ref ref;
+  _RouteSaver(this.ref);
+  Future<void> _save(NavigatorState? nav) async {
+    if (nav == null) return;
+    try {
+      final loc = GoRouter.of(nav.context).routeInformationProvider.value.uri.toString();
+      final db = ref.read(dbProvider);
+      await db
+          .into(db.appSettings)
+          .insertOnConflictUpdate(AppSettingsCompanion(key: const drift.Value('last_route'), value: drift.Value(loc)));
+    } catch (_) {}
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _save(navigator);
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    _save(navigator);
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _save(navigator);
+    super.didPop(route, previousRoute);
+  }
+}
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
   final tokenStore = ref.watch(tokenStoreProvider);
   return GoRouter(
     initialLocation: '/onboarding',
     refreshListenable: notifier,
+    observers: [_RouteSaver(ref)],
     redirect: (context, state) => _redirect(ref, tokenStore, state),
     routes: [
       GoRoute(
@@ -144,6 +180,18 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
     return '/dashboard';
   }
   if (goingAdmin && (user == null || user.role != 'admin')) return '/dashboard';
+  // Restore last route when available and appropriate
+  try {
+    final db = ref.read(dbProvider);
+    final row = await (db.select(db.appSettings)..where((s) => s.key.equals('last_route'))).getSingleOrNull();
+    final saved = row?.value ?? '';
+    if (saved.isNotEmpty && saved != loc) {
+      final canShow = !loggingIn && !registering && !onboarding; // allow dashboard/categories/player/etc.
+      if (canShow) {
+        return saved;
+      }
+    }
+  } catch (_) {}
   return null;
 }
 
@@ -167,3 +215,4 @@ CustomTransitionPage _softSlide(GoRouterState state, Widget child) => CustomTran
         );
       },
     );
+

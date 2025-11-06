@@ -45,9 +45,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     examId = int.tryParse(widget.examId) ?? 0;
     ref.read(analyticsProvider).event('exam_start', params: {'examId': widget.examId});
     _load();
-  }
-
-  Future<void> _load() async {
+  }  Future<void> _load() async {
     try {
       _mode = (widget.mode ?? 'practice');
       final repo = ref.read(examRepositoryProvider);
@@ -69,8 +67,18 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
           : await repo.questionsForExam(examId);
       if (list.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No questions available for this exam yet')));
-          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('No questions available for this exam yet')));
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            if (widget.categoryId != null) {
+              context.go('/categories/${widget.categoryId}');
+            } else if (examId != 0) {
+              context.go('/exam/$examId');
+            } else {
+              context.go('/dashboard');
+            }
+          });
         }
         return;
       }
@@ -96,9 +104,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
       }
       setState(() {
         _questions = [for (final q in list) q.question];
-        _options = {
-          for (final q in list) q.question.id: q.options,
-        };
+        _options = {for (final q in list) q.question.id: q.options};
         _exam = exam;
         _attempt = att;
       });
@@ -108,8 +114,18 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load exam: $e')));
-      Navigator.of(context).pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (widget.categoryId != null) {
+          context.go('/categories/${widget.categoryId}');
+        } else if (examId != 0) {
+          context.go('/exam/$examId');
+        } else {
+          context.go('/dashboard');
+        }
+      });
     }
+  }
   }
 
   void _ensureUnlockedIndex() {
@@ -524,6 +540,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     );
   }
 }
+
 
 
 
