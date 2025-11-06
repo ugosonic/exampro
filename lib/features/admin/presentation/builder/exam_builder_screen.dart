@@ -241,7 +241,7 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
   return Card(
     child: ListTile(
       title: Text(((q['body'] as String?) ?? '').isNotEmpty ? q['body'] : 'Untitled question'),
-      subtitle: Text('${opts.length} options â€¢ $correctCount correct'),
+      subtitle: Text('${opts.length} options • $correctCount correct'),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(icon: const Icon(Icons.edit), onPressed: onEdit),
         IconButton(icon: const Icon(Icons.delete), onPressed: onDelete),

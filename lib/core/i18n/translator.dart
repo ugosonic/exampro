@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'locale_controller.dart';
 
 class Translator {
-  final WidgetRef ref;
+  final Ref ref;
   Translator(this.ref);
 
   Future<String> t(String entity, int id, String key, String fallback) async {
@@ -23,4 +23,4 @@ class Translator {
   }
 }
 
-final translatorProvider = Provider.family<Translator, void>((ref, _) => Translator(ref));
+final translatorProvider = Provider<Translator>((ref) => Translator(ref));

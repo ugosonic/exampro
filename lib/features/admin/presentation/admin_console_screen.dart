@@ -16,7 +16,6 @@ import 'package:exampro/core/network/dio_client.dart';
 import 'package:exampro/features/exam/presentation/pdf_viewer_screen.dart';
 import 'package:exampro/features/sync/data/sync_repository.dart';
 import 'package:exampro/features/sync/data/pg_content_service.dart';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/widgets.dart' show Image; // for Image.network fallback
@@ -54,7 +53,7 @@ class _AdminConsoleScreenState extends ConsumerState<AdminConsoleScreen> with Si
             width: double.infinity,
             color: Colors.amber.withOpacity(0.2),
             padding: const EdgeInsets.all(8),
-            child: const Text('Admins only â€” limited view'),
+            child: const Text('Admins only — limited view'),
           ),
         _AdminCardsBar(controller: _tabController),
         Expanded(
@@ -503,20 +502,44 @@ class _AdminCardsBar extends StatelessWidget {
   }
 }
 
-class _SquareThumb extends StatelessWidget {
+class _SquareThumb extends ConsumerWidget {
   final String src;
   const _SquareThumb({required this.src});
   @override
-  Widget build(BuildContext context) {
-    final isHttp = src.startsWith('http://') || src.startsWith('https://');
+  Widget build(BuildContext context, WidgetRef ref) {
     final w = 40.0, h = 40.0;
-    if (isHttp) {
-      return Image.network(src, width: w, height: h, fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _fallback(w, h));
+    final resolved = src.trim();
+    if (resolved.isEmpty) return _fallback(w, h);
+    Widget network(String url) => Image.network(url, width: w, height: h, fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _fallback(w, h));
+    if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
+      return network(resolved);
     }
-    final f = File(src);
-    if (!f.existsSync()) return _fallback(w, h);
-    return Image.file(f, width: w, height: h, fit: BoxFit.cover);
+    if (resolved.startsWith('assets/')) {
+      return Image.asset(resolved, width: w, height: h, fit: BoxFit.cover);
+    }
+    final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+    if (resolved.startsWith('/')) {
+      final base = env?.apiBaseUrl ?? '';
+      if (base.isNotEmpty) {
+        final url = '${base.endsWith('/') ? base.substring(0, base.length - 1) : base}$resolved';
+        return network(url);
+      }
+    }
+    final uri = Uri.tryParse(resolved);
+    if (uri != null && uri.scheme == 'file') {
+      final f = File.fromUri(uri);
+      if (f.existsSync()) return Image.file(f, width: w, height: h, fit: BoxFit.cover);
+    }
+    final f = File(resolved);
+    if (f.existsSync()) return Image.file(f, width: w, height: h, fit: BoxFit.cover);
+    final base = env?.apiBaseUrl ?? '';
+    if (base.isNotEmpty) {
+      final normalizedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+      final path = resolved.startsWith('/') ? resolved.substring(1) : resolved;
+      return network('$normalizedBase/$path');
+    }
+    return _fallback(w, h);
   }
 
   Widget _fallback(double w, double h) => Container(width: w, height: h, color: Colors.black26, child: const Icon(Icons.image_not_supported, size: 16));
@@ -660,7 +683,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                     if (v == true) _selected.add(u.id); else _selected.remove(u.id);
                   }),
                   title: Text(u.email),
-                  subtitle: Text('Role: ${u.role} â€¢ ${u.isPro ? 'Pro' : 'Free'}'),
+                  subtitle: Text('Role: ${u.role} • ${u.isPro ? 'Pro' : 'Free'}'),
                   secondary: IconButton(
                     icon: const Icon(Icons.more_vert),
                     tooltip: 'Manage user',
@@ -1044,8 +1067,8 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
             final p = _items[i];
             return Card(
               child: ListTile(
-                title: Text('${p.userEmail} â€¢ ${p.currency} ${(p.amountMinor / 100).toStringAsFixed(2)}'),
-                subtitle: Text('${p.status} â€¢ ${p.createdAt.toLocal()}'.split('.').first),
+                title: Text('${p.userEmail} • ${p.currency} ${(p.amountMinor / 100).toStringAsFixed(2)}'),
+                subtitle: Text('${p.status} • ${p.createdAt.toLocal()}'.split('.').first),
                 trailing: p.refunded ? const Text('Refunded') : TextButton(onPressed: () async {
                   await ref.read(adminRepositoryProvider).markRefunded(p.id);
                   setState(() => _items[i] = p.copyWith(refunded: true, status: 'refunded'));

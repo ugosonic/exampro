@@ -89,7 +89,7 @@ class ExamDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('#questions: ${ex.questionCount}   â€¢   Time: ${ex.timeLimitMinutes} mins   â€¢   Pass: ${ex.passPercent}%'),
+                  Text('#questions: ${ex.questionCount}   •   Time: ${ex.timeLimitMinutes} mins   •   Pass: ${ex.passPercent}%'),
                   if (ex.description.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(ex.description),
@@ -165,7 +165,7 @@ class ExamDetailScreen extends ConsumerWidget {
                                   final date = ended ?? a.startedAt;
                                   final subtitle = (ended == null)
                                       ? 'In progress'
-                                      : 'Score: ${a.scorePercent}% ${a.gradeLabel.isNotEmpty ? ' â€¢ ${a.gradeLabel}' : ''}';
+                                      : 'Score: ${a.scorePercent}% ${a.gradeLabel.isNotEmpty ? ' • ${a.gradeLabel}' : ''}';
                                   return ListTile(
                                     leading: Icon(ended == null ? Icons.play_circle : Icons.check_circle, color: ended == null ? Colors.orange : Colors.green),
                                     title: Text('${date.toLocal()}'.split('.').first),

@@ -24,32 +24,51 @@ class _CategoryImage extends ConsumerWidget {
   const _CategoryImage({required this.src});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isHttp = src.startsWith('http://') || src.startsWith('https://');
     const w = 90.0, h = 60.0;
     final border = BorderRadius.circular(10);
-    if (isHttp) {
+    final resolved = src.trim();
+    if (resolved.isEmpty) return _fallback(w, h);
+    Widget network(String url) => ClipRRect(
+          borderRadius: border,
+          child: Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h)),
+        );
+    if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
+      return network(resolved);
+    }
+    if (resolved.startsWith('assets/')) {
       return ClipRRect(
         borderRadius: border,
-        child: Image.network(
-          src,
-          width: w,
-          height: h,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _fallback(w, h),
-        ),
+        child: Image.asset(resolved, width: w, height: h, fit: BoxFit.cover),
       );
     }
-    if (src.startsWith('/')) {
-      final env = ref.watch(envLoaderProvider).requireValue;
-      final url = '${env.apiBaseUrl}$src';
-      return ClipRRect(
-        borderRadius: border,
-        child: Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h)),
-      );
+    final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+    if (resolved.startsWith('/')) {
+      final base = env?.apiBaseUrl ?? '';
+      if (base.isNotEmpty) {
+        final url = '${base.endsWith('/') ? base.substring(0, base.length - 1) : base}$resolved';
+        return network(url);
+      }
+      return _fallback(w, h);
     }
-    final f = File(src);
-    if (!f.existsSync()) return _fallback(w, h);
-    return Image.file(f, width: w, height: h, fit: BoxFit.cover);
+    final uri = Uri.tryParse(resolved);
+    if (uri != null && uri.scheme == 'file') {
+      final file = File.fromUri(uri);
+      if (file.existsSync()) {
+        return ClipRRect(borderRadius: border, child: Image.file(file, width: w, height: h, fit: BoxFit.cover));
+      }
+    }
+    final file = File(resolved);
+    if (file.existsSync()) {
+      return ClipRRect(borderRadius: border, child: Image.file(file, width: w, height: h, fit: BoxFit.cover));
+    }
+    final base = env?.apiBaseUrl ?? '';
+    if (base.isNotEmpty) {
+      final normalizedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+      final path = resolved.startsWith('/') ? resolved.substring(1) : resolved;
+      final url = '$normalizedBase/$path';
+      return network(url);
+    }
+    return _fallback(w, h);
   }
 
   Widget _fallback(double w, double h) => Container(
@@ -316,7 +335,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('Daily Goal', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black.withValues(alpha: 0.85))),
                     const SizedBox(height: 4),
-                    Text('$target mins â€¢ Notifications: ${notify ? 'On' : 'Off'}', style: TextStyle(color: Colors.black.withValues(alpha: 0.6)))
+                    Text('$target mins • Notifications: ${notify ? 'On' : 'Off'}', style: TextStyle(color: Colors.black.withValues(alpha: 0.6)))
                   ]),
                 ),
                 FilledButton(
@@ -649,13 +668,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                             )
                           : null;
-                      final label = sub == null ? cat.name : '${cat.name} â€¢ ${sub.name}';
+                      final label = sub == null ? cat.name : '${cat.name} • ${sub.name}';
                       final on = Theme.of(context).colorScheme.onSurface;
-                      return Text('${ex.title} â€¢ $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.92), fontWeight: FontWeight.w600));
+                      return Text('${ex.title} • $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.92), fontWeight: FontWeight.w600));
                       }(),
                     subtitle: Builder(builder: (context) {
                       final on = Theme.of(context).colorScheme.onSurface;
-                      return Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} â€¢ ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.7)));
+                      return Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} • ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.7)));
                     }),
                       onTap: () {
                         final a = attempts[i];

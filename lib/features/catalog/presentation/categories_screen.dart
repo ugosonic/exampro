@@ -106,20 +106,44 @@ class _CategoryImage extends ConsumerWidget {
   const _CategoryImage({required this.src});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final w = 90.0, h = 60.0;
-    final isHttp = src.startsWith('http://') || src.startsWith('https://');
-    if (isHttp) {
-      return Image.network(src, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h));
+    const w = 90.0, h = 60.0;
+    final resolved = src.trim();
+    if (resolved.isEmpty) return _fallback(w, h);
+    Widget network(String url) => Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h));
+    if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
+      return network(resolved);
     }
-    // Resolve server-relative paths like "/files/..." using API_BASE_URL
-    if (src.startsWith('/')) {
-      final env = ref.watch(envLoaderProvider).requireValue;
-      final url = '${env.apiBaseUrl}$src';
-      return Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h));
+    if (resolved.startsWith('assets/')) {
+      return Image.asset(resolved, width: w, height: h, fit: BoxFit.cover);
     }
-    final f = File(src);
-    if (!f.existsSync()) return _fallback(w, h);
-    return Image.file(f, width: w, height: h, fit: BoxFit.cover);
+    final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+    if (resolved.startsWith('/')) {
+      final base = env?.apiBaseUrl ?? '';
+      if (base.isNotEmpty) {
+        final url = '${base.endsWith('/') ? base.substring(0, base.length - 1) : base}$resolved';
+        return network(url);
+      }
+      return _fallback(w, h);
+    }
+    final uri = Uri.tryParse(resolved);
+    if (uri != null && uri.scheme == 'file') {
+      final file = File.fromUri(uri);
+      if (file.existsSync()) {
+        return Image.file(file, width: w, height: h, fit: BoxFit.cover);
+      }
+    }
+    final file = File(resolved);
+    if (file.existsSync()) {
+      return Image.file(file, width: w, height: h, fit: BoxFit.cover);
+    }
+    final base = env?.apiBaseUrl ?? '';
+    if (base.isNotEmpty) {
+      final normalizedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+      final path = resolved.startsWith('/') ? resolved.substring(1) : resolved;
+      final url = '$normalizedBase/$path';
+      return network(url);
+    }
+    return _fallback(w, h);
   }
 
   Widget _fallback(double w, double h) => Container(width: w, height: h, color: Colors.white.withValues(alpha: 0.06), child: const Icon(Icons.image_not_supported, color: Colors.white70));

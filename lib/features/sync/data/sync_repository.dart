@@ -158,6 +158,17 @@ class SyncRepository {
           if (email == null || email.isEmpty) continue;
           final isPro = (m['is_pro'] as bool?) ?? false;
           final role = (m['role'] as String?) ?? 'user';
+          final remoteId = (m['id'] as num?)?.toInt();
+          await _db.into(_db.users).insert(
+                UsersCompanion(
+                  id: remoteId != null ? Value(remoteId) : const Value.absent(),
+                  email: Value(email),
+                  password: const Value(''),
+                  role: Value(role),
+                  isPro: Value(isPro),
+                ),
+                mode: InsertMode.insertOrIgnore,
+              );
           await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(
             UsersCompanion(
               isPro: Value(isPro),

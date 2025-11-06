@@ -123,24 +123,37 @@ class ExamRepository {
     if (allExamIds.isNotEmpty) {
       final joins = await (_db.select(_db.examQuestions)
             ..where((j) => j.examId.isIn(allExamIds))
-            ..orderBy([(j) => drift.OrderingTerm.asc(j.order)])).
-          get();
-      final qIds = joins.map((j) => j.questionId).toSet().toList();
-      if (qIds.isNotEmpty) {
-        final qs = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
-        final opts = await (_db.select(_db.choices)..where((o) => o.questionId.isIn(qIds))..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).get();
-        final lang = await _lang();
-        qIds.sort();
-        return [
-          for (final id in qIds)
-            _QuestionWithOptions(
-              question: await _translateQuestion(qs.firstWhere((q) => q.id == id), lang),
-              options: [
-                for (final o in opts.where((o) => o.questionId == id))
-                  await _translateChoice(o, lang)
-              ],
-            )
-        ];
+            ..orderBy([(j) => drift.OrderingTerm.asc(j.order)])).get();
+      if (joins.isNotEmpty) {
+        final uniqueIds = <int>[];
+        final seen = <int>{};
+        for (final j in joins) {
+          if (seen.add(j.questionId)) uniqueIds.add(j.questionId);
+        }
+        if (uniqueIds.isNotEmpty) {
+          final qs = await (_db.select(_db.questions)..where((q) => q.id.isIn(uniqueIds))).get();
+          final qMap = {for (final q in qs) q.id: q};
+          final opts = await (_db.select(_db.choices)
+                ..where((o) => o.questionId.isIn(uniqueIds))
+                ..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).get();
+          final optMap = <int, List<Choice>>{};
+          for (final o in opts) {
+            optMap.putIfAbsent(o.questionId, () => <Choice>[]).add(o);
+          }
+          final lang = await _lang();
+          final out = <_QuestionWithOptions>[];
+          for (final id in uniqueIds) {
+            final question = qMap[id];
+            if (question == null) continue;
+            final optionList = optMap[id];
+            if (optionList == null || optionList.isEmpty) continue;
+            out.add(_QuestionWithOptions(
+              question: await _translateQuestion(question, lang),
+              options: [for (final o in optionList) await _translateChoice(o, lang)],
+            ));
+          }
+          if (out.isNotEmpty) return out;
+        }
       }
     }
     // Remote fallback: build by fetching exams then expanding questions
