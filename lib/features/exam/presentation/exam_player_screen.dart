@@ -212,20 +212,21 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
               }
             },
           ),
-          IconButton(
-            tooltip: 'Report',
-            icon: const Icon(Icons.flag_outlined),
-            onPressed: () async {
-              final comment = await _promptComment(context);
-              if (comment == null || comment.trim().isEmpty) return;
-              final user = ref.read(currentUserProvider);
-              final email = user?.email ?? 'guest@local';
-              await ref.read(examRepositoryProvider).submitReport(examId: examId, userEmail: email, comment: comment.trim());
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent')));
-              }
-            },
-          ),
+          if (widget.categoryId == null)
+            IconButton(
+              tooltip: 'Report',
+              icon: const Icon(Icons.flag_outlined),
+              onPressed: () async {
+                final comment = await _promptComment(context);
+                if (comment == null || comment.trim().isEmpty) return;
+                final user = ref.read(currentUserProvider);
+                final email = user?.email ?? 'guest@local';
+                await ref.read(examRepositoryProvider).submitReport(examId: examId, userEmail: email, comment: comment.trim());
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent')));
+                }
+              },
+            ),
           if ((_exam?.timeLimitMinutes ?? 0) > 0)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14),

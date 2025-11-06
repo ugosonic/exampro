@@ -775,16 +775,31 @@ class _PieCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final on = Theme.of(context).colorScheme.onSurface;
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      child: NeonGlassCard(
-        borderRadius: 16,
-        padding: const EdgeInsets.all(12),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Expanded(child: _AnimatedPie(completed: item.completed, total: item.total, color: color)),
-          const SizedBox(height: 8),
-          Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, color: on.withOpacity(0.95))),
-        ]),
+    return SizedBox(
+      width: 150,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        child: NeonGlassCard(
+          borderRadius: 16,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                height: 90,
+                width: 90,
+                child: _AnimatedPie(completed: item.completed, total: item.total, color: color),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                item.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w700, color: on.withOpacity(0.95)),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

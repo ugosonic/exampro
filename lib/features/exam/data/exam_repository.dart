@@ -13,6 +13,10 @@ class ExamRepository {
   ExamRepository(this._db, [this._remote]);
 
   Future<Exam?> getExam(int id) async {
+    // Prefer local DB
+    final local = await (_db.select(_db.exams)..where((e) => e.id.equals(id))).getSingleOrNull();
+    if (local != null) return local;
+    // Fallback to remote when available
     if (_remote != null) {
       final rows = await _remote!.exams();
       final m = rows.firstWhere((e) => (e['id'] as num).toInt() == id, orElse: () => {} as Map<String, dynamic>);
@@ -33,10 +37,36 @@ class ExamRepository {
         pdfUrl: (m['pdf_url'] as String?) ?? '',
       );
     }
-    return await (_db.select(_db.exams)..where((e) => e.id.equals(id))).getSingleOrNull();
+    return null;
   }
 
   Future<List<_QuestionWithOptions>> questionsForExam(int examId) async {
+    // Local first
+    final joins = await (_db.select(_db.examQuestions)
+          ..where((e) => e.examId.equals(examId))
+          ..orderBy([(t) => drift.OrderingTerm.asc(t.order)]))
+        .get();
+    final qIds = joins.map((j) => j.questionId).toSet().toList();
+    if (qIds.isNotEmpty) {
+      final qRows = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
+      final options = await (_db
+              .select(_db.choices)
+            ..where((o) => o.questionId.isIn(qIds))
+            ..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).
+          get();
+      final lang = await _lang();
+      return [
+        for (final j in joins)
+          _QuestionWithOptions(
+            question: await _translateQuestion(qRows.firstWhere((q) => q.id == j.questionId), lang),
+            options: [
+              for (final o in options.where((o) => o.questionId == j.questionId))
+                await _translateChoice(o, lang)
+            ],
+          )
+      ];
+    }
+    // Remote fallback
     if (_remote != null) {
       final data = await _remote!.examQuestions(examId);
       final order = (data['order'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
@@ -58,7 +88,11 @@ class ExamRepository {
           _QuestionWithOptions(
             question: await _translateQuestion(mapQ((j['question_id'] as num).toInt()), lang),
             options: [
-              for (final o in cs.where((o) => (o['question_id'] as num).toInt() == (j['question_id'] as num).toInt()).toList()..sort((a,b)=>((a['order'] as num?)?.toInt()??0).compareTo((b['order'] as num?)?.toInt()??0)))
+              for (final o in cs
+                  .where((o) => (o['question_id'] as num).toInt() == (j['question_id'] as num).toInt())
+                  .toList()
+                ..sort((a, b) => ((a['order'] as num?)?.toInt() ?? 0)
+                    .compareTo((b['order'] as num?)?.toInt() ?? 0)))
                 await _translateChoice(
                   Choice(
                     id: (o['id'] as num).toInt(),
@@ -73,35 +107,44 @@ class ExamRepository {
           ),
       ];
     }
-    final joins = await (_db.select(_db.examQuestions)
-          ..where((e) => e.examId.equals(examId))
-          ..orderBy([(t) => drift.OrderingTerm.asc(t.order)]))
-        .get();
-    final qIds = joins.map((j) => j.questionId).toSet().toList();
-    if (qIds.isEmpty) return [];
-    final qRows = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
-    final options = await (_db
-            .select(_db.choices)
-          ..where((o) => o.questionId.isIn(qIds))
-          ..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).
-        get();
-    final lang = await _lang();
-    return [
-      for (final j in joins)
-        _QuestionWithOptions(
-          question: await _translateQuestion(
-              qRows.firstWhere((q) => q.id == j.questionId), lang),
-          options: [
-            for (final o in options.where((o) => o.questionId == j.questionId))
-              await _translateChoice(o, lang)
-          ],
-        )
-    ];
+    return [];
   }
 
   Future<List<_QuestionWithOptions>> questionsForCategory(int categoryId) async {
+    // Local first: aggregate all questions across category and its subcategories
+    final examRows = await (_db.select(_db.exams)..where((e) => e.categoryId.equals(categoryId))).get();
+    final subIds = await (_db.select(_db.subcategories)..where((s) => s.categoryId.equals(categoryId)))
+        .get()
+        .then((l) => l.map((s) => s.id).toList());
+    final subExams = subIds.isEmpty
+        ? <Exam>[]
+        : await (_db.select(_db.exams)..where((e) => e.subcategoryId.isIn(subIds))).get();
+    final allExamIds = {...examRows.map((e) => e.id), ...subExams.map((e) => e.id)}.toList();
+    if (allExamIds.isNotEmpty) {
+      final joins = await (_db.select(_db.examQuestions)
+            ..where((j) => j.examId.isIn(allExamIds))
+            ..orderBy([(j) => drift.OrderingTerm.asc(j.order)])).
+          get();
+      final qIds = joins.map((j) => j.questionId).toSet().toList();
+      if (qIds.isNotEmpty) {
+        final qs = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
+        final opts = await (_db.select(_db.choices)..where((o) => o.questionId.isIn(qIds))..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).get();
+        final lang = await _lang();
+        qIds.sort();
+        return [
+          for (final id in qIds)
+            _QuestionWithOptions(
+              question: await _translateQuestion(qs.firstWhere((q) => q.id == id), lang),
+              options: [
+                for (final o in opts.where((o) => o.questionId == id))
+                  await _translateChoice(o, lang)
+              ],
+            )
+        ];
+      }
+    }
+    // Remote fallback: build by fetching exams then expanding questions
     if (_remote != null) {
-      // Load exams, then aggregate questions across them
       final exs = await _remote!.exams(categoryId: categoryId);
       final out = <_QuestionWithOptions>[];
       for (final e in exs) {
@@ -110,35 +153,7 @@ class ExamRepository {
       }
       return out;
     }
-    // Collect question ids from all exams in this category (including subcategories)
-    final examRows = await (_db.select(_db.exams)..where((e) => e.categoryId.equals(categoryId))).get();
-    final subIds = await (_db.select(_db.subcategories)..where((s) => s.categoryId.equals(categoryId))).get().then((l)=>l.map((s)=>s.id).toList());
-    final subExams = subIds.isEmpty
-        ? <Exam>[]
-        : await (_db.select(_db.exams)..where((e) => e.subcategoryId.isIn(subIds))).get();
-    final allExamIds = {...examRows.map((e) => e.id), ...subExams.map((e) => e.id)}.toList();
-    if (allExamIds.isEmpty) return [];
-    final joins = await (_db.select(_db.examQuestions)
-          ..where((j) => j.examId.isIn(allExamIds))
-          ..orderBy([(j) => drift.OrderingTerm.asc(j.order)])).
-        get();
-    final qIds = joins.map((j) => j.questionId).toSet().toList();
-    if (qIds.isEmpty) return [];
-    final qs = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
-    final opts = await (_db.select(_db.choices)..where((o) => o.questionId.isIn(qIds))..orderBy([(o) => drift.OrderingTerm.asc(o.order)])).get();
-    final lang = await _lang();
-    // Return in a stable order by question id
-    qIds.sort();
-    return [
-      for (final id in qIds)
-        _QuestionWithOptions(
-          question: await _translateQuestion(qs.firstWhere((q) => q.id == id), lang),
-          options: [
-            for (final o in opts.where((o) => o.questionId == id))
-              await _translateChoice(o, lang)
-          ],
-        )
-    ];
+    return [];
   }
 
   Future<int> startAttempt({required int examId, required String mode, required String userEmail}) async {
