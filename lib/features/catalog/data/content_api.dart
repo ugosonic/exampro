@@ -9,7 +9,11 @@ class ContentApi {
   Future<List<Map<String, dynamic>>> categories() async {
     try {
       final res = await _dio.get('/catalog/categories');
-      return (res.data as List).cast<Map<String, dynamic>>();
+      final list = (res.data as List? ?? const [])
+          .cast<Map>()
+          .map((m) => (m as Map).cast<String, dynamic>())
+          .toList();
+      return list;
     } on DioException catch (e) {
       if ((e.response?.statusCode ?? 0) == 404) {
         final snap = await _dio.get('/sync/snapshot');
@@ -27,7 +31,11 @@ class ContentApi {
       final res = await _dio.get('/catalog/subcategories', queryParameters: {
         if (categoryId != null) 'category_id': categoryId,
       });
-      return (res.data as List).cast<Map<String, dynamic>>();
+      final list = (res.data as List? ?? const [])
+          .cast<Map>()
+          .map((m) => (m as Map).cast<String, dynamic>())
+          .toList();
+      return list;
     } on DioException catch (e) {
       if ((e.response?.statusCode ?? 0) == 404) {
         final snap = await _dio.get('/sync/snapshot');
@@ -50,7 +58,11 @@ class ContentApi {
         if (categoryId != null) 'category_id': categoryId,
         if (subcategoryId != null) 'subcategory_id': subcategoryId,
       });
-      return (res.data as List).cast<Map<String, dynamic>>();
+      final list = (res.data as List? ?? const [])
+          .cast<Map>()
+          .map((m) => (m as Map).cast<String, dynamic>())
+          .toList();
+      return list;
     } on DioException catch (e) {
       if ((e.response?.statusCode ?? 0) == 404) {
         final snap = await _dio.get('/sync/snapshot');

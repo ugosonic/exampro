@@ -1,4 +1,4 @@
-﻿import 'package:exampro/core/i18n/tr_text.dart';
+import 'package:exampro/core/i18n/tr_text.dart';
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:exampro/features/exam/data/exam_repository.dart';
@@ -20,7 +20,7 @@ class ExamDetailScreen extends ConsumerWidget {
     final repo = ref.watch(examRepositoryProvider);
     final id = int.tryParse(examId) ?? 0;
     return Scaffold(
-      appBar: AppBar(title: const TrText('Exam'),
+      appBar: AppBar(title: const TrText('Exam'), leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => context.canPop() ? context.pop() : context.go('/categories')),
         actions: [
           IconButton(
             tooltip: 'Report',
@@ -40,14 +40,14 @@ class ExamDetailScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         child: FutureBuilder<Exam?>(
-          future: (db.select(db.exams)..where((e) => e.id.equals(id))).getSingleOrNull(),
+          future: repo.getExam(id),
           builder: (context, snap) {
             final ex = snap.data;
             if (ex == null) return const Center(child: CircularProgressIndicator());
             // Gate if locked and user is not pro
             return FutureBuilder(
               future: () async {
-                final cat = await (db.select(db.categories)..where((c) => c.id.equals(ex.categoryId))).getSingle();
+                final cat = await (db.select(db.categories)..where((c) => c.id.equals(ex.categoryId))).getSingleOrNull();
                 Subcategory? sub;
                 if (ex.subcategoryId != null) {
                   sub = await (db.select(db.subcategories)..where((s) => s.id.equals(ex.subcategoryId!))).getSingleOrNull();
@@ -58,7 +58,7 @@ class ExamDetailScreen extends ConsumerWidget {
                   final row = await (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull();
                   isPro = row?.isPro ?? false;
                 }
-                final locked = (cat.locked) || (sub?.locked ?? false);
+                final locked = ((cat?.locked ?? false) || (sub?.locked ?? false));
                 // Read-only flag stored in app_settings as exam_readonly_<id>
                 final key = 'exam_readonly_${id}';
                 final ro = await (db.select(db.appSettings)..where((s) => s.key.equals(key))).getSingleOrNull();
@@ -89,7 +89,7 @@ class ExamDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('#questions: ${ex.questionCount}   •   Time: ${ex.timeLimitMinutes} mins   •   Pass: ${ex.passPercent}%'),
+                  Text('#questions: ${ex.questionCount}   -   Time: ${ex.timeLimitMinutes} mins   -   Pass: ${ex.passPercent}%'),
                   if (ex.description.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(ex.description),
@@ -297,6 +297,7 @@ Future<String?> _promptComment(BuildContext context) async {
     ),
   );
 }
+
 
 
 

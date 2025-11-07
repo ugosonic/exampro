@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:exampro/core/db/app_database.dart';
@@ -69,9 +69,12 @@ class ExamRepository {
     // Remote fallback
     if (_remote != null) {
       final data = await _remote!.examQuestions(examId);
-      final order = (data['order'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final qs = (data['questions'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final cs = (data['choices'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      final rawOrder = (data['order'] as List?) ?? const [];
+      final order = [for (final m in rawOrder) (m as Map).cast<String, dynamic>()];
+      final rawQs = (data['questions'] as List?) ?? const [];
+      final qs = [for (final m in rawQs) (m as Map).cast<String, dynamic>()];
+      final rawCs = (data['choices'] as List?) ?? const [];
+      final cs = [for (final m in rawCs) (m as Map).cast<String, dynamic>()];
       final lang = await _lang();
       Question mapQ(int qid) {
         final m = qs.firstWhere((q) => (q['id'] as num).toInt() == qid);

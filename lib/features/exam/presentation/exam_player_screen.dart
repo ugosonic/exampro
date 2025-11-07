@@ -126,7 +126,6 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
       });
     }
   }
-  }
 
   void _ensureUnlockedIndex() {
     if (_questions.isEmpty) return;

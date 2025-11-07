@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:exampro/common/widgets/neon_glass.dart';
 import 'package:go_router/go_router.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:exampro/core/config/env_loader.dart';
+import 'package:exampro/features/catalog/data/content_api.dart';
 
 class ExamsByCategoryScreen extends ConsumerWidget {
   final String categoryId;
@@ -31,7 +33,7 @@ class ExamsByCategoryScreen extends ConsumerWidget {
     final db = ref.watch(dbProvider);
     final id = int.tryParse(categoryId) ?? 0;
     return Scaffold(
-      appBar: AppBar(title: const Text('Exams')),
+      appBar: AppBar(title: const Text('Exams'), leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => context.canPop() ? context.pop() : context.go('/categories')) ),
       body: NeonBackground(
         child: FutureBuilder(
         future: () async {
@@ -44,12 +46,31 @@ class ExamsByCategoryScreen extends ConsumerWidget {
             isPro = row?.isPro ?? false;
           }
           final catLocked = await repo.isCategoryLocked(id);
-          // Build a map of subcategoryId -> locked for exams shown
-          final subIds = list.map((e) => e.subcategoryId).where((x) => x != null).cast<int>().toSet().toList();
-          final subs = subIds.isEmpty
-              ? const <dynamic>[]
-              : await (db.select(db.subcategories)..where((s) => s.id.isIn(subIds))).get();
-          final subLocked = {for (final s in subs) s.id: s.locked};
+          // Build subcategory info (name/locked) using remote when available
+          final env = ref.read(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+          final hasApi = env != null && (env!.apiBaseUrl.isNotEmpty);
+          final subIds = list.map((e) => e.subcategoryId).where((x) => x != null && x != 0).cast<int>().toSet().toList();
+          final List<Map<String, dynamic>> subs = subIds.isEmpty
+              ? const <Map<String, dynamic>>[]
+              : hasApi
+                  ? await ref
+                      .read(contentApiProvider)
+                      .subcategories(categoryId: id)
+                      .then((rows) => [
+                            for (final m in rows)
+                              if (subIds.contains((m['id'] as num).toInt())) m,
+                          ])
+                  : [
+                      for (final s in await (db.select(db.subcategories)..where((s) => s.id.isIn(subIds))).get())
+                        {
+                          'id': s.id,
+                          'name': s.name,
+                          'locked': s.locked,
+                        }
+                    ];
+          final subLocked = {
+            for (final m in subs) (m['id'] as int): ((m['locked'] as bool?) ?? false)
+          };
           // Completed exams set
           final completedRows = await (db.select(db.attempts)
                 ..where((a) => a.endedAt.isNotNull() & a.userEmail.equals(email)))
@@ -72,7 +93,7 @@ class ExamsByCategoryScreen extends ConsumerWidget {
           final catLocked = data.catLocked as bool;
           final subLocked = (data.subLocked as Map);
           final isPro = data.isPro as bool;
-          final subs = (data.subs as List);
+          final List<Map<String, dynamic>> subs = (data.subs as List).cast<Map<String, dynamic>>();
           final completed = (data.completed as Set);
           if (exams.isEmpty) {
             return const Center(child: Text('No exams yet in this category'));
@@ -84,12 +105,12 @@ class ExamsByCategoryScreen extends ConsumerWidget {
             (bySub[k] ??= []).add(e);
           }
           String labelFor(int? sid) {
-            if (sid == null) return 'General';
-            dynamic found;
-            for (final x in subs) {
-              if (x.id == sid) { found = x; break; }
-            }
-            return found == null ? 'General' : (found.name as String);
+            if (sid == null || sid == 0) return 'General';
+            final m = subs.firstWhere(
+              (e) => ((e['id'] as num).toInt() == sid),
+              orElse: () => const <String, dynamic>{},
+            );
+            return (m['name'] as String?) ?? 'General';
           }
 
           final children = <Widget>[

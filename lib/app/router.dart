@@ -26,6 +26,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+bool _didRestoreLastRoute = false;
+
 class _RouteSaver extends NavigatorObserver {
   final Ref ref;
   _RouteSaver(this.ref);
@@ -33,6 +35,8 @@ class _RouteSaver extends NavigatorObserver {
     if (nav == null) return;
     try {
       final loc = GoRouter.of(nav.context).routeInformationProvider.value.uri.toString();
+      if (loc.isEmpty || loc == '/' || loc == '/onboarding' || loc == '/auth' || loc == '/register' ) return;
+      if (loc.startsWith('/admin')) return;
       final db = ref.read(dbProvider);
       await db
           .into(db.appSettings)
@@ -168,7 +172,18 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
   final onboarding = loc == '/onboarding';
   final exploring = loc == '/categories' || loc.startsWith('/categories/');
   final goingAdmin = loc.startsWith('/admin');
-
+  // One-time last-route restore when starting from onboarding/root
+  if (signedIn && !_didRestoreLastRoute && (onboarding || loc == '/')) {
+    try {
+      final db = ref.read(dbProvider);
+      final row = await (db.select(db.appSettings)..where((s) => s.key.equals('last_route'))).getSingleOrNull();
+      final saved = row?.value ?? '';
+      if (saved.isNotEmpty && saved != loc && saved != '/' && saved != '/onboarding' && saved != '/auth' && saved != '/register' && !(saved.startsWith('/admin') && (user == null || user.role != 'admin'))) {
+        _didRestoreLastRoute = true;
+        return saved;
+      }
+    } catch (_) {}
+  }
   // Not signed in: allow auth/onboarding/explore; otherwise push to /auth
   if (!signedIn) {
     if (loggingIn || registering || onboarding || exploring) return null;
@@ -180,18 +195,6 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
     return '/dashboard';
   }
   if (goingAdmin && (user == null || user.role != 'admin')) return '/dashboard';
-  // Restore last route when available and appropriate
-  try {
-    final db = ref.read(dbProvider);
-    final row = await (db.select(db.appSettings)..where((s) => s.key.equals('last_route'))).getSingleOrNull();
-    final saved = row?.value ?? '';
-    if (saved.isNotEmpty && saved != loc) {
-      final canShow = !loggingIn && !registering && !onboarding; // allow dashboard/categories/player/etc.
-      if (canShow) {
-        return saved;
-      }
-    }
-  } catch (_) {}
   return null;
 }
 
