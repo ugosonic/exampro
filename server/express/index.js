@@ -1,6 +1,5 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import path from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
 import jwt from 'jsonwebtoken';
@@ -13,8 +12,10 @@ import path from 'path';
 
 // Load .env next to this file regardless of PM2/working directory
 try {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  dotenv.config({ path: path.join(__dirname, '.env') });
+  // Resolve .env relative to this file so PM2/working directory doesn't matter
+  const __dirname = (await import('path')).default.dirname(fileURLToPath(import.meta.url));
+  const join = (await import('path')).default.join;
+  dotenv.config({ path: join(__dirname, '.env') });
 } catch (_) {
   dotenv.config();
 }
