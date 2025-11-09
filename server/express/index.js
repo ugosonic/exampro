@@ -1,5 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import pkg from 'pg';
 import jwt from 'jsonwebtoken';
 import Stripe from 'stripe';
@@ -9,7 +11,13 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 
-dotenv.config();
+// Load .env next to this file regardless of PM2/working directory
+try {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  dotenv.config({ path: path.join(__dirname, '.env') });
+} catch (_) {
+  dotenv.config();
+}
 const { Pool } = pkg;
 
 const { DATABASE_URL, SYNC_ADMIN_TOKEN, PORT = 8000, JWT_SECRET = 'change-me', ADMIN_EMAILS = '', STRIPE_SECRET_KEY = '', STRIPE_SUCCESS_URL = 'https://example.com/success', STRIPE_CANCEL_URL = 'https://example.com/cancel', SMTP_HOST = '', SMTP_PORT = '', SMTP_USER = '', SMTP_PASS = '', FROM_EMAIL = '' } = process.env;
@@ -418,13 +426,14 @@ app.get('/cancel', (req, res) => {
 
 // Store a payment record in Postgres (used by app after checkout success)
 app.post('/payments/record', auth, async (req, res) => {
-  const { amount_minor = 0, currency = 'GBP', session_id = '' } = req.body || {};
+  const { amount_minor = 0, currency = 'GBP', session_id = '', payment_intent_id = '' } = req.body || {};
   const email = (req.user && req.user.email) || '';
   if (!email || !amount_minor || amount_minor <= 0) return res.status(400).json({ error: 'invalid_input' });
   const client = await pool.connect();
   try {
     await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
-    await client.query('INSERT INTO payments(user_email, amount_minor, currency, stripe_session_id, status) VALUES($1,$2,$3,$4,$5)', [email, amount_minor, String(currency).toUpperCase(), session_id || '', 'paid']);
+    const stripeId = payment_intent_id || session_id || '';
+    await client.query('INSERT INTO payments(user_email, amount_minor, currency, stripe_session_id, status) VALUES($1,$2,$3,$4,$5)', [email, amount_minor, String(currency).toUpperCase(), stripeId, 'paid']);
     return res.json({ ok: true });
   } catch (e) {
     console.error('payments/record error', e);
@@ -441,6 +450,29 @@ app.get('/admin/payments', adminGuard, async (req, res) => {
     await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
     const rows = await client.query('SELECT id, user_email, amount_minor, currency, stripe_session_id, status, refunded, created_at FROM payments ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
     return res.json(rows.rows);
+  } finally { client.release(); }
+});
+
+// Admin: refund a payment via Stripe (full amount)
+app.post('/admin/refund', adminGuard, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+    const r = await client.query('SELECT amount_minor, stripe_session_id, refunded FROM payments WHERE id = $1', [id]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'not_found' });
+    const row = r.rows[0];
+    if (row.refunded) return res.json({ ok: true });
+    const pi = row.stripe_session_id; // stores PaymentIntent id for PaymentSheet
+    if (!pi) return res.status(400).json({ error: 'missing_payment_intent' });
+    await stripe.refunds.create({ payment_intent: pi, amount: row.amount_minor });
+    await client.query("UPDATE payments SET refunded = TRUE, status = 'refunded' WHERE id = $1", [id]);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('admin/refund error', e);
+    return res.status(500).json({ error: 'failed' });
   } finally { client.release(); }
 });
 
@@ -487,6 +519,25 @@ app.post('/payments/checkout', auth, async (req, res) => {
     return res.json({ url: session.url, id: session.id });
   } catch (e) {
     console.error('stripe checkout error', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Payments: create PaymentIntent for PaymentSheet (native in-app)
+app.post('/payments/intent', auth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  try {
+    const { currency = 'GBP', amount_minor = 0 } = req.body || {};
+    const amount = Number(amount_minor) || 0;
+    if (amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
+    const intent = await stripe.paymentIntents.create({
+      amount,
+      currency: String(currency).toLowerCase(),
+      automatic_payment_methods: { enabled: true },
+    });
+    return res.json({ client_secret: intent.client_secret });
+  } catch (e) {
+    console.error('stripe intent error', e);
     return res.status(500).json({ error: 'failed' });
   }
 });
