@@ -101,11 +101,8 @@ class CatalogRepository {
   }
 
   Stream<List<models.Category>> watchCategories() {
-    if (_remote != null) {
-      // Simple one-shot stream; refreshes happen when the screen pulls again
-      return Stream.fromFuture(categories());
-    }
-    return (_db.select(_db.categories)
+    // Watch local DB for reactive updates
+    final stream = (_db.select(_db.categories)
           ..orderBy([
             (t) => drift.OrderingTerm.asc(t.order),
             (t) => drift.OrderingTerm.asc(t.name),
@@ -125,6 +122,36 @@ class CatalogRepository {
       }
       return out;
     });
+
+    // Kick a background refresh from remote (seed/refresh local) when API is available
+    if (_remote != null) {
+      () async {
+        try {
+          final rows = await _remote!.categories();
+          for (final m in rows) {
+            final id = (m['id'] as num).toInt();
+            final name = (m['name'] as String? ?? '');
+            final order = (m['order'] as num?)?.toInt() ?? 0;
+            final imageUrl = (m['image_url'] as String?) ?? '';
+            final locked = (m['locked'] as bool?) ?? false;
+            try {
+              await _db.into(_db.categories).insertOnConflictUpdate(
+                db.CategoriesCompanion.insert(
+                  id: drift.Value(id),
+                  name: name,
+                  order: drift.Value(order),
+                  imageUrl: drift.Value(imageUrl),
+                  locked: drift.Value(locked),
+                ),
+              );
+            } catch (_) {}
+          }
+        } catch (_) {
+          // ignore network errors; local watch will still work
+        }
+      }();
+    }
+    return stream;
   }
 
   Future<bool> isCategoryLocked(int id) async {

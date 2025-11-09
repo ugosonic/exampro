@@ -90,6 +90,9 @@ dev_dependencies:
   mocktail: ^1.0.4
   golden_toolkit: ^0.15.0
   
+  # Launcher icon generator
+  flutter_launcher_icons: ^0.13.1
+  
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
@@ -104,6 +107,15 @@ flutter:
     - assets/env/vc.env
     - assets/env/vc.env.example
     - assets/images/
+
+# Configure launcher icon generation (run manually)
+flutter_icons:
+  android: true
+  ios: true
+  image_path: assets/images/app_icon.png # export from assets/images/app_icon_multi.svg at 1024x1024
+  remove_alpha_ios: true
+  adaptive_icon_background: "#161A4F"
+  adaptive_icon_foreground: assets/images/app_icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -6,6 +6,7 @@ import 'package:exampro/core/analytics/analytics.dart';
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:exampro/features/exam/data/exam_repository.dart';
+import 'package:exampro/features/sync/data/sync_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,6 +34,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
   Exam? _exam;
   Attempt? _attempt;
   Timer? _ticker;
+  Timer? _syncDebounce;
   int _remainingSec = 0;
   bool _autoSubmitted = false;
   bool _isPro = false;
@@ -60,6 +62,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         final user = ref.read(currentUserProvider);
         final email = user?.email ?? 'guest@local';
         attemptId = await repo.startAttempt(examId: examId, mode: _mode, userEmail: email);
+        _queueSync(email);
       }
       // load questions and options
       final list = (widget.categoryId != null)
@@ -125,6 +128,22 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         }
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _syncDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _queueSync(String email) {
+    _syncDebounce?.cancel();
+    _syncDebounce = Timer(const Duration(seconds: 1), () async {
+      try {
+        await ref.read(syncRepositoryProvider).pushUserProgress(email);
+      } catch (_) {}
+    });
   }
 
   void _ensureUnlockedIndex() {
@@ -222,6 +241,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
               final email = user?.email ?? 'guest@local';
               final q = _questions[index];
               await ref.read(examRepositoryProvider).toggleSaved(questionId: q.id, userEmail: email);
+              _queueSync(email);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated saved questions')));
               }
@@ -359,6 +379,8 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                                     points: ok ? 1 : 0,
                                     isCorrect: ok,
                                   );
+                              final u = ref.read(currentUserProvider);
+                              _queueSync(u?.email ?? 'guest@local');
                               _skipped.remove(q.id);
                             }
                           }
@@ -384,6 +406,8 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               setState(() => index = pending);
                             } else {
                               ref.read(analyticsProvider).event('exam_submit', params: {'examId': widget.examId});
+                              final u = ref.read(currentUserProvider);
+                              _queueSync(u?.email ?? 'guest@local');
                               await _autoSubmit();
                             }
                           }
@@ -466,6 +490,8 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                   points: ok ? 1 : 0,
                   isCorrect: ok,
                 );
+            final u = ref.read(currentUserProvider);
+            _queueSync(u?.email ?? 'guest@local');
             _skipped.remove(q.id);
           }
         },

@@ -337,9 +337,15 @@ class SyncRepository {
 
   Future<void> pullUserProgress(String userEmail) async {
     final data = await _api.fetchUserProgress(userEmail);
-    final attempts = (data['attempts'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-    final answers = (data['answers'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-    final saved = (data['saved'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final attempts = [
+      for (final m in ((data['attempts'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()
+    ];
+    final answers = [
+      for (final m in ((data['answers'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()
+    ];
+    final saved = [
+      for (final m in ((data['saved'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()
+    ];
     await _db.transaction(() async {
       for (final m in attempts) {
         await _db.into(_db.attempts).insert(

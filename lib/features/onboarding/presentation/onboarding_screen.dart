@@ -84,6 +84,7 @@ class OnboardingScreen extends ConsumerWidget {
                           ),
                         ),
                         SizedBox(height: hugeGap),
+                        const _ZenovFooter(),
                         Divider(
                           color: (isDark ? Colors.white : Colors.black)
                               .withOpacity(0.20),
@@ -750,6 +751,27 @@ class _HowItem extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ZenovFooter extends StatelessWidget {
+  const _ZenovFooter();
+  @override
+  Widget build(BuildContext context) {
+    final on = Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFF0B2540);
+    final sub = on.withOpacity(0.75);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 12),
+        Text('Developed by ZenovTech (c) 2025', style: TextStyle(color: sub, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('info@zenovtech.com', style: TextStyle(color: sub)),
+        const SizedBox(height: 4),
+        Text('Contact for websites and mobile app development', textAlign: TextAlign.center, style: TextStyle(color: sub)),
+        const SizedBox(height: 8),
+      ],
     );
   }
 }

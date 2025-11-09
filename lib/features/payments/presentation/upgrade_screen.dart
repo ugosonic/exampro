@@ -1,4 +1,3 @@
-import 'package:exampro/core/config/env_loader.dart';
 import 'package:exampro/features/admin/data/admin_repository.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: unused_import
 import 'package:url_launcher/url_launcher.dart';
 import 'package:exampro/features/payments/presentation/checkout_webview.dart';
+import 'package:exampro/features/payments/presentation/payment_status_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'package:exampro/core/network/dio_client.dart';
 
 class UpgradeScreen extends ConsumerStatefulWidget {
   const UpgradeScreen({super.key});
@@ -19,18 +21,32 @@ class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
 
   Future<void> _pay() async {
     setState(() => loading = true);
-    final env = await ref.read(envLoaderProvider.future);
-    final url = currency == 'GBP' ? env.stripeCheckoutUrlGbp : env.stripeCheckoutUrlUsd;
-    if (url.isEmpty) {
+    // Mark payment flow active, so /pay/success and /pay/cancel are accessible
+    ref.read(paymentFlowActiveProvider.notifier).state = true;
+    // Build a Checkout Session via our server using secret key on VPS
+    String? url;
+    try {
+      final amountMinor = await _priceMinor(currency) ?? (currency == 'GBP' ? 1999 : 1999);
+      final dio = ref.read(dioProvider);
+      final res = await dio.post('/payments/checkout', data: {
+        'currency': currency,
+        'amount_minor': amountMinor,
+        'product_name': 'Pro Upgrade',
+      });
+      url = (res.data['url'] as String?);
+    } catch (e) {
+      url = null;
+    }
+    if (url == null || url.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Checkout not configured')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to start checkout')));
       }
       setState(() => loading = false);
       return;
     }
 
     final result = await Navigator.of(context).push<CheckoutWebViewResult>(
-      MaterialPageRoute(builder: (_) => CheckoutWebView(checkoutUrl: url)),
+      MaterialPageRoute(builder: (_) => CheckoutWebView(checkoutUrl: url!)),
     );
 
     if (result?.success == true) {
@@ -38,17 +54,22 @@ class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
       if (user != null) {
         final repo = ref.read(adminRepositoryProvider);
         final amountMinor = await _priceMinor(currency) ?? (currency == 'GBP' ? 1999 : 1999);
-        await repo.addPayment(email: user.email, amountMinor: amountMinor, currency: currency, intentId: result?.finalUrl?.queryParameters['session_id'] ?? '');
+        final sessionId = result?.finalUrl?.queryParameters['session_id'] ?? '';
+        await repo.addPayment(email: user.email, amountMinor: amountMinor, currency: currency, intentId: sessionId, status: 'paid');
+        try {
+          // Also record on server so admins can see online payment history
+          final dio = ref.read(dioProvider);
+          await dio.post('/payments/record', data: {
+            'amount_minor': amountMinor,
+            'currency': currency,
+            'session_id': sessionId,
+          });
+        } catch (_) {}
         await repo.setUserPro(user.email, true);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgraded to Pro')));
-          Navigator.of(context).pop();
-        }
+        if (mounted) context.go('/pay/success');
       }
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment not completed')));
-      }
+      if (mounted) context.go('/pay/cancel');
     }
     if (mounted) setState(() => loading = false);
   }

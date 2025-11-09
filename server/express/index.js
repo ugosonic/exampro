@@ -2,6 +2,8 @@ import express from 'express';
 import dotenv from 'dotenv';
 import pkg from 'pg';
 import jwt from 'jsonwebtoken';
+import Stripe from 'stripe';
+import nodemailer from 'nodemailer';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import fs from 'fs';
@@ -10,9 +12,22 @@ import path from 'path';
 dotenv.config();
 const { Pool } = pkg;
 
-const { DATABASE_URL, SYNC_ADMIN_TOKEN, PORT = 8000, JWT_SECRET = 'change-me' } = process.env;
+const { DATABASE_URL, SYNC_ADMIN_TOKEN, PORT = 8000, JWT_SECRET = 'change-me', ADMIN_EMAILS = '', STRIPE_SECRET_KEY = '', STRIPE_SUCCESS_URL = 'https://example.com/success', STRIPE_CANCEL_URL = 'https://example.com/cancel', SMTP_HOST = '', SMTP_PORT = '', SMTP_USER = '', SMTP_PASS = '', FROM_EMAIL = '' } = process.env;
+const ADMIN_SET = new Set(String(ADMIN_EMAILS).split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
 if (!DATABASE_URL) { throw new Error('DATABASE_URL not set'); }
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: DATABASE_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined });
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
+let mailer = null;
+if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  try {
+    mailer = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT || 465),
+      secure: (SMTP_PORT || '465') === '465',
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+  } catch (_) { mailer = null; }
+}
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
@@ -32,7 +47,8 @@ app.use('/files', express.static(UPLOAD_DIR));
 
 // JWT helpers
 const signTokens = (user) => {
-  const payload = { sub: String(user.id), email: user.email, role: user.role || 'user' };
+  const roleClaim = ADMIN_SET.has(String(user.email || '').toLowerCase()) ? 'admin' : (user.role || 'user');
+  const payload = { sub: String(user.id), email: user.email, role: roleClaim };
   const access = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m', audience: 'exampro-mobile', issuer: 'exampro-auth' });
   const refresh = jwt.sign({ sub: payload.sub }, JWT_SECRET, { expiresIn: '30d', audience: 'exampro-mobile', issuer: 'exampro-auth' });
   return { access, refresh };
@@ -80,7 +96,7 @@ app.post('/auth/register', async (req, res) => {
     // Ensure table exists
     await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
     const hash = await bcrypt.hash(password, 10);
-    const role = 'user';
+    const role = ADMIN_SET.has(String(email).toLowerCase()) ? 'admin' : 'user';
     const r = await client.query('INSERT INTO users(email, password_hash, role) VALUES($1,$2,$3) ON CONFLICT (email) DO NOTHING RETURNING id', [email, hash, role]);
     if (r.rowCount === 0) return res.status(409).json({ error: 'email_exists' });
     const id = r.rows[0].id;
@@ -99,7 +115,8 @@ app.post('/auth/sign-in', async (req, res) => {
     const { id, password_hash: hash, role } = r.rows[0];
     const ok = await bcrypt.compare(password, hash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
-    const tokens = signTokens({ id, email, role });
+    const roleClaim = ADMIN_SET.has(String(email).toLowerCase()) ? 'admin' : role;
+    const tokens = signTokens({ id, email, role: roleClaim });
     return res.json(tokens);
   } finally { client.release(); }
 });
@@ -389,6 +406,91 @@ app.get('/config', async (req, res) => {
   res.json({ upgrade_disabled: upgradeDisabled });
 });
 
+// Simple success/cancel landing pages for Stripe (used only for redirect detection in app)
+app.get('/success', (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send('<html><body><h2>Payment success</h2><p>You can close this page.</p></body></html>');
+});
+app.get('/cancel', (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send('<html><body><h2>Payment canceled</h2><p>You can close this page.</p></body></html>');
+});
+
+// Store a payment record in Postgres (used by app after checkout success)
+app.post('/payments/record', auth, async (req, res) => {
+  const { amount_minor = 0, currency = 'GBP', session_id = '' } = req.body || {};
+  const email = (req.user && req.user.email) || '';
+  if (!email || !amount_minor || amount_minor <= 0) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+    await client.query('INSERT INTO payments(user_email, amount_minor, currency, stripe_session_id, status) VALUES($1,$2,$3,$4,$5)', [email, amount_minor, String(currency).toUpperCase(), session_id || '', 'paid']);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('payments/record error', e);
+    return res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+// Admin: list payments
+app.get('/admin/payments', adminGuard, async (req, res) => {
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+    const rows = await client.query('SELECT id, user_email, amount_minor, currency, stripe_session_id, status, refunded, created_at FROM payments ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
+    return res.json(rows.rows);
+  } finally { client.release(); }
+});
+
+// Admin: send email via SMTP (Hostinger). Authorization: Bearer <SYNC_ADMIN_TOKEN> or admin JWT
+app.post('/admin/send-email', adminGuard, async (req, res) => {
+  if (!mailer || !FROM_EMAIL) return res.status(503).json({ error: 'smtp_not_configured' });
+  const { to = [], subject = '', text = '', html = '' } = req.body || {};
+  try {
+    if (!Array.isArray(to) || to.length === 0 || !subject) return res.status(400).json({ error: 'invalid_input' });
+    await mailer.sendMail({
+      from: FROM_EMAIL,
+      to: to.join(','),
+      subject,
+      text: text || undefined,
+      html: html || undefined,
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('send-email error', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Payments: create Stripe Checkout Session with server-side secret
+app.post('/payments/checkout', auth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  try {
+    const { currency = 'GBP', amount_minor = 0, product_name = 'Pro Upgrade' } = req.body || {};
+    const amount = Number(amount_minor) || 0;
+    if (amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: String(currency).toLowerCase(),
+          unit_amount: amount,
+          product_data: { name: product_name },
+        },
+        quantity: 1,
+      }],
+      success_url: `${STRIPE_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${STRIPE_CANCEL_URL}`,
+    });
+    return res.json({ url: session.url, id: session.id });
+  } catch (e) {
+    console.error('stripe checkout error', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
 // Admin CRUD for content (create/update/delete)
 app.post('/admin/categories', adminGuard, async (req, res) => {
   const { name, order = 0, pass_percent = 60, image_url = '' } = req.body || {};
@@ -563,6 +665,16 @@ app.delete('/admin/exams/:examId/questions/:questionId', adminGuard, async (req,
     await client.query('UPDATE exams SET question_count = (SELECT COUNT(*) FROM exam_questions WHERE exam_id = $1) WHERE id = $1', [examId]);
     await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
     res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+// Admin: list registered users (from online DB)
+app.get('/admin/users', adminGuard, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    const rows = await client.query('SELECT id, email, role FROM users ORDER BY id DESC');
+    return res.json(rows.rows);
   } finally { client.release(); }
 });
 

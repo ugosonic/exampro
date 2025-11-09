@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2A2E79"/>
+      <stop offset="100%" stop-color="#161A4F"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect x="32" y="32" width="960" height="960" rx="200" ry="200" fill="url(#bg)"/>
+
+  <!-- Subtle glow circle -->
+  <circle cx="512" cy="512" r="330" fill="#ffffff" opacity="0.04"/>
+
+  <!-- Globe outline -->
+  <g stroke="#FFFFFF" stroke-width="28" fill="none" opacity="0.9">
+    <circle cx="512" cy="512" r="300"/>
+    <!-- Meridians -->
+    <ellipse cx="512" cy="512" rx="220" ry="300"/>
+    <ellipse cx="512" cy="512" rx="120" ry="300"/>
+    <!-- Parallels -->
+    <ellipse cx="512" cy="512" rx="300" ry="220"/>
+    <ellipse cx="512" cy="512" rx="300" ry="120"/>
+  </g>
+
+  <!-- Country badges (lightweight, text-based) -->
+  <g font-family="Segoe UI, Arial, sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="central">
+    <!-- UK -->
+    <circle cx="320" cy="320" r="78" fill="#C8102E" stroke="#FFFFFF" stroke-width="8"/>
+    <text x="320" y="320" font-size="44" fill="#FFFFFF">UK</text>
+
+    <!-- US -->
+    <circle cx="704" cy="312" r="78" fill="#3C3B6E" stroke="#FFFFFF" stroke-width="8"/>
+    <text x="704" y="312" font-size="44" fill="#FFFFFF">US</text>
+
+    <!-- CA -->
+    <circle cx="320" cy="708" r="78" fill="#D52B1E" stroke="#FFFFFF" stroke-width="8"/>
+    <text x="320" y="708" font-size="44" fill="#FFFFFF">CA</text>
+
+    <!-- AU -->
+    <circle cx="708" cy="712" r="78" fill="#00247D" stroke="#FFFFFF" stroke-width="8"/>
+    <text x="708" y="712" font-size="44" fill="#FFFFFF">AU</text>
+  </g>
+</svg>
+

@@ -25,6 +25,9 @@ class ProgressRepository {
     // Compute totals from server snapshot when possible to avoid depending on local content
     Map<int, int> totals = {};
     List<Map<String, dynamic>> categories = [];
+    // Load local categories to reflect immediate edits in names/images
+    final localCats = await _db.select(_db.categories).get();
+    final localMap = {for (final c in localCats) c.id: {'id': c.id, 'name': c.name, 'image_url': c.imageUrl}};
     try {
       final snap = await _dio.get('/sync/snapshot');
       final exams = ((snap.data['exams'] as List?) ?? const [])
@@ -35,10 +38,18 @@ class ProgressRepository {
           .cast<Map>()
           .map((m) => (m as Map).cast<String, dynamic>())
           .toList();
-      categories = ((snap.data['categories'] as List?) ?? const [])
+      final remoteCats = ((snap.data['categories'] as List?) ?? const [])
           .cast<Map>()
           .map((m) => (m as Map).cast<String, dynamic>())
           .toList();
+      categories = [
+        for (final m in remoteCats)
+          {
+            'id': (m['id'] as num).toInt(),
+            'name': (localMap[(m['id'] as num).toInt()]?['name'] as String?) ?? (m['name'] as String? ?? ''),
+            'image_url': (localMap[(m['id'] as num).toInt()]?['image_url'] as String?) ?? (m['image_url'] as String? ?? ''),
+          }
+      ];
       final byExam = <int, Set<int>>{};
       for (final m in examQs) {
         final e = (m['exam_id'] as num).toInt();
@@ -93,4 +104,3 @@ final progressRepositoryProvider = Provider<ProgressRepository>((ref) => Progres
 final categoryProgressProvider = FutureProvider.family<List<CategoryProgress>, String>((ref, email) async {
   return ref.watch(progressRepositoryProvider).categoryProgressForUser(email);
 });
-

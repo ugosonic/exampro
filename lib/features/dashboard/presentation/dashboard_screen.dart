@@ -94,6 +94,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     _scroll.addListener(() => setState(() => _offset = _scroll.offset));
+    // Ensure recent attempts sync from server so progress is portable across devices
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final u = ref.read(currentUserProvider);
+      final email = u?.email;
+      if (email != null && email.isNotEmpty) {
+        try { await ref.read(syncRepositoryProvider).pullUserProgress(email); } catch (_) {}
+      }
+    });
   }
 
   @override
@@ -193,6 +201,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
+                      Center(child: _zenovFooter(context)),
+                      const SizedBox(height: 12),
                     ],
                   ),
                 ]),
@@ -494,17 +504,35 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return async.when(
       data: (items) {
         if (items.isEmpty) return const Text('No categories yet');
-        return SizedBox(
-          height: 160,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => _PieCard(item: items[i], color: _piePalette[i % _piePalette.length]),
-          ),
+        final hasMany = items.length > 1;
+        final controller = PageController(viewportFraction: 0.88);
+        final height = 280.0;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: height,
+              child: PageView.builder(
+                controller: controller,
+                itemCount: items.length,
+                itemBuilder: (_, i) {
+                  final color = _piePalette[i % _piePalette.length];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                    child: _PieCard.big(item: items[i], color: color),
+                  );
+                },
+              ),
+            ),
+            if (hasMany)
+              Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: Text('Swipe to see more ▶', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7))),
+              ),
+          ],
         );
       },
-      loading: () => const SizedBox(height: 160, child: Center(child: CircularProgressIndicator())),
+      loading: () => const SizedBox(height: 200, child: Center(child: CircularProgressIndicator())),
       error: (e, _) => Text('Failed to load progress: $e'),
     );
   }
@@ -529,36 +557,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 child: const Center(child: Padding(padding: EdgeInsets.all(12.0), child: Text('No attempts yet'))),
               );
             }
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final lineColor = Theme.of(context).colorScheme.primary;
+            final spots = [
+              for (var i = 0; i < items.length; i++)
+                FlSpot(i.toDouble(), items[i].scorePercent.toDouble())
+            ];
             return NeonGlassCard(
               padding: const EdgeInsets.all(12),
-              child: BarChart(
-                  BarChartData(
-                    titlesData: FlTitlesData(
-                      bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta) {
-                        final i = v.toInt();
-                        if (i < 0 || i >= items.length) return const SizedBox.shrink();
-                        final d = items[i].startedAt;
-                        final label = '${d.month}/${d.day}';
-                        final isDark = Theme.of(context).brightness == Brightness.dark;
-                        return Padding(padding: const EdgeInsets.only(top: 6), child: Text(label, style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54)));
-                      })),
-                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, meta) {
-                        if (v % 25 != 0) return const SizedBox.shrink();
-                        final isDark = Theme.of(context).brightness == Brightness.dark;
-                        return Text('${v.toInt()}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54));
-                      })),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    borderData: FlBorderData(show: false),
-                    barGroups: [
-                      for (var i = 0; i < items.length; i++)
-                        BarChartGroupData(x: i, barRods: [BarChartRodData(toY: items[i].scorePercent.toDouble(), width: 14, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.85))])
-                    ],
-                    gridData: const FlGridData(show: true, drawVerticalLine: false),
-                    maxY: 100,
+              child: LineChart(
+                LineChartData(
+                  backgroundColor: Colors.transparent,
+                  minY: 0,
+                  maxY: 100,
+                  gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 25),
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta) {
+                      final i = v.toInt();
+                      if (i < 0 || i >= items.length) return const SizedBox.shrink();
+                      final d = items[i].startedAt;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text('${d.month}/${d.day}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54)),
+                      );
+                    })),
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, meta) {
+                      if (v % 25 != 0) return const SizedBox.shrink();
+                      return Text('${v.toInt()}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54));
+                    })),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      isCurved: true,
+                      color: lineColor,
+                      barWidth: 3,
+                      belowBarData: BarAreaData(show: true, color: lineColor.withOpacity(0.18)),
+                      dotData: FlDotData(show: true, getDotPainter: (s, __, ___, ____) => FlDotCirclePainter(radius: 3, color: lineColor, strokeWidth: 1, strokeColor: isDark ? Colors.white24 : Colors.black12)),
+                      spots: spots,
+                    )
+                  ],
+                  borderData: FlBorderData(show: false),
                 ),
+              ),
             );
           },
         );
@@ -790,34 +832,42 @@ const List<Color> _piePalette = [
 class _PieCard extends StatelessWidget {
   final CategoryProgress item;
   final Color color;
-  const _PieCard({required this.item, required this.color});
+  final bool big;
+  const _PieCard({required this.item, required this.color}) : big = false;
+  const _PieCard.big({required this.item, required this.color}) : big = true;
   @override
   Widget build(BuildContext context) {
     final on = Theme.of(context).colorScheme.onSurface;
+    final diameter = big ? 180.0 : 90.0;
+    final width = big ? MediaQuery.of(context).size.width - 48 : 150.0;
+    final pendingColor = Colors.grey.withOpacity(0.25);
     return SizedBox(
-      width: 150,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        child: NeonGlassCard(
-          borderRadius: 16,
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                height: 90,
-                width: 90,
-                child: _AnimatedPie(completed: item.completed, total: item.total, color: color),
+      width: width,
+      child: NeonGlassCard(
+        borderRadius: 16,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              height: diameter,
+              width: diameter,
+              child: _AnimatedPie(
+                completed: item.completed,
+                total: item.total,
+                color: color,
+                pendingColor: pendingColor,
+                showCounts: true,
               ),
-              const SizedBox(height: 8),
-              Text(
-                item.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w700, color: on.withOpacity(0.95)),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w700, color: on.withOpacity(0.95), fontSize: big ? 16 : 14),
+            ),
+          ],
         ),
       ),
     );
@@ -828,7 +878,9 @@ class _AnimatedPie extends StatefulWidget {
   final int completed;
   final int total;
   final Color color;
-  const _AnimatedPie({required this.completed, required this.total, required this.color});
+  final Color? pendingColor;
+  final bool showCounts;
+  const _AnimatedPie({required this.completed, required this.total, required this.color, this.pendingColor, this.showCounts = false});
   @override
   State<_AnimatedPie> createState() => _AnimatedPieState();
 }
@@ -847,27 +899,53 @@ class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderSta
         final t = Curves.easeOutCubic.transform(_ac.value);
         final done = (completed * t).toDouble();
         final remain = (total.toDouble() - done).clamp(0.0, total.toDouble()).toDouble();
-        return PieChart(PieChartData(
-          sectionsSpace: 2,
-          centerSpaceRadius: 24,
-          sections: [
-            PieChartSectionData(
-              color: widget.color,
-              value: done,
-              title: '${((done/total)*100).round()}%',
-              radius: 34,
-              titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-            PieChartSectionData(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.14),
-              value: remain,
-              title: '',
-              radius: 28,
-            ),
+        final percent = ((done / total) * 100).round();
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            PieChart(PieChartData(
+              sectionsSpace: 2,
+              centerSpaceRadius: 48,
+              sections: [
+                PieChartSectionData(
+                  color: widget.color,
+                  value: done,
+                  title: '',
+                  radius: 64,
+                ),
+                PieChartSectionData(
+                  color: widget.pendingColor ?? Theme.of(context).colorScheme.onSurface.withOpacity(0.14),
+                  value: remain,
+                  title: '',
+                  radius: 58,
+                ),
+              ],
+            )),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$percent%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                if (widget.showCounts)
+                  Text('${widget.completed}/${widget.total}', style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 12)),
+              ],
+            )
           ],
-        ));
+        );
       },
     );
   }
 }
 
+Widget _zenovFooter(BuildContext context) {
+  final on = Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87;
+  final sub = on.withOpacity(0.75);
+  return Column(
+    children: [
+      Text('Developed by ZenovTech (c) 2025', style: TextStyle(color: sub, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      Text('info@zenovtech.com', style: TextStyle(color: sub)),
+      const SizedBox(height: 4),
+      Text('Contact for websites and mobile app development', style: TextStyle(color: sub)),
+    ],
+  );
+}

@@ -130,7 +130,16 @@ class AdminApi {
   Future<void> deleteQuestionFromExam({required int examId, required int questionId}) async {
     await _dio.delete('/admin/exams/$examId/questions/$questionId');
   }
+
+  // Users
+  Future<List<Map<String, dynamic>>> users() async {
+    final res = await _dio.get('/admin/users');
+    final list = (res.data as List? ?? const [])
+        .cast<Map>()
+        .map((m) => (m as Map).cast<String, dynamic>())
+        .toList();
+    return list;
+  }
 }
 
 final adminApiProvider = Provider<AdminApi>((ref) => AdminApi(ref.watch(dioProvider)));
-

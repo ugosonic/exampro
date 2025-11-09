@@ -344,7 +344,9 @@ Future<bool> _editCategoryDialog(BuildContext context, WidgetRef ref, Category c
   if (ok == true) {
     final parsed = int.tryParse(passCtrl.text.trim());
     final pass = parsed == null ? c.passPercent : parsed.clamp(0, 100);
-    final finalUrl = imageCtrl.text.trim().isNotEmpty ? imageCtrl.text.trim() : imageUrl;
+    // Ensure any local file is uploaded and replaced by a hosted URL
+    final rawUrl = imageCtrl.text.trim().isNotEmpty ? imageCtrl.text.trim() : imageUrl;
+    final finalUrl = await _ensureRemoteUrl(context, ref, rawUrl);
     await repo.updateCategory(c.id, name: nameCtrl.text.trim(), passPercent: pass, imageUrl: finalUrl);
     return true;
   }
@@ -1127,6 +1129,12 @@ class _PagedListState<T> extends State<_PagedList<T>> {
         return widget.itemBuilder(context, item);
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 }
 

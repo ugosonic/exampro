@@ -28,7 +28,7 @@ class ExamProApp extends ConsumerWidget {
         ref.watch(sessionInitializerProvider);
         ref.watch(localeInitializerProvider);
         return MaterialApp.router(
-          title: 'Citizenship Test',
+          title: 'Citizen Test',
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
           themeMode: themeMode,

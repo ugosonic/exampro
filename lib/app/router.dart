@@ -16,6 +16,7 @@ import 'package:exampro/features/exam/presentation/saved_questions_screen.dart';
 import 'package:exampro/features/exam/presentation/attempts_list_screen.dart';
 import 'package:exampro/features/exam/presentation/attempt_review_screen.dart';
 import 'package:exampro/features/payments/presentation/upgrade_screen.dart';
+import 'package:exampro/features/payments/presentation/payment_status_screen.dart';
 import 'package:exampro/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:exampro/core/db/db_provider.dart';
 import 'package:drift/drift.dart' as drift;
@@ -153,6 +154,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => _softSlide(state, const UpgradeScreen()),
           ),
           GoRoute(
+            path: '/pay/success',
+            pageBuilder: (context, state) => _softSlide(state, const PaymentStatusScreen(success: true)),
+          ),
+          GoRoute(
+            path: '/pay/cancel',
+            pageBuilder: (context, state) => _softSlide(state, const PaymentStatusScreen(success: false)),
+          ),
+          GoRoute(
             path: '/admin',
             pageBuilder: (context, state) => _fade(state, const AdminConsoleScreen()),
           ),
@@ -172,6 +181,7 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
   final onboarding = loc == '/onboarding';
   final exploring = loc == '/categories' || loc.startsWith('/categories/');
   final goingAdmin = loc.startsWith('/admin');
+  final payingStatus = (loc == '/pay/success' || loc == '/pay/cancel');
   // One-time last-route restore when starting from onboarding/root
   if (signedIn && !_didRestoreLastRoute && (onboarding || loc == '/')) {
     try {
@@ -186,7 +196,7 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
   }
   // Not signed in: allow auth/onboarding/explore; otherwise push to /auth
   if (!signedIn) {
-    if (loggingIn || registering || onboarding || exploring) return null;
+    if (loggingIn || registering || onboarding || exploring || payingStatus) return null;
     return '/auth';
   }
   // Has tokens
@@ -195,6 +205,10 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
     return '/dashboard';
   }
   if (goingAdmin && (user == null || user.role != 'admin')) return '/dashboard';
+  if (payingStatus) {
+    final active = ref.read(paymentFlowActiveProvider);
+    if (!active) return '/dashboard';
+  }
   return null;
 }
 

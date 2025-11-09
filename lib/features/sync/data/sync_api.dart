@@ -10,7 +10,8 @@ class SyncApi {
 
   Future<Map<String, dynamic>> snapshot() async {
     final res = await _dio.get('/sync/snapshot');
-    return (res.data as Map).cast<String, dynamic>();
+    final raw = (res.data is Map) ? (res.data as Map) : <String, dynamic>{};
+    return Map<String, dynamic>.from(raw as Map);
   }
 
   Future<String> version() async {
@@ -25,7 +26,8 @@ class SyncApi {
 
   Future<Map<String, dynamic>> fetchUserProgress(String email) async {
     final res = await _dio.get('/sync/user-progress', queryParameters: {'email': email});
-    return (res.data as Map).cast<String, dynamic>();
+    final raw = (res.data is Map) ? (res.data as Map) : <String, dynamic>{};
+    return Map<String, dynamic>.from(raw as Map);
   }
 }
 

@@ -14,7 +14,18 @@ class AdminRepository {
 
   Future<int> createCategory(String name, {int order = 0, String imageUrl = ''}) async {
     if (_adminApi != null) {
-      return _adminApi!.createCategory(name: name, order: order, imageUrl: imageUrl);
+      final id = await _adminApi!.createCategory(name: name, order: order, imageUrl: imageUrl);
+      try {
+        await _db.into(_db.categories).insertOnConflictUpdate(
+          CategoriesCompanion.insert(
+            id: drift.Value(id),
+            name: name,
+            order: drift.Value(order),
+            imageUrl: drift.Value(imageUrl),
+          ),
+        );
+      } catch (_) {}
+      return id;
     }
     return _db.into(_db.categories).insert(CategoriesCompanion.insert(
           name: name,
@@ -25,7 +36,19 @@ class AdminRepository {
 
   Future<int> createSubcategory(int categoryId, String name, {int order = 0, String imageUrl = ''}) async {
     if (_adminApi != null) {
-      return _adminApi!.createSubcategory(categoryId: categoryId, name: name, order: order, imageUrl: imageUrl);
+      final id = await _adminApi!.createSubcategory(categoryId: categoryId, name: name, order: order, imageUrl: imageUrl);
+      try {
+        await _db.into(_db.subcategories).insertOnConflictUpdate(
+          SubcategoriesCompanion.insert(
+            id: drift.Value(id),
+            categoryId: categoryId,
+            name: name,
+            order: drift.Value(order),
+            imageUrl: drift.Value(imageUrl),
+          ),
+        );
+      } catch (_) {}
+      return id;
     }
     return _db.into(_db.subcategories).insert(SubcategoriesCompanion.insert(
           categoryId: categoryId,
@@ -132,6 +155,15 @@ class AdminRepository {
     ));
   }
 
+  Future<void> setCategoryLocked(int id, bool locked) async {
+    if (_adminApi != null) {
+      await _adminApi!.updateCategory(id, locked: locked);
+      try { await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(locked: drift.Value(locked))); } catch (_) {}
+      return;
+    }
+    await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(locked: drift.Value(locked)));
+  }
+
   Future<int> addQuestionWithOptions({
     required int examId,
     required String text,
@@ -209,13 +241,61 @@ class AdminRepository {
     return await _db.select(_db.categories).get();
   }
 
-  // Users
-  Stream<List<DbUser>> watchUsers() => _db.select(_db.users).watch();
-  Future<List<DbUser>> allUsers() async => _db.select(_db.users).get();
+  // Users — prefer online database when API is configured; fall back to local
+  Stream<List<DbUser>> watchUsers() {
+    if (_adminApi != null) {
+      return Stream.fromFuture(() async {
+        try {
+          final rows = await _adminApi!.users();
+          return [
+            for (final m in rows)
+              DbUser(
+                id: (m['id'] as num).toInt(),
+                email: (m['email'] as String?) ?? '',
+                password: '',
+                role: (m['role'] as String?) ?? 'user',
+                isPro: false,
+              )
+          ];
+        } catch (_) {
+          return _db.select(_db.users).get();
+        }
+      }());
+    }
+    return _db.select(_db.users).watch();
+  }
+  Future<List<DbUser>> allUsers() async {
+    if (_adminApi != null) {
+      try {
+        final rows = await _adminApi!.users();
+        return [
+          for (final m in rows)
+            DbUser(
+              id: (m['id'] as num).toInt(),
+              email: (m['email'] as String?) ?? '',
+              password: '',
+              role: (m['role'] as String?) ?? 'user',
+              isPro: false,
+            )
+        ];
+      } catch (_) {
+        return _db.select(_db.users).get();
+      }
+    }
+    return _db.select(_db.users).get();
+  }
 
   Future<void> updateCategory(int id, {String? name, int? order, int? passPercent, String? imageUrl}) async {
     if (_adminApi != null) {
       await _adminApi!.updateCategory(id, name: name, order: order, passPercent: passPercent, imageUrl: imageUrl);
+      try {
+        await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(
+              name: name != null ? drift.Value(name) : const drift.Value.absent(),
+              order: order != null ? drift.Value(order) : const drift.Value.absent(),
+              passPercent: passPercent != null ? drift.Value(passPercent) : const drift.Value.absent(),
+              imageUrl: imageUrl != null ? drift.Value(imageUrl) : const drift.Value.absent(),
+            ));
+      } catch (_) {}
       return;
     }
     await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(
@@ -227,7 +307,7 @@ class AdminRepository {
   }
 
   Future<void> deleteCategory(int id) async {
-    if (_adminApi != null) return _adminApi!.deleteCategory(id);
+    if (_adminApi != null) { await _adminApi!.deleteCategory(id); try { await (_db.delete(_db.categories)..where((c) => c.id.equals(id))).go(); } catch (_) {} return; }
     await (_db.delete(_db.categories)..where((c) => c.id.equals(id))).go();
   }
 
@@ -238,6 +318,14 @@ class AdminRepository {
   Future<void> updateSubcategory(int id, {String? name, int? order, String? imageUrl, bool? locked}) async {
     if (_adminApi != null) {
       await _adminApi!.updateSubcategory(id, name: name, order: order, imageUrl: imageUrl, locked: locked);
+      try {
+        await (_db.update(_db.subcategories)..where((s) => s.id.equals(id))).write(SubcategoriesCompanion(
+              name: name != null ? drift.Value(name) : const drift.Value.absent(),
+              order: order != null ? drift.Value(order) : const drift.Value.absent(),
+              imageUrl: imageUrl != null ? drift.Value(imageUrl) : const drift.Value.absent(),
+              locked: locked != null ? drift.Value(locked) : const drift.Value.absent(),
+            ));
+      } catch (_) {}
       return;
     }
     await (_db.update(_db.subcategories)..where((s) => s.id.equals(id))).write(SubcategoriesCompanion(
@@ -253,7 +341,7 @@ class AdminRepository {
   }
 
   Future<void> deleteSubcategory(int id) async {
-    if (_adminApi != null) return _adminApi!.deleteSubcategory(id);
+    if (_adminApi != null) { await _adminApi!.deleteSubcategory(id); try { await (_db.delete(_db.subcategories)..where((s) => s.id.equals(id))).go(); } catch (_) {} return; }
     await (_db.delete(_db.subcategories)..where((s) => s.id.equals(id))).go();
   }
 
@@ -454,10 +542,7 @@ class AdminRepository {
     });
   }
 
-  Future<void> setCategoryLocked(int id, bool locked) async {
-    if (_adminApi != null) return _adminApi!.updateCategory(id, locked: locked);
-    await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(locked: drift.Value(locked)));
-  }
+  
 
   Future<void> setQuestionLocked(int id, bool locked) async {
     await (_db.update(_db.questions)..where((q) => q.id.equals(id))).write(QuestionsCompanion(locked: drift.Value(locked)));
