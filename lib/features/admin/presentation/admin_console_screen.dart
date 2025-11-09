@@ -4,6 +4,8 @@ import 'package:exampro/features/admin/data/admin_repository.dart';
 import 'package:exampro/features/auth/application/auth_session.dart';
 import 'package:exampro/core/db/app_database.dart';
 import 'package:exampro/features/admin/data/email_api.dart';
+import 'package:exampro/core/network/dio_client.dart';
+import 'package:dio/dio.dart' show DioException;
 import 'package:exampro/core/config/env_loader.dart';
 import 'package:exampro/features/payments/presentation/checkout_webview.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1017,15 +1019,21 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
 
   Future<void> _initPrices() async {
     final repo = ref.read(adminRepositoryProvider);
-    gbpCtrl.text = (await repo.getSetting('price_gbp_minor')) ?? '1999';
-    usdCtrl.text = (await repo.getSetting('price_usd_minor')) ?? '1999';
+    final gbpMinor = int.tryParse((await repo.getSetting('price_gbp_minor')) ?? '1999') ?? 1999;
+    final usdMinor = int.tryParse((await repo.getSetting('price_usd_minor')) ?? '1999') ?? 1999;
+    gbpCtrl.text = (gbpMinor / 100).toStringAsFixed(2);
+    usdCtrl.text = (usdMinor / 100).toStringAsFixed(2);
     setState(() {});
   }
 
   Future<void> _savePrices() async {
     final repo = ref.read(adminRepositoryProvider);
-    await repo.setSetting('price_gbp_minor', gbpCtrl.text.trim());
-    await repo.setSetting('price_usd_minor', usdCtrl.text.trim());
+    int toMinor(String s) {
+      final v = double.tryParse(s.trim().replaceAll(',', '')) ?? 0.0;
+      return (v * 100).round();
+    }
+    await repo.setSetting('price_gbp_minor', toMinor(gbpCtrl.text).toString());
+    await repo.setSetting('price_usd_minor', toMinor(usdCtrl.text).toString());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Prices saved')));
     }
@@ -1033,8 +1041,40 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
 
   Future<void> _loadMore() async {
     setState(() => _loading = true);
-    final repo = ref.read(adminRepositoryProvider);
-    final more = await repo.listPayments(limit: _size, offset: _page * _size);
+    List<Payment> more = const [];
+    // Try online list first
+    try {
+      final dio = ref.read(dioProvider);
+      final res = await dio.get('/admin/payments', queryParameters: {
+        'limit': _size,
+        'offset': _page * _size,
+      });
+      final list = (res.data as List? ?? const [])
+          .cast<Map>()
+          .map((m) => (m as Map).cast<String, dynamic>())
+          .toList();
+      more = [
+        for (final m in list)
+          Payment(
+            id: (m['id'] as num).toInt(),
+            userEmail: (m['user_email'] as String?) ?? '',
+            amountMinor: (m['amount_minor'] as num?)?.toInt() ?? 0,
+            currency: (m['currency'] as String?) ?? 'GBP',
+            stripePaymentIntentId: (m['stripe_session_id'] as String?) ?? '',
+            status: (m['status'] as String?) ?? 'paid',
+            refunded: (m['refunded'] as bool?) ?? false,
+            createdAt: DateTime.tryParse((m['created_at'] as String?) ?? '') ?? DateTime.now(),
+          )
+      ];
+    } on DioException catch (_) {
+      // Fallback to local DB
+      final repo = ref.read(adminRepositoryProvider);
+      more = await repo.listPayments(limit: _size, offset: _page * _size);
+    } catch (_) {
+      final repo = ref.read(adminRepositoryProvider);
+      more = await repo.listPayments(limit: _size, offset: _page * _size);
+    }
+    if (!mounted) return;
     setState(() {
       _page++;
       _items.addAll(more);
@@ -1048,9 +1088,9 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
       Padding(
         padding: const EdgeInsets.all(12.0),
         child: Row(children: [
-          Expanded(child: TextField(controller: gbpCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'GBP (minor)'))),
+          Expanded(child: TextField(controller: gbpCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'GBP (£)'))),
           const SizedBox(width: 8),
-          Expanded(child: TextField(controller: usdCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'USD (minor)'))),
+          Expanded(child: TextField(controller: usdCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'USD (\$)'))),
           const SizedBox(width: 8),
           FilledButton(onPressed: _savePrices, child: const Text('Save')),
         ]),
@@ -1072,8 +1112,16 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
                 title: Text('${p.userEmail} • ${p.currency} ${(p.amountMinor / 100).toStringAsFixed(2)}'),
                 subtitle: Text('${p.status} • ${p.createdAt.toLocal()}'.split('.').first),
                 trailing: p.refunded ? const Text('Refunded') : TextButton(onPressed: () async {
-                  await ref.read(adminRepositoryProvider).markRefunded(p.id);
-                  setState(() => _items[i] = p.copyWith(refunded: true, status: 'refunded'));
+                  // Try server-side refund first
+                  try {
+                    final dio = ref.read(dioProvider);
+                    await dio.post('/admin/refund', data: {'id': p.id});
+                    setState(() => _items[i] = p.copyWith(refunded: true, status: 'refunded'));
+                  } catch (_) {
+                    // Fallback: mark refunded locally only
+                    await ref.read(adminRepositoryProvider).markRefunded(p.id);
+                    setState(() => _items[i] = p.copyWith(refunded: true, status: 'refunded'));
+                  }
                 }, child: const Text('Refund')),
               ),
             );

@@ -8,6 +8,7 @@ import 'package:exampro/features/auth/application/session_initializer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 
 class ExamProApp extends ConsumerWidget {
   const ExamProApp({super.key});
@@ -27,6 +28,10 @@ class ExamProApp extends ConsumerWidget {
         // env-dependent providers before they are ready.
         ref.watch(sessionInitializerProvider);
         ref.watch(localeInitializerProvider);
+        final env = ref.read(envLoaderProvider).requireValue;
+        if ((env.stripePublishableKey).isNotEmpty) {
+          Stripe.publishableKey = env.stripePublishableKey;
+        }
         return MaterialApp.router(
           title: 'Citizen Test',
           theme: AppTheme.light,
@@ -71,4 +76,3 @@ class ExamProApp extends ConsumerWidget {
     );
   }
 }
-

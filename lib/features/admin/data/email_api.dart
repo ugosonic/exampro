@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:exampro/core/config/env_loader.dart';
+import 'package:exampro/core/network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class EmailApi {
@@ -11,11 +12,13 @@ class EmailApi {
         _key = key;
 
   Future<void> sendEmail({required List<String> to, required String subject, String? text, String? html}) async {
-    if (_url.isEmpty || _key.isEmpty) {
-      throw StateError('Email API not configured');
+    if (_url.isEmpty) {
+      throw StateError('Email API URL not configured');
     }
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (_key.isNotEmpty) headers['Authorization'] = 'Bearer $_key';
     await _dio.post(_url,
-        options: Options(headers: {'Authorization': 'Bearer $_key', 'Content-Type': 'application/json'}),
+        options: Options(headers: headers),
         data: {
           'to': to,
           'subject': subject,
@@ -27,7 +30,12 @@ class EmailApi {
 
 final emailApiProvider = Provider<EmailApi>((ref) {
   final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
-  final dio = Dio();
-  return EmailApi(dio, url: env?.emailApiUrl ?? '', key: env?.emailApiKey ?? '');
+  final dio = ref.watch(dioProvider); // includes JWT via AuthInterceptor
+  String url = env?.emailApiUrl ?? '';
+  if ((url.isEmpty) && (env?.apiBaseUrl.isNotEmpty == true)) {
+    final base = env!.apiBaseUrl.endsWith('/') ? env.apiBaseUrl.substring(0, env.apiBaseUrl.length - 1) : env.apiBaseUrl;
+    url = '$base/admin/send-email';
+  }
+  final key = env?.emailApiKey ?? '';
+  return EmailApi(dio, url: url, key: key);
 });
-
