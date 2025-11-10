@@ -730,4 +730,5 @@ app.get('/admin/users', adminGuard, async (req, res) => {
   } finally { client.release(); }
 });
 
-app.listen(PORT, () => console.log(`API listening on ${PORT}`));
+// Bind explicitly on IPv4 so clients that use IPv4 addresses can connect even if the OS reports '::'
+app.listen(PORT, '0.0.0.0', () => console.log(`API listening on ${PORT}`));
