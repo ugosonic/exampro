@@ -1,7 +1,7 @@
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/features/sync/data/sync_repository.dart';
-import 'package:exampro/features/auth/data/auth_repository.dart';
+import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/sync/data/sync_repository.dart';
+import 'package:citizentest/features/auth/data/auth_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final sessionInitializerProvider = FutureProvider<void>((ref) async {
@@ -13,11 +13,9 @@ final sessionInitializerProvider = FutureProvider<void>((ref) async {
     ref.read(currentUserProvider.notifier).state = me;
     // Auto-sync content and user progress so devices are consistent.
     try {
-      if (me != null) {
-        await ref.read(syncRepositoryProvider).pushUserProgress(me.email);
-        await ref.read(syncRepositoryProvider).pullUserProgress(me.email);
-      }
-      await ref.read(syncRepositoryProvider).pullAndImport();
+      await ref.read(syncRepositoryProvider).pushUserProgress(me.email);
+      await ref.read(syncRepositoryProvider).pullUserProgress(me.email);
+          await ref.read(syncRepositoryProvider).pullAndImport();
     } catch (_) {
       // Ignore transient sync errors; UI remains usable and will retry later.
     }

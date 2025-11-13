@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:exampro/core/network/dio_client.dart';
+import 'package:citizentest/core/network/dio_client.dart';
 import 'package:dio/dio.dart';
 
 class CategoryProgress {
@@ -32,15 +32,15 @@ class ProgressRepository {
       final snap = await _dio.get('/sync/snapshot');
       final exams = ((snap.data['exams'] as List?) ?? const [])
           .cast<Map>()
-          .map((m) => (m as Map).cast<String, dynamic>())
+          .map((m) => (m).cast<String, dynamic>())
           .toList();
       final examQs = ((snap.data['exam_questions'] as List?) ?? const [])
           .cast<Map>()
-          .map((m) => (m as Map).cast<String, dynamic>())
+          .map((m) => (m).cast<String, dynamic>())
           .toList();
       final remoteCats = ((snap.data['categories'] as List?) ?? const [])
           .cast<Map>()
-          .map((m) => (m as Map).cast<String, dynamic>())
+          .map((m) => (m).cast<String, dynamic>())
           .toList();
       categories = [
         for (final m in remoteCats)

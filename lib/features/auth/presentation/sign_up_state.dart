@@ -1,7 +1,7 @@
-import 'package:exampro/core/utils/validators.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/features/auth/data/auth_repository.dart';
-import 'package:exampro/features/auth/domain/models.dart';
+import 'package:citizentest/core/utils/validators.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/auth/data/auth_repository.dart';
+import 'package:citizentest/features/auth/domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
@@ -19,10 +19,10 @@ class SignUpState {
     this.password = '',
     this.confirm = '',
     this.loading = false,
-    this.emailError = null,
-    this.passwordError = null,
-    this.confirmError = null,
-    this.errorMessage = null,
+    this.emailError,
+    this.passwordError,
+    this.confirmError,
+    this.errorMessage,
   });
 
   bool get canSubmit =>

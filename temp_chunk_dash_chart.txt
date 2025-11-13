@@ -1,0 +1,120 @@
+            if (hasMany)
+              Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: Text('Swipe to see more ▶', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+              ),
+          ],
+        );
+      },
+      loading: () => const SizedBox(height: 200, child: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Text('Failed to load progress: $e'),
+    );
+  }
+  Widget _progressChart(BuildContext context) {
+    return SizedBox(
+      height: 160,
+      child: Consumer(builder: (context, ref, _) {
+        final db = ref.watch(dbProvider);
+        final user = ref.watch(currentUserProvider);
+        final email = user?.email ?? 'guest@local';
+        return FutureBuilder(
+          future: (db.select(db.attempts)
+                ..where((t) => t.endedAt.isNotNull() & t.userEmail.equals(email))
+                ..orderBy([(t) => drift.OrderingTerm.desc(t.startedAt)])
+                ..limit(7))
+              .get(),
+          builder: (context, snap) {
+            final items = (snap.data ?? const <Attempt>[]).reversed.toList();
+            if (items.isEmpty) {
+              return NeonGlassCard(
+                padding: const EdgeInsets.all(12),
+                child: const Center(child: Padding(padding: EdgeInsets.all(12.0), child: Text('No attempts yet'))),
+              );
+            }
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final lineColor = Theme.of(context).colorScheme.primary;
+            final spots = [
+              for (var i = 0; i < items.length; i++)
+                FlSpot(i.toDouble(), items[i].scorePercent.toDouble())
+            ];
+            return NeonGlassCard(
+              padding: const EdgeInsets.all(12),
+              child: LineChart(
+                LineChartData(
+                  backgroundColor: Colors.transparent,
+                  minY: 0,
+                  maxY: 100,
+                  gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 25),
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta) {
+                      final i = v.toInt();
+                      if (i < 0 || i >= items.length) return const SizedBox.shrink();
+                      final d = items[i].startedAt;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text('${d.month}/${d.day}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54)),
+                      );
+                    })),
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, meta) {
+                      if (v % 25 != 0) return const SizedBox.shrink();
+                      return Text('${v.toInt()}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54));
+                    })),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      isCurved: true,
+                      color: lineColor,
+                      barWidth: 3,
+                      belowBarData: BarAreaData(show: true, color: lineColor.withValues(alpha: 0.18)),
+                      dotData: FlDotData(show: true, getDotPainter: (s, __, ___, ____) => FlDotCirclePainter(radius: 3, color: lineColor, strokeWidth: 1, strokeColor: isDark ? Colors.white24 : Colors.black12)),
+                      spots: spots,
+                    )
+                  ],
+                  borderData: FlBorderData(show: false),
+                ),
+              ),
+            );
+          },
+        );
+      }),
+    );
+  }
+
+  Widget _maybeUpgradeCard(BuildContext context, WidgetRef ref) {
+    final db = ref.watch(dbProvider);
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const SizedBox.shrink();
+    return FutureBuilder(
+      future: (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull(),
+      builder: (context, snap) {
+        final row = snap.data;
+        if (row?.isPro == true) return const SizedBox.shrink();
+        return Container(
+          decoration: BoxDecoration(
+            gradient: _softGradients[1],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3))],
+          ),
+          child: ListTile(
+            leading: Icon(Icons.workspace_premium, color: Theme.of(context).colorScheme.primary),
+            title: Text('Upgrade to Pro', style: TextStyle(color: Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w700)),
+            subtitle: Text('Unlock all locked categories and questions', style: TextStyle(color: Colors.black.withValues(alpha: 0.6))),
+            trailing: Icon(Icons.chevron_right, color: Colors.black.withValues(alpha: 0.7)),
+            onTap: () => context.go('/upgrade'),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _recentAttempts(BuildContext context, WidgetRef ref) {
+    final db = ref.watch(dbProvider);
+    final user = ref.watch(currentUserProvider);
+    final email = user?.email ?? 'guest@local';
+    return FutureBuilder(
+      future: (db.select(db.attempts)
+            ..where((t) => t.userEmail.equals(email))
+            ..orderBy([(t) => drift.OrderingTerm.desc(t.startedAt)])

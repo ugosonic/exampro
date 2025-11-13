@@ -1,5 +1,5 @@
-import 'package:exampro/core/i18n/locale_controller.dart';
-import 'package:exampro/core/i18n/translation_populator.dart';
+import 'package:citizentest/core/i18n/locale_controller.dart';
+import 'package:citizentest/core/i18n/translation_populator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,11 +21,11 @@ class LanguagePicker extends ConsumerWidget {
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.92),
+        color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.06)),
+        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06)),
         boxShadow: [
-          if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
         ],
       ),
       child: Padding(

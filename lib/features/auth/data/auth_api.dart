@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:exampro/core/network/dio_client.dart';
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/features/auth/domain/models.dart';
+import 'package:citizentest/core/network/dio_client.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/features/auth/domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:exampro/core/auth/token_store.dart';
+import 'package:citizentest/core/auth/token_store.dart';
 
 abstract class AuthApi {
   Future<Tokens> signIn({required String email, required String password});

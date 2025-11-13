@@ -1,16 +1,16 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io' show File;
 
-import 'package:exampro/features/admin/data/admin_repository.dart';
-import 'package:exampro/features/admin/utils/import_parser.dart';
+import 'package:citizentest/features/admin/data/admin_repository.dart';
+import 'package:citizentest/features/admin/utils/import_parser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
-import 'package:exampro/core/i18n/translation_populator.dart';
-import 'package:exampro/core/i18n/locale_controller.dart';
-import 'package:exampro/core/network/dio_client.dart';
-import 'package:exampro/core/config/env_loader.dart';
+import 'package:citizentest/core/i18n/translation_populator.dart';
+import 'package:citizentest/core/i18n/locale_controller.dart';
+import 'package:citizentest/core/network/dio_client.dart';
+import 'package:citizentest/core/config/env_loader.dart';
 
 class ExamBuilderScreen extends ConsumerStatefulWidget {
   const ExamBuilderScreen({super.key});
@@ -578,7 +578,7 @@ class _ThemeChip extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         gradient: gradient,
-        color: gradient == null ? Theme.of(context).colorScheme.surfaceVariant : null,
+        color: gradient == null ? Theme.of(context).colorScheme.surfaceContainerHighest : null,
         border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Colors.black12),
       ),
       alignment: Alignment.center,

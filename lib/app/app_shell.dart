@@ -1,7 +1,9 @@
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/core/network/network_status.dart';
-import 'package:exampro/core/config/remote_config.dart';
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/core/network/network_status.dart';
+import 'package:citizentest/core/config/remote_config.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'dart:io' show Platform;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,42 +31,86 @@ class AppShell extends ConsumerWidget {
     ];
 
     final location = state.matchedLocation;
-    int currentIndex = items.indexWhere((i) => location == i.path || location.startsWith(i.path + '/'));
+    int currentIndex = items.indexWhere((i) => location == i.path || location.startsWith('${i.path}/'));
     if (currentIndex == -1) currentIndex = 0;
 
     final offlineBar = ref.watch(onlineStatusProvider).maybeWhen(
       data: (on) => on ? const SizedBox.shrink() : Container(
         width: double.infinity,
-        color: Colors.orange.withOpacity(0.9),
+        color: Colors.orange.withValues(alpha: 0.9),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: const SafeArea(top: true, bottom: false, child: Text('No internet connection. Please reconnect.', style: TextStyle(color: Colors.white))),
       ),
       orElse: () => const SizedBox.shrink(),
     );
 
-    final upgradeBar = Builder(builder: (context) {
-      final cfg = ref.watch(remoteConfigProvider).maybeWhen(data: (c) => c, orElse: () => const RemoteConfig(upgradeDisabled: false));
-      final u = ref.watch(currentUserProvider);
-      if (cfg.upgradeDisabled) return const SizedBox.shrink();
-      if (u == null) return const SizedBox.shrink();
-      final db = ref.watch(dbProvider);
-      return FutureBuilder(
-        future: (db.select(db.users)..where((r) => r.email.equals(u.email))).getSingleOrNull(),
+    // App update prompt bar
+    final updateBar = Builder(builder: (context) {
+      final cfg = ref.watch(remoteConfigProvider).maybeWhen(data: (c) => c, orElse: () => null);
+      if (cfg == null || (cfg.latestVersion == null && cfg.minVersion == null)) return const SizedBox.shrink();
+
+      bool isLower(String a, String b) {
+        List<int> pa(String v) => v.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+        final x = pa(a), y = pa(b);
+        for (var i = 0; i < (x.length > y.length ? x.length : y.length); i++) {
+          final xi = i < x.length ? x[i] : 0;
+          final yi = i < y.length ? y[i] : 0;
+          if (xi < yi) return true;
+          if (xi > yi) return false;
+        }
+        return false;
+      }
+
+      return FutureBuilder<({bool must, bool hasNew, String? storeUrl, String packageName})>(
+        future: () async {
+          final info = await PackageInfo.fromPlatform();
+          final current = info.version;
+          final must = cfg.minVersion != null && isLower(current, cfg.minVersion!);
+          final hasNew = cfg.latestVersion != null && isLower(current, cfg.latestVersion!);
+          String? storeUrl;
+          if (Platform.isAndroid) {
+            storeUrl = cfg.androidStoreUrl ?? 'https://play.google.com/store/apps/details?id=${info.packageName}';
+          } else if (Platform.isIOS) {
+            storeUrl = cfg.iosStoreUrl;
+          }
+          return (must: must, hasNew: hasNew, storeUrl: storeUrl, packageName: info.packageName);
+        }(),
         builder: (context, snap) {
-          final isPro = snap.data?.isPro ?? false;
-          if (isPro) return const SizedBox.shrink();
+          final data = snap.data;
+          if (data == null || (!data.must && !data.hasNew)) return const SizedBox.shrink();
+          final scheme = Theme.of(context).colorScheme;
+          final bg = data.must ? Colors.red.withValues(alpha: 0.95) : scheme.tertiaryContainer.withValues(alpha: 0.9);
+          final fg = data.must ? Colors.white : scheme.onTertiaryContainer;
+          Future<void> goStore() async {
+            final url = data.storeUrl;
+            if (url == null || url.isEmpty) return;
+            final uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          }
           return Container(
             width: double.infinity,
-            color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.9),
+            color: bg,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: SafeArea(
               top: offlineBar is SizedBox ? true : false,
               bottom: false,
               child: Row(children: [
-                const Icon(Icons.workspace_premium, size: 18),
+                Icon(Icons.system_update, size: 18, color: fg),
                 const SizedBox(width: 8),
-                const Expanded(child: Text('Upgrade to Pro to unlock all categories and features.')),
-                TextButton(onPressed: () => GoRouter.of(context).go('/upgrade'), child: const Text('Upgrade')),
+                Expanded(
+                  child: Text(
+                    data.must
+                        ? 'A new version is required to continue.'
+                        : 'Update available. Tap to get the latest features.',
+                    style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: goStore,
+                  child: Text('Update', style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
+                ),
               ]),
             ),
           );
@@ -72,9 +118,15 @@ class AppShell extends ConsumerWidget {
       );
     });
 
+    final upgradeBar = Builder(builder: (context) {
+      // Hidden as requested: suppress upgrade notification on all screens.
+      return const SizedBox.shrink();
+    });
+
     return Scaffold(
       body: Column(children: [
         offlineBar,
+        updateBar,
         upgradeBar,
         Expanded(child: child),
       ]),

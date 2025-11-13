@@ -42,8 +42,8 @@ class _NeonGlassCardState extends State<NeonGlassCard> with SingleTickerProvider
               filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
               child: Container(
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.88),
-                  border: Border.all(color: isDark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.88),
+                  border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
                   borderRadius: BorderRadius.circular(widget.borderRadius),
                 ),
                 padding: widget.padding,
@@ -65,6 +65,10 @@ class _NeonBorderPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Avoid drawing with invalid sizes which can cause CoreGraphics NaNs on iOS
+    if (!size.width.isFinite || !size.height.isFinite || size.width <= 0 || size.height <= 0) {
+      return;
+    }
     final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius));
     final rect = rrect.outerRect;
 
@@ -72,21 +76,24 @@ class _NeonBorderPainter extends CustomPainter {
     final glowPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 10
-      ..color = glow.withOpacity(0.25)
+      ..color = glow.withValues(alpha: 0.25)
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 20);
     canvas.drawRRect(rrect, glowPaint);
 
     // Animated sweep highlight traveling around the border
-    final start = progress;
-    final mid = (progress + 0.02) % 1.0;
-    final end = (progress + 0.04) % 1.0;
+    final start = progress.isFinite ? progress.clamp(0.0, 1.0) : 0.0;
+    var mid = ((start as double) + 0.02) % 1.0;
+    var end = (start + 0.04) % 1.0;
+    // Ensure strictly increasing stops to avoid degenerate gradients
+    if (mid <= start) mid = (start + 0.001).clamp(0.0, 1.0);
+    if (end <= mid) end = (mid + 0.001).clamp(0.0, 1.0);
     final sweep = SweepGradient(
       colors: [
         Colors.transparent,
-        glow.withOpacity(0.95),
+        glow.withValues(alpha: 0.95),
         Colors.transparent,
       ],
-      stops: [start, mid, end]..sort(),
+      stops: [start, mid, end],
       transform: GradientRotation(-math.pi / 2),
     );
 
@@ -100,7 +107,7 @@ class _NeonBorderPainter extends CustomPainter {
     final outline = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = Colors.white.withOpacity(0.15);
+      ..color = Colors.white.withValues(alpha: 0.15);
     canvas.drawRRect(rrect.deflate(0.5), outline);
   }
 
@@ -150,9 +157,9 @@ class NeonBackground extends StatelessWidget {
         height: 180,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: c.withOpacity(0.15),
+          color: c.withValues(alpha: 0.15),
           boxShadow: [
-            BoxShadow(color: c.withOpacity(0.35), blurRadius: 100, spreadRadius: 60),
+            BoxShadow(color: c.withValues(alpha: 0.35), blurRadius: 100, spreadRadius: 60),
           ],
         ),
       );

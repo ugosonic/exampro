@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:exampro/core/network/dio_client.dart';
+import 'package:citizentest/core/network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AdminApi {
@@ -136,7 +136,7 @@ class AdminApi {
     final res = await _dio.get('/admin/users');
     final list = (res.data as List? ?? const [])
         .cast<Map>()
-        .map((m) => (m as Map).cast<String, dynamic>())
+        .map((m) => (m).cast<String, dynamic>())
         .toList();
     return list;
   }

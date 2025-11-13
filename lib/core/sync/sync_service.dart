@@ -1,4 +1,4 @@
-import 'package:exampro/features/exam/data/attempt_repository.dart';
+import 'package:citizentest/features/exam/data/attempt_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class SyncService {
@@ -7,11 +7,10 @@ class SyncService {
 
   Future<void> syncAll() async {
     final pending = await _attempts.pendingSyncAttempts();
-    for (final a in pending) {
+    for (final _ in pending) {
       // TODO: POST to API and mark as synced on success
     }
   }
 }
 
 final syncServiceProvider = Provider<SyncService>((ref) => SyncService(ref.watch(attemptRepositoryProvider)));
-

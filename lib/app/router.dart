@@ -1,28 +1,28 @@
 import 'dart:async';
 
-import 'package:exampro/app/router_notifier.dart';
-import 'package:exampro/app/app_shell.dart';
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/features/admin/presentation/admin_console_screen.dart';
-import 'package:exampro/features/auth/presentation/sign_in_screen.dart';
-import 'package:exampro/features/catalog/presentation/categories_screen.dart';
-import 'package:exampro/features/catalog/presentation/exams_by_category_screen.dart';
-import 'package:exampro/features/dashboard/presentation/dashboard_screen.dart';
-import 'package:exampro/features/exam/presentation/exam_detail_screen.dart';
-import 'package:exampro/features/exam/presentation/exam_player_screen.dart';
-import 'package:exampro/features/exam/presentation/exam_result_screen.dart';
-import 'package:exampro/features/exam/presentation/saved_questions_screen.dart';
-import 'package:exampro/features/exam/presentation/attempts_list_screen.dart';
-import 'package:exampro/features/exam/presentation/attempt_review_screen.dart';
-import 'package:exampro/features/payments/presentation/upgrade_screen.dart';
-import 'package:exampro/features/payments/presentation/payment_status_screen.dart';
-import 'package:exampro/features/onboarding/presentation/onboarding_screen.dart';
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/app/router_notifier.dart';
+import 'package:citizentest/app/app_shell.dart';
+import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/admin/presentation/admin_console_screen.dart';
+import 'package:citizentest/features/auth/presentation/sign_in_screen.dart';
+import 'package:citizentest/features/catalog/presentation/categories_screen.dart';
+import 'package:citizentest/features/catalog/presentation/exams_by_category_screen.dart';
+import 'package:citizentest/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:citizentest/features/exam/presentation/exam_detail_screen.dart';
+import 'package:citizentest/features/exam/presentation/exam_player_screen.dart';
+import 'package:citizentest/features/exam/presentation/exam_result_screen.dart';
+import 'package:citizentest/features/exam/presentation/saved_questions_screen.dart';
+import 'package:citizentest/features/exam/presentation/attempts_list_screen.dart';
+import 'package:citizentest/features/exam/presentation/attempt_review_screen.dart';
+import 'package:citizentest/features/payments/presentation/upgrade_screen.dart';
+import 'package:citizentest/features/payments/presentation/payment_status_screen.dart';
+import 'package:citizentest/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:citizentest/core/db/db_provider.dart';
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/features/profile/presentation/profile_screen.dart';
-import 'package:exampro/features/auth/presentation/sign_up_screen.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/features/profile/presentation/profile_screen.dart';
+import 'package:citizentest/features/auth/presentation/sign_up_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -188,7 +188,7 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
       final db = ref.read(dbProvider);
       final row = await (db.select(db.appSettings)..where((s) => s.key.equals('last_route'))).getSingleOrNull();
       final saved = row?.value ?? '';
-      if (saved.isNotEmpty && saved != loc && saved != '/' && saved != '/onboarding' && saved != '/auth' && saved != '/register' && !(saved.startsWith('/admin') && (user == null || user.role != 'admin'))) {
+      if (saved.isNotEmpty && saved != loc && saved != '/' && saved != '/onboarding' && saved != '/auth' && saved != '/register' && !(saved.startsWith('/admin') && (user.role != 'admin'))) {
         _didRestoreLastRoute = true;
         return saved;
       }
@@ -201,10 +201,10 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
   }
   // Has tokens
   if (loggingIn || registering || onboarding) {
-    if (user?.role == 'admin') return '/admin';
+    if (user.role == 'admin') return '/admin';
     return '/dashboard';
   }
-  if (goingAdmin && (user == null || user.role != 'admin')) return '/dashboard';
+  if (goingAdmin && (user.role != 'admin')) return '/dashboard';
   if (payingStatus) {
     final active = ref.read(paymentFlowActiveProvider);
     if (!active) return '/dashboard';

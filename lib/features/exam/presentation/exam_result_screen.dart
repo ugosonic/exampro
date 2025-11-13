@@ -1,5 +1,5 @@
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -35,8 +35,8 @@ class ExamResultScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    color: color.withOpacity(0.1),
-                    border: Border.all(color: color.withOpacity(0.2)),
+                    color: color.withValues(alpha: 0.1),
+                    border: Border.all(color: color.withValues(alpha: 0.2)),
                   ),
                   child: Column(children: [
                     Text('$percent%', style: Theme.of(context).textTheme.displaySmall?.copyWith(color: color, fontWeight: FontWeight.bold)),

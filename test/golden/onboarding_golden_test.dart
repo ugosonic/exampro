@@ -1,6 +1,5 @@
-import 'package:exampro/app/app.dart';
+import 'package:citizentest/app/app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:golden_toolkit/golden_toolkit.dart';
 
 void main() {

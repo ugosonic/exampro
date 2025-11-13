@@ -1,4 +1,4 @@
-import 'package:exampro/core/config/env.dart';
+import 'package:citizentest/core/config/env.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

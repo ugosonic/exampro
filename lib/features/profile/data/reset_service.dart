@@ -1,6 +1,6 @@
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/core/db/app_database.dart';
+import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ResetService {
@@ -33,7 +33,7 @@ class ResetService {
         'categories',
       ];
       for (final t in tables) {
-        await _db.customStatement('DELETE FROM ' + t);
+        await _db.customStatement('DELETE FROM $t');
       }
       // Optionally reset autoincrement counters
       try {

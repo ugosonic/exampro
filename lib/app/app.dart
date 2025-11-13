@@ -1,10 +1,10 @@
-﻿import 'package:exampro/app/router.dart';
-import 'package:exampro/app/theme/app_theme.dart';
-import 'package:exampro/app/theme/theme_controller.dart';
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/core/config/feature_flags.dart';
-import 'package:exampro/core/i18n/locale_controller.dart';
-import 'package:exampro/features/auth/application/session_initializer.dart';
+﻿import 'package:citizentest/app/router.dart';
+import 'package:citizentest/app/theme/app_theme.dart';
+import 'package:citizentest/app/theme/theme_controller.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/core/config/feature_flags.dart';
+import 'package:citizentest/core/i18n/locale_controller.dart';
+import 'package:citizentest/features/auth/application/session_initializer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

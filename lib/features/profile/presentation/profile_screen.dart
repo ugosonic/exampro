@@ -1,13 +1,10 @@
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/features/auth/domain/models.dart';
-import 'package:exampro/features/sync/data/sync_repository.dart';
+import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/profile/data/reset_service.dart';
-import 'package:exampro/features/onboarding/presentation/widgets/language_picker.dart';
+import 'package:citizentest/features/profile/data/reset_service.dart';
+import 'package:citizentest/features/onboarding/presentation/widgets/language_picker.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -16,9 +13,9 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  double _progress = 0;
-  String _label = '';
-  bool _updating = false;
+  final double _progress = 0;
+  final String _label = '';
+  final bool _updating = false;
 
   @override
   Widget build(BuildContext context) {

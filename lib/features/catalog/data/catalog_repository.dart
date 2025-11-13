@@ -1,10 +1,10 @@
-import 'package:exampro/core/db/app_database.dart' as db;
+import 'package:citizentest/core/db/app_database.dart' as db;
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/catalog/domain/models.dart' as models;
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/features/catalog/domain/models.dart' as models;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/features/catalog/data/content_api.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/features/catalog/data/content_api.dart';
 
 class CatalogRepository {
   final db.AppDatabase _db;
@@ -33,7 +33,7 @@ class CatalogRepository {
 
   Future<List<models.Category>> categories() async {
     if (_remote != null) {
-      final rows = await _remote!.categories();
+      final rows = await _remote.categories();
       return [
         for (final m in rows)
           models.Category(
@@ -67,7 +67,7 @@ class CatalogRepository {
 
   Future<List<models.ExamSummary>> exams({int? categoryId}) async {
     if (_remote != null) {
-      final rows = await _remote!.exams(categoryId: categoryId);
+      final rows = await _remote.exams(categoryId: categoryId);
       return [
         for (final m in rows)
           models.ExamSummary(
@@ -127,7 +127,7 @@ class CatalogRepository {
     if (_remote != null) {
       () async {
         try {
-          final rows = await _remote!.categories();
+          final rows = await _remote.categories();
           for (final m in rows) {
             final id = (m['id'] as num).toInt();
             final name = (m['name'] as String? ?? '');
@@ -156,7 +156,7 @@ class CatalogRepository {
 
   Future<bool> isCategoryLocked(int id) async {
     if (_remote != null) {
-      final rows = await _remote!.categories();
+      final rows = await _remote.categories();
       final m = rows.firstWhere((e) => (e['id'] as num).toInt() == id, orElse: () => {} as Map<String, dynamic>);
       return (m.isEmpty) ? false : ((m['locked'] as bool?) ?? false);
     }
@@ -169,7 +169,7 @@ class CatalogRepository {
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
   final dbi = ref.watch(dbProvider);
   final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
-  final hasApi = env != null && env!.apiBaseUrl.isNotEmpty;
+  final hasApi = env != null && env.apiBaseUrl.isNotEmpty;
   final remote = hasApi ? ref.watch(contentApiProvider) : null;
   return CatalogRepository(dbi, remote);
 });

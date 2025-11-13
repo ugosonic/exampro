@@ -1,14 +1,12 @@
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/sync/data/sync_api.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/features/sync/data/sync_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value, InsertMode, Selectable;
 import 'package:drift/drift.dart' as drift show Variable;
 import 'dart:convert';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
-import 'package:exampro/features/sync/data/pg_content_service.dart';
 
 typedef Progress = void Function(double pct, String label);
 

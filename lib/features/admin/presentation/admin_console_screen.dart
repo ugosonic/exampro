@@ -1,26 +1,18 @@
-﻿import 'package:exampro/features/admin/presentation/builder/exam_builder_screen.dart';
-import 'package:exampro/features/admin/presentation/builder/exam_editor_screen.dart';
-import 'package:exampro/features/admin/data/admin_repository.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/features/admin/data/email_api.dart';
-import 'package:exampro/core/network/dio_client.dart';
-import 'package:dio/dio.dart' show DioException;
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/features/payments/presentation/checkout_webview.dart';
+import 'package:citizentest/features/admin/presentation/builder/exam_builder_screen.dart';
+import 'package:citizentest/features/admin/presentation/builder/exam_editor_screen.dart';
+import 'package:citizentest/features/admin/data/admin_repository.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/features/admin/data/email_api.dart';
+import 'package:citizentest/core/network/dio_client.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/features/payments/presentation/checkout_webview.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
-import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import 'package:exampro/core/network/dio_client.dart';
-import 'package:exampro/features/exam/presentation/pdf_viewer_screen.dart';
-import 'package:exampro/features/sync/data/sync_repository.dart';
-import 'package:exampro/features/sync/data/pg_content_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/widgets.dart' show Image; // for Image.network fallback
+// for Image.network fallback
 
 class AdminConsoleScreen extends ConsumerStatefulWidget {
   const AdminConsoleScreen({super.key});
@@ -53,7 +45,7 @@ class _AdminConsoleScreenState extends ConsumerState<AdminConsoleScreen> with Si
         if (user == null || user.role != 'admin')
           Container(
             width: double.infinity,
-            color: Colors.amber.withOpacity(0.2),
+            color: Colors.amber.withValues(alpha: 0.2),
             padding: const EdgeInsets.all(8),
             child: const Text('Admins only — limited view'),
           ),
@@ -487,7 +479,7 @@ class _AdminCardsBar extends StatelessWidget {
               width: 160,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: selected ? Theme.of(context).colorScheme.primary.withOpacity(0.12) : Theme.of(context).cardColor,
+                color: selected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Theme.of(context).cardColor,
                 border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Colors.black12),
               ),
               padding: const EdgeInsets.all(12),
@@ -684,7 +676,11 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                 return CheckboxListTile(
                   value: sel,
                   onChanged: (v) => setState(() {
-                    if (v == true) _selected.add(u.id); else _selected.remove(u.id);
+                    if (v == true) {
+                      _selected.add(u.id);
+                    } else {
+                      _selected.remove(u.id);
+                    }
                   }),
                   title: Text(u.email),
                   subtitle: Text('Role: ${u.role} • ${u.isPro ? 'Pro' : 'Free'}'),
@@ -889,7 +885,7 @@ class _ReportsTab extends ConsumerStatefulWidget {
 
 class _ReportsTabState extends ConsumerState<_ReportsTab> {
   final _controller = ScrollController();
-  List<({Report report, Exam exam})> _items = [];
+  final List<({Report report, Exam exam})> _items = [];
   bool _loading = false;
   int _page = 0;
   final int _size = 25;
@@ -1051,7 +1047,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
       });
       final list = (res.data as List? ?? const [])
           .cast<Map>()
-          .map((m) => (m as Map).cast<String, dynamic>())
+          .map((m) => (m).cast<String, dynamic>())
           .toList();
       more = [
         for (final m in list)
@@ -1370,7 +1366,11 @@ class _QuestionsTabState extends ConsumerState<_QuestionsTab> {
                   final q = _items[i];
                   final sel = _selected.contains(q.id);
                   return ListTile(
-                    leading: Checkbox(value: sel, onChanged: (v) => setState(() { if (v == true) _selected.add(q.id); else _selected.remove(q.id);})),
+                    leading: Checkbox(value: sel, onChanged: (v) => setState(() { if (v == true) {
+                      _selected.add(q.id);
+                    } else {
+                      _selected.remove(q.id);
+                    }})),
                     title: Text(q.body.isEmpty ? 'Untitled' : q.body, maxLines: 2, overflow: TextOverflow.ellipsis),
                     subtitle: FutureBuilder(
                       future: repo.categoriesForQuestion(q.id),
@@ -1411,7 +1411,11 @@ class _QuestionsTabState extends ConsumerState<_QuestionsTab> {
                                       for (final c in cats)
                                         CheckboxListTile(
                                           value: temp.contains(c.id),
-                                          onChanged: (v) => set(() { if (v == true) temp.add(c.id); else temp.remove(c.id); }),
+                                          onChanged: (v) => set(() { if (v == true) {
+                                            temp.add(c.id);
+                                          } else {
+                                            temp.remove(c.id);
+                                          } }),
                                           title: Text(c.name),
                                         ),
                                     ]),
@@ -1478,11 +1482,19 @@ class _QuestionsTabState extends ConsumerState<_QuestionsTab> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Select categories'),
                 const SizedBox(height: 6),
-                ...cats.map((c) => CheckboxListTile(value: catSel.contains(c.id), onChanged: (v) => set(() { if (v == true) catSel.add(c.id); else catSel.remove(c.id);} ), title: Text(c.name))),
+                ...cats.map((c) => CheckboxListTile(value: catSel.contains(c.id), onChanged: (v) => set(() { if (v == true) {
+                  catSel.add(c.id);
+                } else {
+                  catSel.remove(c.id);
+                }} ), title: Text(c.name))),
                 const Divider(),
                 const Text('Select subcategories'),
                 const SizedBox(height: 6),
-                ...subs.map((s) => CheckboxListTile(value: subSel.contains(s.id), onChanged: (v) => set(() { if (v == true) subSel.add(s.id); else subSel.remove(s.id);} ), title: Text(s.name))),
+                ...subs.map((s) => CheckboxListTile(value: subSel.contains(s.id), onChanged: (v) => set(() { if (v == true) {
+                  subSel.add(s.id);
+                } else {
+                  subSel.remove(s.id);
+                }} ), title: Text(s.name))),
                 const SizedBox(height: 8),
                 TextField(controller: catCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Per-category count')),
                 TextField(controller: subCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Per-subcategory count')),

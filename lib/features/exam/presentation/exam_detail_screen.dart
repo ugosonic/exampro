@@ -1,14 +1,13 @@
-import 'package:exampro/core/i18n/tr_text.dart';
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/exam/data/exam_repository.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/features/exam/presentation/pdf_viewer_screen.dart';
-import 'package:exampro/core/config/env_loader.dart';
+import 'package:citizentest/core/i18n/tr_text.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/features/exam/data/exam_repository.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/exam/presentation/pdf_viewer_screen.dart';
+import 'package:citizentest/core/config/env_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
 
 class ExamDetailScreen extends ConsumerWidget {
   final String examId;
@@ -60,7 +59,7 @@ class ExamDetailScreen extends ConsumerWidget {
                 }
                 final locked = ((cat?.locked ?? false) || (sub?.locked ?? false));
                 // Read-only flag stored in app_settings as exam_readonly_<id>
-                final key = 'exam_readonly_${id}';
+                final key = 'exam_readonly_$id';
                 final ro = await (db.select(db.appSettings)..where((s) => s.key.equals(key))).getSingleOrNull();
                 final readOnly = (ro?.value == '1');
                 return (cat: cat, sub: sub, isPro: isPro, locked: locked, readOnly: readOnly);
@@ -100,7 +99,7 @@ class ExamDetailScreen extends ConsumerWidget {
                       future: () async {
                         final user = ref.read(currentUserProvider);
                         final email = user?.email ?? 'guest@local';
-                        final key = 'exam_readonly_${id}';
+                        final key = 'exam_readonly_$id';
                         final row = await (db.select(db.appSettings)..where((s) => s.key.equals(key))).getSingleOrNull();
                         final ro = (row?.value == '1');
                         final page = await repo.pdfProgress(examId: id, userEmail: email);

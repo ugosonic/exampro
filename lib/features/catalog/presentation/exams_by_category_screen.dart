@@ -1,13 +1,13 @@
-import 'package:exampro/features/catalog/data/catalog_repository.dart';
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/features/catalog/data/catalog_repository.dart';
+import 'package:citizentest/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
-import 'package:exampro/common/widgets/neon_glass.dart';
+import 'package:citizentest/common/widgets/neon_glass.dart';
 import 'package:go_router/go_router.dart';
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/features/catalog/data/content_api.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/features/catalog/data/content_api.dart';
 
 class ExamsByCategoryScreen extends ConsumerWidget {
   final String categoryId;
@@ -48,7 +48,7 @@ class ExamsByCategoryScreen extends ConsumerWidget {
           final catLocked = await repo.isCategoryLocked(id);
           // Build subcategory info (name/locked) using remote when available
           final env = ref.read(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
-          final hasApi = env != null && (env!.apiBaseUrl.isNotEmpty);
+          final hasApi = env != null && (env.apiBaseUrl.isNotEmpty);
           final subIds = list.map((e) => e.subcategoryId).where((x) => x != null && x != 0).cast<int>().toSet().toList();
           final List<Map<String, dynamic>> subs = subIds.isEmpty
               ? const <Map<String, dynamic>>[]
@@ -90,9 +90,9 @@ class ExamsByCategoryScreen extends ConsumerWidget {
           }
           final data = snapshot.data!;
           final exams = data.exams as List;
-          final catLocked = data.catLocked as bool;
+          final catLocked = data.catLocked;
           final subLocked = (data.subLocked as Map);
-          final isPro = data.isPro as bool;
+          final isPro = data.isPro;
           final List<Map<String, dynamic>> subs = (data.subs as List).cast<Map<String, dynamic>>();
           final completed = (data.completed as Set);
           if (exams.isEmpty) {
@@ -147,9 +147,9 @@ class ExamsByCategoryScreen extends ConsumerWidget {
                   ], begin: Alignment.topLeft, end: Alignment.bottomRight),
                 ),
                 child: ListTile(
-                  leading: CircleAvatar(backgroundColor: Colors.white.withOpacity(0.2), child: Icon(_iconForExam(e.id), color: Colors.white)),
+                  leading: CircleAvatar(backgroundColor: Colors.white.withValues(alpha: 0.2), child: Icon(_iconForExam(e.id), color: Colors.white)),
                   title: Text(e.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                  subtitle: Text('${e.questionCount} questions', style: TextStyle(color: Colors.white.withOpacity(0.85))),
+                  subtitle: Text('${e.questionCount} questions', style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
                   trailing: locked
                       ? const Icon(Icons.lock, color: Colors.white)
                       : (completed.contains(e.id)

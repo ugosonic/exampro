@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/core/network/auth_interceptor.dart';
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/features/auth/data/auth_api.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/core/network/auth_interceptor.dart';
+import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/features/auth/data/auth_api.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authDioProvider = Provider<Dio>((ref) {

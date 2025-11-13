@@ -1,0 +1,207 @@
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            item.desc,
+                            style: TextStyle(
+                              color: sub,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Section: How it works (kept for completeness)
+class _HowItWorks extends StatelessWidget {
+  const _HowItWorks();
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const steps = [
+      ('1. Learn', 'Skim the official handbook by topic.'),
+      ('2. Practice', 'Answer curated questions with explanations.'),
+      ('3. Mock', 'Timed tests that mirror exam format.'),
+      ('4. Review', 'Focus on weak areas and improve.'),
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'How it works',
+            style:
+                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(builder: (context, c) {
+            final isWide = c.maxWidth > 640;
+            final children = [
+              for (final s in steps) _HowItem(title: s.$1, text: s.$2),
+            ];
+            if (isWide) {
+              return Row(
+                children: [
+                  for (var i = 0; i < children.length; i++) ...[
+                    Expanded(child: children[i]),
+                    if (i != children.length - 1) const SizedBox(width: 12),
+                  ]
+                ],
+              );
+            }
+            return Column(
+              children: [
+                for (var i = 0; i < children.length; i++) ...[
+                  children[i],
+                  if (i != children.length - 1) const SizedBox(height: 12),
+                ]
+              ],
+            );
+          })
+        ],
+      ),
+    );
+  }
+}
+
+class _HowItem extends StatelessWidget {
+  final String title;
+  final String text;
+  const _HowItem({required this.title, required this.text});
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_circle, color: theme.colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(
+                  text,
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZenovFooter extends StatelessWidget {
+  const _ZenovFooter();
+  @override
+  Widget build(BuildContext context) {
+    final on = Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFF0B2540);
+    final sub = on.withValues(alpha: 0.75);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 12),
+        Text('Developed by ZenovTech (c) 2025', style: TextStyle(color: sub, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('info@zenovtech.com', style: TextStyle(color: sub)),
+        const SizedBox(height: 4),
+        Text('Contact for websites and mobile app development', textAlign: TextAlign.center, style: TextStyle(color: sub)),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _FeatureCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String asset;
+  final Color color;
+  const _FeatureCard({
+    required this.title,
+    required this.subtitle,
+    required this.asset,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration:
+          BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: SvgPicture.asset(asset, fit: BoxFit.contain),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}

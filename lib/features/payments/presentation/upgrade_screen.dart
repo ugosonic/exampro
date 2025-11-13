@@ -1,12 +1,12 @@
-import 'package:exampro/features/admin/data/admin_repository.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/admin/data/admin_repository.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: unused_import
 import 'package:url_launcher/url_launcher.dart';
-import 'package:exampro/features/payments/presentation/payment_status_screen.dart';
+import 'package:citizentest/features/payments/presentation/payment_status_screen.dart';
 import 'package:go_router/go_router.dart';
-import 'package:exampro/core/network/dio_client.dart';
+import 'package:citizentest/core/network/dio_client.dart';
 import 'package:dio/dio.dart' show DioException;
 import 'package:flutter_stripe/flutter_stripe.dart';
 
@@ -66,7 +66,7 @@ class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
         ),
       );
       await Stripe.instance.presentPaymentSheet();
-    } on StripeException catch (e) {
+    } on StripeException {
       if (mounted) context.go('/pay/cancel');
       setState(() => loading = false);
       return;
@@ -78,12 +78,12 @@ class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
       if (user != null) {
         final repo = ref.read(adminRepositoryProvider);
         final amountMinor = await _priceMinor(currency) ?? (currency == 'GBP' ? 1999 : 1999);
-        String? _piFromSecret(String s) {
+        String? piFromSecret(String s) {
           final i = s.indexOf('_secret_');
           if (i > 0) return s.substring(0, i);
           return null;
         }
-        final piId = clientSecret == null ? '' : (_piFromSecret(clientSecret!) ?? '');
+        final piId = (piFromSecret(clientSecret) ?? '');
         await repo.addPayment(email: user.email, amountMinor: amountMinor, currency: currency, intentId: piId, status: 'paid');
         try {
           // Also record on server so admins can see online payment history

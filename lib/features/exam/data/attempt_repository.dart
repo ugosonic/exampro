@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AttemptRepository {
