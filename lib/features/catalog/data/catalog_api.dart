@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
-import 'package:exampro/core/network/dio_client.dart';
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/features/catalog/domain/models.dart';
+import 'package:citizentest/core/network/dio_client.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/features/catalog/domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 abstract class CatalogApi {

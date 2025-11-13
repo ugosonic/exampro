@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:exampro/core/storage/secure_storage.dart';
+import 'package:citizentest/core/storage/secure_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class TokenBundle {

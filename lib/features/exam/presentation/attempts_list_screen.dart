@@ -1,10 +1,10 @@
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
 
 class AttemptsListScreen extends ConsumerStatefulWidget {
   const AttemptsListScreen({super.key});

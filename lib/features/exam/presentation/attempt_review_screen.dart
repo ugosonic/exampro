@@ -1,7 +1,7 @@
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/features/exam/data/exam_repository.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/features/exam/data/exam_repository.dart';
 import 'package:flutter/material.dart';
-import 'package:exampro/core/i18n/tr_text.dart';
+import 'package:citizentest/core/i18n/tr_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AttemptReviewScreen extends ConsumerWidget {

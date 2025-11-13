@@ -1,7 +1,7 @@
-import 'package:exampro/features/auth/presentation/sign_up_state.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/auth/presentation/sign_up_state.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
-import 'package:exampro/common/widgets/neon_glass.dart';
+import 'package:citizentest/common/widgets/neon_glass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -43,14 +43,14 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                           height: 80,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withOpacity(0.25)),
-                            color: Colors.white.withOpacity(0.04),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                            color: Colors.white.withValues(alpha: 0.04),
                           ),
                           child: const Icon(Icons.person_add_alt_1_outlined, color: Color(0xFF8FC7FF), size: 34),
                         ),
                       ),
                       const SizedBox(height: 22),
-                      Text('Create account', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: isDark ? Colors.white.withOpacity(0.95) : const Color(0xFF0B2540), fontWeight: FontWeight.w700)),
+                      Text('Create account', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: isDark ? Colors.white.withValues(alpha: 0.95) : const Color(0xFF0B2540), fontWeight: FontWeight.w700)),
                       const SizedBox(height: 16),
               TextField(
                 keyboardType: TextInputType.emailAddress,
@@ -61,8 +61,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   prefixIcon: Icon(Icons.email_outlined, color: isDark ? Colors.white70 : Colors.black45),
                   labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   filled: true,
-                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black12)),
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black12)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4DA3FF))),
                   errorText: state.emailError,
                 ),
@@ -78,8 +78,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   prefixIcon: Icon(Icons.lock_outline, color: isDark ? Colors.white70 : Colors.black45),
                   labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   filled: true,
-                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black12)),
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black12)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4DA3FF))),
                   errorText: state.passwordError,
                   suffixIcon: IconButton(
@@ -99,8 +99,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   prefixIcon: Icon(Icons.lock_person_outlined, color: isDark ? Colors.white70 : Colors.black45),
                   labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   filled: true,
-                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withOpacity(0.12) : Colors.black12)),
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black12)),
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4DA3FF))),
                   errorText: state.confirmError,
                   suffixIcon: IconButton(

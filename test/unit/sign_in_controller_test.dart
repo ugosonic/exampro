@@ -1,6 +1,6 @@
-import 'package:exampro/features/auth/data/auth_repository.dart';
-import 'package:exampro/features/auth/domain/models.dart';
-import 'package:exampro/features/auth/presentation/sign_in_state.dart';
+import 'package:citizentest/features/auth/data/auth_repository.dart';
+import 'package:citizentest/features/auth/domain/models.dart';
+import 'package:citizentest/features/auth/presentation/sign_in_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';

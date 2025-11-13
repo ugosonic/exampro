@@ -42,8 +42,8 @@ class _NeonGlassCardState extends State<NeonGlassCard> with SingleTickerProvider
               filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
               child: Container(
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.88),
-                  border: Border.all(color: isDark ? Colors.white.withOpacity(0.10) : Colors.black.withOpacity(0.06)),
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.88),
+                  border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
                   borderRadius: BorderRadius.circular(widget.borderRadius),
                 ),
                 padding: widget.padding,
@@ -72,7 +72,7 @@ class _NeonBorderPainter extends CustomPainter {
     final glowPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 10
-      ..color = glow.withOpacity(0.25)
+      ..color = glow.withValues(alpha: 0.25)
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 20);
     canvas.drawRRect(rrect, glowPaint);
 
@@ -83,7 +83,7 @@ class _NeonBorderPainter extends CustomPainter {
     final sweep = SweepGradient(
       colors: [
         Colors.transparent,
-        glow.withOpacity(0.95),
+        glow.withValues(alpha: 0.95),
         Colors.transparent,
       ],
       stops: [start, mid, end]..sort(),
@@ -100,7 +100,7 @@ class _NeonBorderPainter extends CustomPainter {
     final outline = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = Colors.white.withOpacity(0.15);
+      ..color = Colors.white.withValues(alpha: 0.15);
     canvas.drawRRect(rrect.deflate(0.5), outline);
   }
 
@@ -150,9 +150,9 @@ class NeonBackground extends StatelessWidget {
         height: 180,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: c.withOpacity(0.15),
+          color: c.withValues(alpha: 0.15),
           boxShadow: [
-            BoxShadow(color: c.withOpacity(0.35), blurRadius: 100, spreadRadius: 60),
+            BoxShadow(color: c.withValues(alpha: 0.35), blurRadius: 100, spreadRadius: 60),
           ],
         ),
       );

@@ -2,11 +2,11 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:exampro/core/config/env_loader.dart';
-import 'package:exampro/features/catalog/data/content_api.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/features/catalog/data/content_api.dart';
 
 class ExamRepository {
   final AppDatabase _db;
@@ -49,7 +49,7 @@ class ExamRepository {
 
     // Remote fallback
     if (_remote != null) {
-      final rows = await _remote!.exams();
+      final rows = await _remote.exams();
       final m = rows.firstWhere(
         (e) => _asInt(e['id']) == id,
         orElse: () => const <String, dynamic>{},
@@ -74,7 +74,7 @@ class ExamRepository {
     return null;
   }
 
-  Future<List<_QuestionWithOptions>> questionsForExam(int examId) async {
+  Future<List<QuestionWithOptions>> questionsForExam(int examId) async {
     // Local first
     final joins = await (_db.select(_db.examQuestions)
           ..where((e) => e.examId.equals(examId))
@@ -93,7 +93,7 @@ class ExamRepository {
 
       return [
         for (final j in joins)
-          _QuestionWithOptions(
+          QuestionWithOptions(
             question:
                 await _translateQuestion(qRows.firstWhere((q) => q.id == j.questionId), lang),
             options: [
@@ -106,7 +106,7 @@ class ExamRepository {
 
     // Remote fallback
     if (_remote != null) {
-      final data = await _remote!.examQuestions(examId);
+      final data = await _remote.examQuestions(examId);
       final order = _asListOfMap(data['order']);
       final qs = _asListOfMap(data['questions']);
       final cs = _asListOfMap(data['choices']);
@@ -130,7 +130,7 @@ class ExamRepository {
 
       return [
         for (final j in order)
-          _QuestionWithOptions(
+          QuestionWithOptions(
             question: await _translateQuestion(mapQ(_asInt(j['question_id']) ?? 0), lang),
             options: [
               for (final o in (cs
@@ -155,7 +155,7 @@ class ExamRepository {
     return [];
   }
 
-  Future<List<_QuestionWithOptions>> questionsForCategory(int categoryId) async {
+  Future<List<QuestionWithOptions>> questionsForCategory(int categoryId) async {
     // Local aggregate across category & its subcategories
     final examRows =
         await (_db.select(_db.exams)..where((e) => e.categoryId.equals(categoryId))).get();
@@ -192,13 +192,13 @@ class ExamRepository {
             optMap.putIfAbsent(o.questionId, () => <Choice>[]).add(o);
           }
           final lang = await _lang();
-          final out = <_QuestionWithOptions>[];
+          final out = <QuestionWithOptions>[];
           for (final id in uniqueIds) {
             final question = qMap[id];
             if (question == null) continue;
             final optionList = optMap[id];
             if (optionList == null || optionList.isEmpty) continue;
-            out.add(_QuestionWithOptions(
+            out.add(QuestionWithOptions(
               question: await _translateQuestion(question, lang),
               options: [for (final o in optionList) await _translateChoice(o, lang)],
             ));
@@ -210,8 +210,8 @@ class ExamRepository {
 
     // Remote fallback: expand each exam in the category
     if (_remote != null) {
-      final exs = await _remote!.exams(categoryId: categoryId);
-      final out = <_QuestionWithOptions>[];
+      final exs = await _remote.exams(categoryId: categoryId);
+      final out = <QuestionWithOptions>[];
       for (final e in exs) {
         final id = _asInt(e['id']);
         if (id == null) continue;
@@ -496,10 +496,10 @@ class ExamRepository {
   }
 }
 
-class _QuestionWithOptions {
+class QuestionWithOptions {
   final Question question;
   final List<Choice> options;
-  const _QuestionWithOptions({required this.question, required this.options});
+  const QuestionWithOptions({required this.question, required this.options});
 }
 
 extension on ExamRepository {
@@ -568,7 +568,7 @@ extension on ExamRepository {
 final examRepositoryProvider = Provider<ExamRepository>((ref) {
   final dbi = ref.watch(dbProvider);
   final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
-  final hasApi = env != null && env!.apiBaseUrl.isNotEmpty;
+  final hasApi = env != null && env.apiBaseUrl.isNotEmpty;
   final remote = hasApi ? ref.watch(contentApiProvider) : null;
   return ExamRepository(dbi, remote);
 });

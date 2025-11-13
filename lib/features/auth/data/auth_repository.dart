@@ -1,13 +1,13 @@
 import 'dart:math';
 
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/core/db/app_database.dart' as db;
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/auth/domain/models.dart' as auth_models;
+import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/core/db/app_database.dart' as db;
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/features/auth/domain/models.dart' as auth_models;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/features/auth/data/auth_api.dart';
-import 'package:exampro/core/config/env_loader.dart';
+import 'package:citizentest/features/auth/data/auth_api.dart';
+import 'package:citizentest/core/config/env_loader.dart';
 
 class AuthRepository {
   final db.AppDatabase _db;
@@ -18,10 +18,10 @@ class AuthRepository {
 
   Future<auth_models.User> signIn(String email, String password) async {
     if (_remote != null) {
-      final tokens = await _remote!.signIn(email: email, password: password);
+      final tokens = await _remote.signIn(email: email, password: password);
       // Save tokens first so /auth/me can authorize
       await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
-      final me = await _remote!.me();
+      final me = await _remote.me();
       // Re-save with identity details
       await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh, userId: me.id, email: me.email));
       // Respect local admin override for same email
@@ -55,10 +55,10 @@ class AuthRepository {
 
   Future<auth_models.User> register(String email, String password) async {
     if (_remote != null) {
-      final tokens = await _remote!.register(email: email, password: password);
+      final tokens = await _remote.register(email: email, password: password);
       // Save tokens first so /auth/me can authorize
       await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
-      final me = await _remote!.me();
+      final me = await _remote.me();
       // Re-save with identity details
       await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh, userId: me.id, email: me.email));
       // Persist local row so role/is_pro checks work
@@ -92,7 +92,7 @@ class AuthRepository {
   Future<auth_models.User> me() async {
     if (_remote != null) {
       try {
-        final me = await _remote!.me();
+        final me = await _remote.me();
         final local = await (_db.select(_db.users)..where((u) => u.email.equals(me.email))).getSingleOrNull();
         final envAdmins = _adminEmailsCsv.split(',').map((e) => e.trim().toLowerCase()).toSet();
         final role = (local?.role == 'admin' || envAdmins.contains(me.email.toLowerCase())) ? 'admin' : me.role;
@@ -130,7 +130,7 @@ class AuthRepository {
 
   Future<void> forgotPassword(String email) async {
     if (_remote == null) throw Exception('Forgot password requires network');
-    await _remote!.requestPasswordReset(email: email);
+    await _remote.requestPasswordReset(email: email);
   }
 
   String _randToken(String pfx, String uid) {

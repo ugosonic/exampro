@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:exampro/core/network/dio_client.dart';
+import 'package:citizentest/core/network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Emits true when online, false when last probe failed

@@ -1,16 +1,15 @@
 
 import 'dart:async';
-import 'dart:math' as math;
-import 'package:exampro/common/widgets/tap_scale.dart';
-import 'package:exampro/core/analytics/analytics.dart';
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/exam/data/exam_repository.dart';
-import 'package:exampro/features/sync/data/sync_repository.dart';
+import 'package:citizentest/common/widgets/tap_scale.dart';
+import 'package:citizentest/core/analytics/analytics.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/features/exam/data/exam_repository.dart';
+import 'package:citizentest/features/sync/data/sync_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
 
 class ExamPlayerScreen extends ConsumerStatefulWidget {
   final String examId;
@@ -295,7 +294,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               ),
                         ),
                         const SizedBox(height: 12),
-                        ...options.map((o) => _option(context, o, correctIds.contains(o.id))).toList(),
+                        ...options.map((o) => _option(context, o, correctIds.contains(o.id))),
                         if (_mode == 'practice' && _revealed.contains(q.id))
                           Padding(
                             padding: const EdgeInsets.only(top: 8.0),
@@ -304,8 +303,8 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: _isSelectionCorrect(q, selected, correctIds)
-                                    ? Colors.green.withOpacity(0.1)
-                                    : Colors.red.withOpacity(0.1),
+                                    ? Colors.green.withValues(alpha: 0.1)
+                                    : Colors.red.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(q.explanation.isEmpty ? ' ' : q.explanation),
@@ -341,7 +340,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                     Expanded(
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+                          backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
                           foregroundColor: Theme.of(context).colorScheme.onSurface,
                         ),
                         onPressed: index > 0

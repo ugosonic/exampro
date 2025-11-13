@@ -1,5 +1,5 @@
-﻿import 'dart:async';
-import 'package:exampro/core/analytics/analytics.dart';
+import 'dart:async';
+import 'package:citizentest/core/analytics/analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -87,7 +87,7 @@ class OnboardingScreen extends ConsumerWidget {
                         const _ZenovFooter(),
                         Divider(
                           color: (isDark ? Colors.white : Colors.black)
-                              .withOpacity(0.20),
+                              .withValues(alpha: 0.20),
                           thickness: 1,
                         ),
                         SizedBox(height: bigGap),
@@ -139,10 +139,10 @@ class OnboardingScreen extends ConsumerWidget {
                                   : const Color(0xFF0B2540),
                               side: BorderSide(
                                 color: (isDark ? Colors.white : Colors.black)
-                                    .withOpacity(0.18),
+                                    .withValues(alpha: 0.18),
                               ),
                               backgroundColor: isDark
-                                  ? Colors.white.withOpacity(0.08)
+                                  ? Colors.white.withValues(alpha: 0.08)
                                   : Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(32),
@@ -210,7 +210,7 @@ class _HeroHeader extends StatelessWidget {
           Text(
             'Study smart. Practice more. Sure pass.',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.75),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
               height: 1.35,
             ),
           ),
@@ -260,8 +260,8 @@ class _HeroHeader extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           gradient: LinearGradient(
             colors: [
-              theme.colorScheme.primary.withOpacity(0.14),
-              theme.colorScheme.secondary.withOpacity(0.10),
+              theme.colorScheme.primary.withValues(alpha: 0.14),
+              theme.colorScheme.secondary.withValues(alpha: 0.10),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -298,7 +298,7 @@ class _Pill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant,
+        color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -385,7 +385,7 @@ class _DotsPattern extends StatelessWidget {
         : const Color(0xFF9ED7FF);
     final child = CustomPaint(
       size: const Size(120, 140),
-      painter: _DotsPainter(color.withOpacity(0.8)),
+      painter: _DotsPainter(color.withValues(alpha: 0.8)),
     );
     return Positioned(top: top, right: right, bottom: bottom, left: left, child: child);
   }
@@ -511,7 +511,7 @@ class _FlagCyclerState extends State<_FlagCycler>
             style: TextStyle(
               fontSize: 38,
               shadows: [
-                Shadow(color: color.withOpacity(0.25), blurRadius: 4),
+                Shadow(color: color.withValues(alpha: 0.25), blurRadius: 4),
               ],
             ),
           ),
@@ -587,7 +587,7 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final on = isDark ? Colors.white : const Color(0xFF0B2540);
-    final sub = on.withOpacity(0.78);
+    final sub = on.withValues(alpha: 0.78);
     final item = _items[_index];
 
     return ClipRRect(
@@ -596,11 +596,11 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
           border: Border.all(
             color: isDark
-                ? Colors.white.withOpacity(0.10)
-                : Colors.black.withOpacity(0.06),
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.black.withValues(alpha: 0.06),
           ),
           borderRadius: BorderRadius.circular(16),
         ),
@@ -666,7 +666,7 @@ class _HowItWorks extends StatelessWidget {
     ];
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.35),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.all(16),
@@ -723,7 +723,7 @@ class _HowItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -760,7 +760,7 @@ class _ZenovFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final on = Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFF0B2540);
-    final sub = on.withOpacity(0.75);
+    final sub = on.withValues(alpha: 0.75);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -806,7 +806,7 @@ class _FeatureCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),

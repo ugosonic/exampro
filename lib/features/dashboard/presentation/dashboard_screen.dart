@@ -1,22 +1,21 @@
-﻿import 'package:exampro/app/theme/theme_controller.dart';
-import 'package:exampro/common/widgets/tap_scale.dart';
+import 'package:citizentest/app/theme/theme_controller.dart';
+import 'package:citizentest/common/widgets/tap_scale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:exampro/features/exam/data/exam_repository.dart';
-import 'package:exampro/features/catalog/data/catalog_repository.dart';
+import 'package:citizentest/features/exam/data/exam_repository.dart';
+import 'package:citizentest/features/catalog/data/catalog_repository.dart';
 import 'dart:io';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
 import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/notifications/notifications.dart';
-import 'package:exampro/common/widgets/neon_glass.dart';
-import 'package:exampro/features/sync/data/sync_api.dart';
-import 'package:exampro/features/sync/data/sync_repository.dart';
-import 'package:exampro/features/dashboard/data/progress_repository.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/core/config/env_loader.dart';
+import 'package:citizentest/core/notifications/notifications.dart';
+import 'package:citizentest/common/widgets/neon_glass.dart';
+import 'package:citizentest/features/sync/data/sync_repository.dart';
+import 'package:citizentest/features/dashboard/data/progress_repository.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/core/config/env_loader.dart';
 
 // Top-level helper widget for category thumbnails (supports file or https URLs)
 class _CategoryImage extends ConsumerWidget {
@@ -116,7 +115,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     // Manual content update banner removed; content now auto-syncs after sign-in.
     final mode = ref.watch(themeModeProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Citizenship Test'), actions: [
+      appBar: AppBar(title: const Text('Citizen Test'), actions: [
         IconButton(
           tooltip: 'Theme',
           onPressed: () {
@@ -160,10 +159,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       const SizedBox(height: 20),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Text('Select Country', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
-                              fontWeight: FontWeight.w700,
-                            )),
+                        child: Center(
+                          child: Text(
+                            'Select Country',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.white.withValues(alpha: 0.95)
+                                      : Colors.black.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       NeonGlassCard(child: _homeCategoriesGrid(context)),
@@ -173,7 +180,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Your Progress', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
                                   fontWeight: FontWeight.w700,
                                 )),
                             const SizedBox(height: 8),
@@ -189,7 +196,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text('Recent attempts', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85),
+                                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
                                       fontWeight: FontWeight.w700,
                                     )),
                                 TextButton(onPressed: () => context.go('/attempts'), child: const Text('View all')),
@@ -221,9 +228,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Welcome', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.95) : Colors.black.withOpacity(0.85), fontWeight: FontWeight.w700)),
+                Text('Welcome', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                Text('Sign in to sync progress across devices, or explore categories without an account.', style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withOpacity(0.9) : Colors.black.withOpacity(0.75))),
+                Text('Sign in to sync progress across devices, or explore categories without an account.', style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.9) : Colors.black.withValues(alpha: 0.75))),
                 const SizedBox(height: 12),
                 Row(children: [
                   FilledButton(onPressed: () => GoRouter.of(context).go('/auth'), child: const Text('Sign in')),
@@ -305,7 +312,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             else
                               CircleAvatar(radius: 22, child: Icon(icon, size: 24)),
                             const SizedBox(height: 10),
-                            Text(c.name, style: TextStyle(fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
+                            Text(
+                              c.name,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
                           ])),
                         ]),
                       ),
@@ -469,7 +483,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _searchBar(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.6),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(40),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -527,7 +541,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             if (hasMany)
               Padding(
                 padding: const EdgeInsets.only(top: 6.0),
-                child: Text('Swipe to see more ▶', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7))),
+                child: Text('Swipe to see more ▶', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
               ),
           ],
         );
@@ -593,7 +607,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       isCurved: true,
                       color: lineColor,
                       barWidth: 3,
-                      belowBarData: BarAreaData(show: true, color: lineColor.withOpacity(0.18)),
+                      belowBarData: BarAreaData(show: true, color: lineColor.withValues(alpha: 0.18)),
                       dotData: FlDotData(show: true, getDotPainter: (s, __, ___, ____) => FlDotCirclePainter(radius: 3, color: lineColor, strokeWidth: 1, strokeColor: isDark ? Colors.white24 : Colors.black12)),
                       spots: spots,
                     )
@@ -667,9 +681,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             if (snap2.hasError) return Text('Failed to load exam info: ${snap2.error}');
             final extras = snap2.data;
             if (attempts.isEmpty) return const Text('No attempts yet. Start from Categories.');
-            final exams = (extras?.exams as List<Exam>? ?? const <Exam>[]);
-            final cats = (extras?.cats as List<Category>? ?? const <Category>[]);
-            final subs = (extras?.subs as List<Subcategory>? ?? const <Subcategory>[]);
+            final exams = (extras?.exams ?? const <Exam>[]);
+            final cats = (extras?.cats ?? const <Category>[]);
+            final subs = (extras?.subs ?? const <Subcategory>[]);
             return Column(children: [
               for (var i = 0; i < attempts.length; i++)
                 Padding(
@@ -712,11 +726,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           : null;
                       final label = sub == null ? cat.name : '${cat.name} • ${sub.name}';
                       final on = Theme.of(context).colorScheme.onSurface;
-                      return Text('${ex.title} • $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.92), fontWeight: FontWeight.w600));
+                      return Text('${ex.title} • $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withValues(alpha: 0.92), fontWeight: FontWeight.w600));
                       }(),
                     subtitle: Builder(builder: (context) {
                       final on = Theme.of(context).colorScheme.onSurface;
-                      return Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} • ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withOpacity(0.7)));
+                      return Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} • ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withValues(alpha: 0.7)));
                     }),
                       onTap: () {
                         final a = attempts[i];
@@ -765,11 +779,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: on.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: on.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
                 child: Icon(icon, color: Theme.of(context).colorScheme.primary),
               ),
               const SizedBox(height: 6),
-              Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: TextStyle(color: on.withOpacity(0.92), fontWeight: FontWeight.w700, fontSize: font)),
+              Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: TextStyle(color: on.withValues(alpha: 0.92), fontWeight: FontWeight.w700, fontSize: font)),
             ],
           );
         }),
@@ -840,7 +854,7 @@ class _PieCard extends StatelessWidget {
     final on = Theme.of(context).colorScheme.onSurface;
     final diameter = big ? 180.0 : 90.0;
     final width = big ? MediaQuery.of(context).size.width - 48 : 150.0;
-    final pendingColor = Colors.grey.withOpacity(0.25);
+    final pendingColor = Colors.grey.withValues(alpha: 0.25);
     return SizedBox(
       width: width,
       child: NeonGlassCard(
@@ -865,7 +879,7 @@ class _PieCard extends StatelessWidget {
               item.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontWeight: FontWeight.w700, color: on.withOpacity(0.95), fontSize: big ? 16 : 14),
+              style: TextStyle(fontWeight: FontWeight.w700, color: on.withValues(alpha: 0.95), fontSize: big ? 16 : 14),
             ),
           ],
         ),
@@ -914,7 +928,7 @@ class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderSta
                   radius: 64,
                 ),
                 PieChartSectionData(
-                  color: widget.pendingColor ?? Theme.of(context).colorScheme.onSurface.withOpacity(0.14),
+                  color: widget.pendingColor ?? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.14),
                   value: remain,
                   title: '',
                   radius: 58,
@@ -926,7 +940,7 @@ class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderSta
               children: [
                 Text('$percent%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                 if (widget.showCounts)
-                  Text('${widget.completed}/${widget.total}', style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 12)),
+                  Text('${widget.completed}/${widget.total}', style: TextStyle(color: Colors.white.withValues(alpha: 0.95), fontSize: 12)),
               ],
             )
           ],
@@ -938,7 +952,7 @@ class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderSta
 
 Widget _zenovFooter(BuildContext context) {
   final on = Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87;
-  final sub = on.withOpacity(0.75);
+  final sub = on.withValues(alpha: 0.75);
   return Column(
     children: [
       Text('Developed by ZenovTech (c) 2025', style: TextStyle(color: sub, fontWeight: FontWeight.w600)),

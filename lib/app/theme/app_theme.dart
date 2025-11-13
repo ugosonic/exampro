@@ -21,8 +21,8 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
           foregroundColor: WidgetStatePropertyAll(Color(0xFF0B2540)),
-          backgroundColor: WidgetStatePropertyAll(_primary.withOpacity(0.92)),
-          overlayColor: WidgetStatePropertyAll(_primary.withOpacity(0.12)),
+          backgroundColor: WidgetStatePropertyAll(_primary.withValues(alpha: 0.92)),
+          overlayColor: WidgetStatePropertyAll(_primary.withValues(alpha: 0.12)),
           shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
         ),
       ),

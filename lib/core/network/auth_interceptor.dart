@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/features/auth/data/auth_api.dart';
+import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/features/auth/data/auth_api.dart';
 
 class AuthInterceptor extends Interceptor {
   final TokenStore tokenStore;

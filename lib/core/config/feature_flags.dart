@@ -1,4 +1,4 @@
-import 'package:exampro/core/config/env_loader.dart';
+import 'package:citizentest/core/config/env_loader.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class FeatureFlags {

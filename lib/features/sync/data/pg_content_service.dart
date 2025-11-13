@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:postgres/postgres.dart';
-import 'package:exampro/core/pg/pg_client.dart';
+import 'package:citizentest/core/pg/pg_client.dart';
 
 class PgContentService {
   final PgClient _pg;
@@ -29,8 +29,8 @@ class PgContentService {
     try {
       await conn.execute('BEGIN');
 
-      String _colSql(String c) => c == 'order' ? '"order"' : c;
-      dynamic _pick(Map<String, dynamic> m, String key) {
+      String colSql(String c) => c == 'order' ? '"order"' : c;
+      dynamic pick(Map<String, dynamic> m, String key) {
         switch (key) {
           case 'category_id':
             return m['category_id'] ?? m['categoryId'];
@@ -77,35 +77,35 @@ class PgContentService {
         }
       }
 
-      Future<void> _upsert(String table, List<String> keys, List<Map<String, dynamic>> rows) async {
+      Future<void> upsert(String table, List<String> keys, List<Map<String, dynamic>> rows) async {
         if (rows.isEmpty) return;
-        final colsList = keys.map(_colSql).join(', ');
+        final colsList = keys.map(colSql).join(', ');
         final params = List.generate(keys.length, (i) => '@p$i').join(', ');
-        final setList = [for (final c in keys.where((c) => c != 'id')) '${_colSql(c)} = EXCLUDED.${_colSql(c)}'].join(', ');
+        final setList = [for (final c in keys.where((c) => c != 'id')) '${colSql(c)} = EXCLUDED.${colSql(c)}'].join(', ');
         final sql = 'INSERT INTO $table ($colsList) OVERRIDING SYSTEM VALUE VALUES ($params) '
             'ON CONFLICT (id) DO UPDATE SET $setList';
         for (final m in rows) {
           final values = <String, dynamic>{};
           for (var i = 0; i < keys.length; i++) {
-            values['p$i'] = _pick(m, keys[i]);
+            values['p$i'] = pick(m, keys[i]);
           }
           await conn.execute(Sql.named(sql), parameters: values);
         }
       }
 
-      await _upsert('categories', ['id','name','order','pass_percent','image_url','locked'],
+      await upsert('categories', ['id','name','order','pass_percent','image_url','locked'],
           [for (final m in ((snap['categories'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()]);
-      await _upsert('subcategories', ['id','category_id','name','order','image_url','locked'],
+      await upsert('subcategories', ['id','category_id','name','order','image_url','locked'],
           [for (final m in ((snap['subcategories'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()]);
-      await _upsert('exams', ['id','title','description','category_id','subcategory_id','question_count','published','time_limit_minutes','shuffle_options','negative_marking','pass_percent','theme_key'],
+      await upsert('exams', ['id','title','description','category_id','subcategory_id','question_count','published','time_limit_minutes','shuffle_options','negative_marking','pass_percent','theme_key'],
           [for (final m in ((snap['exams'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()]);
-      await _upsert('questions', ['id','body','explanation','multiple','locked'],
+      await upsert('questions', ['id','body','explanation','multiple','locked'],
           [for (final m in ((snap['questions'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()]);
-      await _upsert('choices', ['id','question_id','label','is_correct','order'],
+      await upsert('choices', ['id','question_id','label','is_correct','order'],
           [for (final m in ((snap['choices'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()]);
-      await _upsert('exam_questions', ['id','exam_id','question_id','order','points'],
+      await upsert('exam_questions', ['id','exam_id','question_id','order','points'],
           [for (final m in ((snap['exam_questions'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()]);
-      await _upsert('exam_grade_bands', ['id','exam_id','min_percent','label','color'],
+      await upsert('exam_grade_bands', ['id','exam_id','min_percent','label','color'],
           [for (final m in ((snap['exam_grade_bands'] as List?) ?? const [])) (m as Map).cast<String, dynamic>()]);
 
       // Optional: sync users (email, role, is_pro) without passwords
@@ -125,7 +125,7 @@ class PgContentService {
       await conn.execute('CREATE TABLE IF NOT EXISTS media_files (entity TEXT NOT NULL, entity_id INT NOT NULL, filename TEXT NOT NULL, content_base64 TEXT NOT NULL, PRIMARY KEY(entity, entity_id))');
       final catMedia = (snap['media_categories'] as List?) ?? const [];
       final subMedia = (snap['media_subcategories'] as List?) ?? const [];
-      Future<void> _upsertMedia(String entity, List<Map<String, dynamic>> rows) async {
+      Future<void> upsertMedia(String entity, List<Map<String, dynamic>> rows) async {
         for (final m in rows) {
           if ((m['content_base64'] as String?)?.isEmpty ?? true) continue;
           final sql = 'INSERT INTO media_files(entity, entity_id, filename, content_base64) VALUES (@e,@id,@f,@b) '
@@ -138,8 +138,8 @@ class PgContentService {
           });
         }
       }
-      await _upsertMedia('categories', catMedia.cast<Map<String, dynamic>>());
-      await _upsertMedia('subcategories', subMedia.cast<Map<String, dynamic>>());
+      await upsertMedia('categories', catMedia.cast<Map<String, dynamic>>());
+      await upsertMedia('subcategories', subMedia.cast<Map<String, dynamic>>());
 
       await conn.execute('COMMIT');
     } catch (e) {

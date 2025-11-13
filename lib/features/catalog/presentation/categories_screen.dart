@@ -1,14 +1,14 @@
-﻿import 'package:exampro/core/i18n/tr_text.dart';
-import 'package:exampro/common/widgets/tap_scale.dart';
-import 'package:exampro/features/catalog/data/catalog_repository.dart';
+﻿import 'package:citizentest/core/i18n/tr_text.dart';
+import 'package:citizentest/common/widgets/tap_scale.dart';
+import 'package:citizentest/features/catalog/data/catalog_repository.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:exampro/common/widgets/neon_glass.dart';
+import 'package:citizentest/common/widgets/neon_glass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/core/config/env_loader.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/core/config/env_loader.dart';
 
 class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
@@ -19,7 +19,10 @@ class CategoriesScreen extends ConsumerWidget {
     final db = ref.watch(dbProvider);
     final user = ref.watch(currentUserProvider);
     return Scaffold(
-      appBar: AppBar(title: const TrText('Categories')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const TrText('Categories'),
+      ),
       body: NeonBackground(
         child: SafeArea(
           child: catsAsync.when(
@@ -80,7 +83,14 @@ class CategoriesScreen extends ConsumerWidget {
                             else
                               CircleAvatar(radius: 22, child: Icon(icon, size: 24)),
                             const SizedBox(height: 10),
-                            Text(c.name, style: TextStyle(fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
+                            Text(
+                              c.name,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
                           ])),
                           ]),
                         ),

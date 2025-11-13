@@ -1,4 +1,4 @@
-import 'package:exampro/core/utils/validators.dart';
+import 'package:citizentest/core/utils/validators.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

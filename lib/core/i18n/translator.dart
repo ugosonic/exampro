@@ -1,4 +1,4 @@
-import 'package:exampro/core/db/db_provider.dart';
+import 'package:citizentest/core/db/db_provider.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'locale_controller.dart';

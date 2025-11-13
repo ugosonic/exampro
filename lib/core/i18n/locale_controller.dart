@@ -1,5 +1,5 @@
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/core/db/app_database.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

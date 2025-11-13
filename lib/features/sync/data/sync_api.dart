@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:exampro/core/network/dio_client.dart';
-import 'package:exampro/features/sync/data/pg_content_service.dart';
-import 'package:exampro/core/pg/pg_client.dart';
+import 'package:citizentest/core/network/dio_client.dart';
+import 'package:citizentest/features/sync/data/pg_content_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class SyncApi {
@@ -11,7 +10,7 @@ class SyncApi {
   Future<Map<String, dynamic>> snapshot() async {
     final res = await _dio.get('/sync/snapshot');
     final raw = (res.data is Map) ? (res.data as Map) : <String, dynamic>{};
-    return Map<String, dynamic>.from(raw as Map);
+    return Map<String, dynamic>.from(raw);
   }
 
   Future<String> version() async {
@@ -27,7 +26,7 @@ class SyncApi {
   Future<Map<String, dynamic>> fetchUserProgress(String email) async {
     final res = await _dio.get('/sync/user-progress', queryParameters: {'email': email});
     final raw = (res.data is Map) ? (res.data as Map) : <String, dynamic>{};
-    return Map<String, dynamic>.from(raw as Map);
+    return Map<String, dynamic>.from(raw);
   }
 }
 
