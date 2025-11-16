@@ -1,0 +1,43 @@
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tzdata;
+
+final _plugin = FlutterLocalNotificationsPlugin();
+
+Future<void> init() async {
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const settings = InitializationSettings(android: android);
+  await _plugin.initialize(settings);
+  tzdata.initializeTimeZones();
+}
+
+Future<void> scheduleDaily(int id, int hour, int minute, {required String title, required String body}) async {
+  const androidDetails = AndroidNotificationDetails(
+    'daily_goals',
+    'Daily Goals',
+    importance: Importance.high,
+    priority: Priority.high,
+  );
+  const details = NotificationDetails(android: androidDetails);
+  await _plugin.zonedSchedule(
+    id,
+    title,
+    body,
+    _nextInstanceOfTime(hour, minute),
+    details,
+    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    matchDateTimeComponents: DateTimeComponents.time,
+  );
+}
+
+tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
+  final now = tz.TZDateTime.now(tz.local);
+  var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+  if (scheduled.isBefore(now)) {
+    scheduled = scheduled.add(const Duration(days: 1));
+  }
+  return scheduled;
+}
+
+Future<void> cancel(int id) async => _plugin.cancel(id);
+

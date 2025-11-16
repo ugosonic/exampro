@@ -3,8 +3,12 @@ class User {
   final String email;
   final String role; // 'user' | 'admin'
   const User({required this.id, required this.email, required this.role});
-  factory User.fromJson(Map<String, dynamic> json) =>
-      User(id: json['id'] as String, email: json['email'] as String, role: json['role'] as String);
+  // The backend returns `id` as a number. Coerce to String for app use.
+  factory User.fromJson(Map<String, dynamic> json) => User(
+        id: '${json['id']}',
+        email: json['email'] as String,
+        role: json['role'] as String,
+      );
   Map<String, dynamic> toJson() => {'id': id, 'email': email, 'role': role};
 }
 

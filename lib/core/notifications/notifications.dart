@@ -1,39 +1,10 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tzdata;
+// Provide a single NotificationsService API and choose an implementation
+// per-platform via conditional imports.
+import 'notifications_impl_mobile.dart' if (dart.library.html) 'notifications_impl_web.dart' as impl;
 
 class NotificationsService {
-  static final _plugin = FlutterLocalNotificationsPlugin();
-
-  static Future<void> init() async {
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const settings = InitializationSettings(android: android);
-    await _plugin.initialize(settings);
-    tzdata.initializeTimeZones();
-  }
-
-  static Future<void> scheduleDaily(int id, int hour, int minute, {required String title, required String body}) async {
-    const androidDetails = AndroidNotificationDetails('daily_goals', 'Daily Goals', importance: Importance.high, priority: Priority.high);
-    final details = const NotificationDetails(android: androidDetails);
-    await _plugin.zonedSchedule(
-      id,
-      title,
-      body,
-      _nextInstanceOfTime(hour, minute),
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
-  }
-
-  static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
-    final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
-    if (scheduled.isBefore(now)) {
-      scheduled = scheduled.add(const Duration(days: 1));
-    }
-    return scheduled;
-  }
-
-  static Future<void> cancel(int id) async => _plugin.cancel(id);
+  static Future<void> init() => impl.init();
+  static Future<void> scheduleDaily(int id, int hour, int minute, {required String title, required String body}) =>
+      impl.scheduleDaily(id, hour, minute, title: title, body: body);
+  static Future<void> cancel(int id) => impl.cancel(id);
 }

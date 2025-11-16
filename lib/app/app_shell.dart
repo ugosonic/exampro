@@ -2,7 +2,7 @@ import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:citizentest/core/network/network_status.dart';
 import 'package:citizentest/core/config/remote_config.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -61,20 +61,20 @@ class AppShell extends ConsumerWidget {
         return false;
       }
 
-      return FutureBuilder<({bool must, bool hasNew, String? storeUrl, String packageName})>(
-        future: () async {
-          final info = await PackageInfo.fromPlatform();
-          final current = info.version;
-          final must = cfg.minVersion != null && isLower(current, cfg.minVersion!);
-          final hasNew = cfg.latestVersion != null && isLower(current, cfg.latestVersion!);
-          String? storeUrl;
-          if (Platform.isAndroid) {
-            storeUrl = cfg.androidStoreUrl ?? 'https://play.google.com/store/apps/details?id=${info.packageName}';
-          } else if (Platform.isIOS) {
-            storeUrl = cfg.iosStoreUrl;
-          }
-          return (must: must, hasNew: hasNew, storeUrl: storeUrl, packageName: info.packageName);
-        }(),
+          return FutureBuilder<({bool must, bool hasNew, String? storeUrl, String packageName})>(
+            future: () async {
+              final info = await PackageInfo.fromPlatform();
+              final current = info.version;
+              final must = cfg.minVersion != null && isLower(current, cfg.minVersion!);
+              final hasNew = cfg.latestVersion != null && isLower(current, cfg.latestVersion!);
+              String? storeUrl;
+              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+                storeUrl = cfg.androidStoreUrl ?? 'https://play.google.com/store/apps/details?id=${info.packageName}';
+              } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+                storeUrl = cfg.iosStoreUrl;
+              }
+              return (must: must, hasNew: hasNew, storeUrl: storeUrl, packageName: info.packageName);
+            }(),
         builder: (context, snap) {
           final data = snap.data;
           if (data == null || (!data.must && !data.hasNew)) return const SizedBox.shrink();

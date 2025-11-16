@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:citizentest/core/network/dio_client.dart';
@@ -37,7 +36,8 @@ final onlineStatusProvider = StreamProvider<bool>((ref) async* {
         DioExceptionType.badCertificate => true,
         DioExceptionType.badResponse ||
         DioExceptionType.cancel => false,
-        DioExceptionType.unknown => err.error is IOException,
+        // On web, dart:io is unavailable; treat unknown as network-related.
+        DioExceptionType.unknown => true,
       };
       if (!isNetworkFailure) {
         if (!online) {
