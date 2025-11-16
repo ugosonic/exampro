@@ -1,0 +1,110 @@
+import express from 'express';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import pkg from 'pg';
+import jwt from 'jsonwebtoken';
+import Stripe from 'stripe';
+import nodemailer from 'nodemailer';
+import bcrypt from 'bcryptjs';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+
+// Load .env next to this file regardless of PM2/working directory
+try {
+  // Resolve .env relative to this file so PM2/working directory doesn't matter
+  const __dirname = (await import('path')).default.dirname(fileURLToPath(import.meta.url));
+  const join = (await import('path')).default.join;
+  dotenv.config({ path: join(__dirname, '.env') });
+} catch (_) {
+  dotenv.config();
+}
+const { Pool } = pkg;
+
+const { DATABASE_URL, SYNC_ADMIN_TOKEN, PORT = 8000, JWT_SECRET = 'change-me', ADMIN_EMAILS = '', STRIPE_SECRET_KEY = '', STRIPE_SUCCESS_URL = 'https://example.com/success', STRIPE_CANCEL_URL = 'https://example.com/cancel', SMTP_HOST = '', SMTP_PORT = '', SMTP_USER = '', SMTP_PASS = '', FROM_EMAIL = '' } = process.env;
+const ADMIN_SET = new Set(String(ADMIN_EMAILS).split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+if (!DATABASE_URL) { throw new Error('DATABASE_URL not set'); }
+const pool = new Pool({ connectionString: DATABASE_URL, ssl: DATABASE_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined });
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
+let mailer = null;
+if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  try {
+    mailer = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT || 465),
+      secure: (SMTP_PORT || '465') === '465',
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+  } catch (_) { mailer = null; }
+}
+
+const app = express();
+app.use(express.json({ limit: '25mb' }));
+
+// File uploads (PDFs)
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
+try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, UPLOAD_DIR); },
+  filename: function (req, file, cb) {
+    const safe = `${Date.now()}_${(file.originalname || 'file').replace(/[^\w.\-]+/g, '_')}`;
+    cb(null, safe);
+  }
+});
+const upload = multer({ storage });
+app.use('/files', express.static(UPLOAD_DIR));
+
+// JWT helpers
+const signTokens = (user) => {
+  const roleClaim = ADMIN_SET.has(String(user.email || '').toLowerCase()) ? 'admin' : (user.role || 'user');
+  const payload = { sub: String(user.id), email: user.email, role: roleClaim };
+  const access = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m', audience: 'exampro-mobile', issuer: 'exampro-auth' });
+  const refresh = jwt.sign({ sub: payload.sub }, JWT_SECRET, { expiresIn: '30d', audience: 'exampro-mobile', issuer: 'exampro-auth' });
+  return { access, refresh };
+};
+const auth = async (req, res, next) => {
+  const hdr = req.get('Authorization') || '';
+  if (!hdr.startsWith('Bearer ')) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const token = hdr.slice(7);
+    const decoded = jwt.verify(token, JWT_SECRET, { audience: 'exampro-mobile', issuer: 'exampro-auth' });
+    req.user = decoded;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+};
+
+// Allow either: (1) JWT with role=admin, or (2) SYNC_ADMIN_TOKEN bearer
+const adminGuard = async (req, res, next) => {
+  const hdr = req.get('Authorization') || '';
+  if (hdr.startsWith('Bearer ')) {
+    const token = hdr.slice(7);
+    if (SYNC_ADMIN_TOKEN && token === SYNC_ADMIN_TOKEN) {
+      req.user = { role: 'admin' };
+      return next();
+    }
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET, { audience: 'exampro-mobile', issuer: 'exampro-auth' });
+      if ((decoded.role || 'user') !== 'admin') return res.status(403).json({ error: 'forbidden' });
+      req.user = decoded;
+      return next();
+    } catch (_) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+  }
+  return res.status(401).json({ error: 'unauthorized' });
+};
+
+// Auth endpoints
+app.post('/auth/register', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password || password.length < 6) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    // Ensure table exists
+    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    const hash = await bcrypt.hash(password, 10);
+    const role = ADMIN_SET.has(String(email).toLowerCase()) ? 'admin' : 'user';
+    const r = await client.query('INSERT INTO users(email, password_hash, role) VALUES($1,$2,$3) ON CONFLICT (email) DO NOTHING RETURNING id', [email, hash, role]);
+    if (r.rowCount === 0) return res.status(409).json({ error: 'email_exists' });

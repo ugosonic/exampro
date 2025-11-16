@@ -38,9 +38,9 @@ class CategoriesScreen extends ConsumerWidget {
               final isPro = isProSnap.data ?? false;
               return NeonGlassCard(
                 child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(0),
+                  // Make categories (Explore) scrollable
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(8),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.1),
                   itemCount: cats.length,

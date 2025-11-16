@@ -74,19 +74,15 @@ class ProgressRepository {
       categories = [for (final c in catsRows) {'id': c.id, 'name': c.name, 'image_url': c.imageUrl}];
     }
 
-    // Completed distinct questions by category for this user
-    // Combine exam attempts and category practice answers (union of question_ids per category)
+    // Completed distinct questions by category for this user (local attempts)
     final doneRows = await _db.customSelect(
-      'SELECT cid, CAST(COUNT(DISTINCT qid) AS INTEGER) AS completed FROM ('
-      '  SELECT e.category_id AS cid, aa.question_id AS qid '
-      '  FROM attempts a '
-      '  JOIN attempt_answers aa ON aa.attempt_id = a.id '
-      '  JOIN exams e ON e.id = a.exam_id '
-      '  WHERE a.user_email = ? '
-      '  UNION '
-      '  SELECT category_id AS cid, question_id AS qid FROM practice_answers WHERE user_email = ?'
-      ') t GROUP BY cid',
-      variables: [drift.Variable(userEmail), drift.Variable(userEmail)],
+      'SELECT e.category_id AS cid, CAST(COUNT(DISTINCT aa.question_id) AS INTEGER) AS completed '
+      'FROM attempts a '
+      'JOIN attempt_answers aa ON aa.attempt_id = a.id '
+      'JOIN exams e ON e.id = a.exam_id '
+      'WHERE a.user_email = ? '
+      'GROUP BY e.category_id',
+      variables: [drift.Variable(userEmail)],
     ).get();
     final done = <int, int>{ for (final r in doneRows) (r.data['cid'] as int): (r.data['completed'] as int) };
 
@@ -106,13 +102,5 @@ class ProgressRepository {
 final progressRepositoryProvider = Provider<ProgressRepository>((ref) => ProgressRepository(ref.watch(dbProvider), ref.watch(dioProvider)));
 
 final categoryProgressProvider = FutureProvider.family<List<CategoryProgress>, String>((ref, email) async {
-  return ref.watch(progressRepositoryProvider).categoryProgressForUser(email);
-});
-
-// Lightweight live-update wiring: when progressTickProvider changes, recompute
-final progressTickProvider = StateProvider<int>((ref) => 0);
-final liveCategoryProgressProvider = FutureProvider.family<List<CategoryProgress>, String>((ref, email) async {
-  // Re-run when tick changes
-  ref.watch(progressTickProvider);
   return ref.watch(progressRepositoryProvider).categoryProgressForUser(email);
 });

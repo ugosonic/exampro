@@ -1,0 +1,100 @@
+  Future<List<Payment>> listPayments({int limit = 50, int offset = 0}) async {
+    return await (_db.select(_db.payments)
+          ..orderBy([(p) => drift.OrderingTerm.desc(p.createdAt)])
+          ..limit(limit, offset: offset))
+        .get();
+  }
+
+  Future<int> addPayment({required String email, required int amountMinor, required String currency, String intentId = '', String status = 'paid'}) async {
+    return await _db.into(_db.payments).insert(PaymentsCompanion.insert(userEmail: email, amountMinor: amountMinor, currency: currency, stripePaymentIntentId: drift.Value(intentId), status: drift.Value(status)));
+  }
+
+  Future<void> markRefunded(int id) async {
+    await (_db.update(_db.payments)..where((p) => p.id.equals(id))).write(PaymentsCompanion(refunded: const drift.Value(true), status: const drift.Value('refunded')));
+  }
+
+  Future<void> setUserPro(String email, bool isPro) async {
+    await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(UsersCompanion(isPro: drift.Value(isPro)));
+  }
+
+  // Exam flags stored in app_settings to avoid codegen: key = 'exam_readonly_<id>' value '1'/'0'
+  Future<bool> getExamReadOnly(int examId) async {
+    final key = 'exam_readonly_$examId';
+    final row = await (_db.select(_db.appSettings)..where((s) => s.key.equals(key))).getSingleOrNull();
+    return row?.value == '1';
+  }
+  Future<void> setExamReadOnly(int examId, bool readOnly) async {
+    final key = 'exam_readonly_$examId';
+    await _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(AppSettingsCompanion(key: drift.Value(key), value: drift.Value(readOnly ? '1' : '0')));
+  }
+
+  // Reports
+  Future<List<({Report report, Exam exam})>> listReports({bool unresolvedOnly = false, int limit = 200, int offset = 0}) async {
+    final query = _db.select(_db.reports)
+      ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])
+      ..limit(limit, offset: offset);
+    if (unresolvedOnly) {
+      query.where((r) => r.resolved.equals(false));
+    }
+    final reps = await query.get();
+    final examIds = reps.map((r) => r.examId).toSet().toList();
+    final exams = await (_db.select(_db.exams)..where((e) => e.id.isIn(examIds))).get();
+    return [for (final r in reps) (report: r, exam: exams.firstWhere((e) => e.id == r.examId))];
+  }
+  Future<void> deleteReport(int id) async {
+    await (_db.delete(_db.reports)..where((r) => r.id.equals(id))).go();
+  }
+
+  Future<void> markReportResolved(int id, bool resolved) async {
+    await (_db.update(_db.reports)..where((r) => r.id.equals(id))).write(ReportsCompanion(resolved: drift.Value(resolved)));
+  }
+
+  // Paging questions
+  Future<List<Question>> pagedQuestions({required int limit, required int offset}) async {
+    final q = _db.select(_db.questions)
+      ..orderBy([(t) => drift.OrderingTerm.desc(t.id)])
+      ..limit(limit, offset: offset);
+    return q.get();
+  }
+
+  // Filters and bulk ops for questions
+  Future<List<Question>> unassignedQuestions({int limit = 500, int offset = 0}) async {
+    final res = await _db.customSelect(
+      'SELECT q.* FROM questions q '
+      'LEFT JOIN question_categories qc ON qc.question_id = q.id '
+      'LEFT JOIN question_subcategories qs ON qs.question_id = q.id '
+      'WHERE qc.id IS NULL AND qs.id IS NULL '
+      'ORDER BY q.id DESC LIMIT ? OFFSET ?',
+      variables: [drift.Variable(limit), drift.Variable(offset)],
+      readsFrom: { _db.questions, _db.questionCategories, _db.questionSubcategories },
+    ).get();
+    return res.map((r) => _db.questions.map(r.data)).toList();
+  }
+
+  Future<List<Question>> questionsInCategory(int categoryId, {int limit = 500, int offset = 0}) async {
+    final res = await _db.customSelect(
+      'SELECT q.* FROM questions q '
+      'JOIN question_categories qc ON qc.question_id = q.id '
+      'WHERE qc.category_id = ? '
+      'ORDER BY q.id DESC LIMIT ? OFFSET ?',
+      variables: [drift.Variable(categoryId), drift.Variable(limit), drift.Variable(offset)],
+      readsFrom: { _db.questions, _db.questionCategories },
+    ).get();
+    return res.map((r) => _db.questions.map(r.data)).toList();
+  }
+
+  Future<List<Question>> questionsInSubcategory(int subcategoryId, {int limit = 500, int offset = 0}) async {
+    final res = await _db.customSelect(
+      'SELECT q.* FROM questions q '
+      'JOIN question_subcategories qs ON qs.question_id = q.id '
+      'WHERE qs.subcategory_id = ? '
+      'ORDER BY q.id DESC LIMIT ? OFFSET ?',
+      variables: [drift.Variable(subcategoryId), drift.Variable(limit), drift.Variable(offset)],
+      readsFrom: { _db.questions, _db.questionSubcategories },
+    ).get();
+    return res.map((r) => _db.questions.map(r.data)).toList();
+  }
+
+  Future<void> moveQuestionsTo({required List<int> questionIds, int? categoryId, int? subcategoryId}) async {

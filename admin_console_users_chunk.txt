@@ -1,0 +1,346 @@
+    super.dispose();
+  }
+}
+
+class _QuestionsTab extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_QuestionsTab> createState() => _QuestionsTabState();
+}
+
+class _QuestionsTabState extends ConsumerState<_QuestionsTab> {
+  final Set<int> _selected = {};
+  String _filter = 'All'; // All, Unassigned, Category, Subcategory
+  int? _categoryId;
+  int? _subcategoryId;
+  String _sort = 'Newest';
+  String _query = '';
+  List<Question> _items = [];
+  List<Category> _cats = [];
+  List<Subcategory> _subs = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final repo = ref.read(adminRepositoryProvider);
+    final cats = await repo.categories();
+    List<Subcategory> subs = [];
+    if (_categoryId != null) subs = await repo.watchSubcategories(_categoryId!).first;
+    List<Question> qs;
+    if (_filter == 'Unassigned') {
+      qs = await repo.unassignedQuestions(limit: 500);
+    } else if (_filter == 'Category' && _categoryId != null) {
+      qs = await repo.questionsInCategory(_categoryId!, limit: 500);
+    } else if (_filter == 'Subcategory' && _subcategoryId != null) {
+      qs = await repo.questionsInSubcategory(_subcategoryId!, limit: 500);
+    } else {
+      qs = await repo.pagedQuestions(limit: 500, offset: 0);
+    }
+    if (_sort == 'Oldest') {
+      qs = qs.reversed.toList();
+    }
+    setState(() {
+      _cats = cats;
+      _subs = subs;
+      _items = _applyQuery(qs);
+      _loading = false;
+    });
+  }
+
+  List<Question> _applyQuery(List<Question> input) {
+    if (_query.trim().isEmpty) return input;
+    final q = _query.trim().toLowerCase();
+    return input.where((e) => e.body.toLowerCase().contains(q)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = ref.watch(adminRepositoryProvider);
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          DropdownButton<String>(
+            value: _filter,
+            items: const [
+              DropdownMenuItem(value: 'All', child: Text('All')),
+              DropdownMenuItem(value: 'Unassigned', child: Text('No category')),
+              DropdownMenuItem(value: 'Category', child: Text('In category')),
+              DropdownMenuItem(value: 'Subcategory', child: Text('In subcategory')),
+            ],
+            onChanged: (v) async {
+              setState(() {
+                _filter = v ?? 'All';
+                _categoryId = null;
+                _subcategoryId = null;
+                _selected.clear();
+              });
+              await _load();
+            },
+          ),
+          SizedBox(
+            width: 220,
+            child: TextField(
+              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search questions'),
+              onChanged: (v) => setState(() {
+                _query = v;
+                _items = _applyQuery(_items);
+              }),
+            ),
+          ),
+          if (_filter == 'Category')
+            DropdownButton<int>(
+              hint: const Text('Category'),
+              value: _categoryId,
+              items: [for (final c in _cats) DropdownMenuItem(value: c.id, child: Text(c.name))],
+              onChanged: (v) async {
+                setState(() {
+                  _categoryId = v;
+                  _subcategoryId = null;
+                });
+                await _load();
+              },
+            ),
+          if (_filter == 'Subcategory')
+            DropdownButton<int>(
+              hint: const Text('Subcategory'),
+              value: _subcategoryId,
+              items: [for (final s in _subs) DropdownMenuItem(value: s.id, child: Text(s.name))],
+              onChanged: (v) async {
+                setState(() => _subcategoryId = v);
+                await _load();
+              },
+            ),
+          const SizedBox(width: 12),
+          DropdownButton<String>(
+            value: _sort,
+            items: const [DropdownMenuItem(value: 'Newest', child: Text('Newest')), DropdownMenuItem(value: 'Oldest', child: Text('Oldest'))],
+            onChanged: (v) async {
+              setState(() => _sort = v ?? 'Newest');
+              await _load();
+            },
+          ),
+          const SizedBox(width: 12),
+          CheckboxListTile(
+            value: _items.isNotEmpty && _selected.length == _items.length,
+            onChanged: (v) => setState(() {
+              _selected
+                ..clear()
+                ..addAll(v == true ? _items.map((e) => e.id) : <int>{});
+            }),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Select all visible'),
+          ),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          const Text('Move selected to:'),
+          DropdownButton<int>(
+            hint: const Text('Category'),
+            value: _categoryId,
+            items: [for (final c in _cats) DropdownMenuItem(value: c.id, child: Text(c.name))],
+            onChanged: (v) => setState(() => _categoryId = v),
+          ),
+          FutureBuilder(
+            future: _categoryId != null ? repo.watchSubcategories(_categoryId!).first : Future.value(<Subcategory>[]),
+            builder: (context, snap) {
+              final subs = snap.data ?? const <Subcategory>[];
+              return DropdownButton<int>(
+                hint: const Text('Subcategory'),
+                value: _subcategoryId,
+                items: [for (final s in subs) DropdownMenuItem(value: s.id, child: Text(s.name))],
+                onChanged: (v) => setState(() => _subcategoryId = v),
+              );
+            },
+          ),
+          FilledButton(
+            onPressed: _selected.isEmpty ? null : () async {
+              await repo.moveQuestionsTo(questionIds: _selected.toList(), categoryId: _categoryId, subcategoryId: _subcategoryId);
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Moved')));
+              await _load();
+            },
+            child: const Text('Move Selected'),
+          ),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.shuffle),
+            label: const Text('Random Assign'),
+            onPressed: () => _randomAssign(context),
+          ),
+        ]),
+      ),
+      const Divider(height: 1),
+      Expanded(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView.separated(
+                itemCount: _items.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final q = _items[i];
+                  final sel = _selected.contains(q.id);
+                  return ListTile(
+                    leading: Checkbox(value: sel, onChanged: (v) => setState(() { if (v == true) {
+                      _selected.add(q.id);
+                    } else {
+                      _selected.remove(q.id);
+                    }})),
+                    title: Text(q.body.isEmpty ? 'Untitled' : q.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: FutureBuilder(
+                      future: repo.categoriesForQuestion(q.id),
+                      builder: (context, catsSnap) {
+                        final cats = catsSnap.data ?? const [];
+                        final catText = cats.isEmpty ? 'No categories' : 'Categories: ${cats.map((e) => e.name).join(', ')}';
+                        return Text(catText);
+                      },
+                    ),
+                    trailing: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Text('Lock'),
+                        Switch(
+                          value: q.locked,
+                          onChanged: (v) async {
+                            await repo.setQuestionLocked(q.id, v);
+                            await _load();
+                          },
+                        ),
+                      ]),
+                      IconButton(
+                        tooltip: 'Assign categories',
+                        icon: const Icon(Icons.category),
+                        onPressed: () async {
+                          final cats = await repo.categories();
+                          final current = await repo.categoriesForQuestion(q.id);
+                          final currentIds = current.map((e) => e.id).toSet();
+                          final selected = await showDialog<Set<int>>(
+                            context: context,
+                            builder: (ctx) {
+                              final temp = {...currentIds};
+                              return StatefulBuilder(builder: (context, set) {
+                                return AlertDialog(
+                                  title: const Text('Assign Categories'),
+                                  content: SizedBox(
+                                    width: 420,
+                                    child: ListView(shrinkWrap: true, children: [
+                                      for (final c in cats)
+                                        CheckboxListTile(
+                                          value: temp.contains(c.id),
+                                          onChanged: (v) => set(() { if (v == true) {
+                                            temp.add(c.id);
+                                          } else {
+                                            temp.remove(c.id);
+                                          } }),
+                                          title: Text(c.name),
+                                        ),
+                                    ]),
+                                  ),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancel')),
+                                    FilledButton(onPressed: () => Navigator.of(ctx).pop(temp), child: const Text('Save')),
+                                  ],
+                                );
+                              });
+                            },
+                          );
+                          if (selected != null) {
+                            await repo.setCategoriesForQuestion(q.id, selected.toList());
+                            await _load();
+                          }
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'Delete question',
+                        icon: const Icon(Icons.delete),
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete question?'),
+                              content: const Text('This will remove the question from all exams.'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+                              ],
+                            ),
+                          );
+                          if (ok == true) {
+                            await repo.deleteQuestion(q.id);
+                            await _load();
+                          }
+                        },
+                      ),
+                    ]),
+                  );
+                },
+              ),
+      ),
+    ]);
+  }
+
+  Future<void> _randomAssign(BuildContext context) async {
+    final repo = ref.read(adminRepositoryProvider);
+    final cats = await repo.categories();
+    final subs = await repo.allSubcategories();
+    final catSel = <int>{};
+    final subSel = <int>{};
+    final catCtrl = TextEditingController(text: '10');
+    final subCtrl = TextEditingController(text: '10');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (context, set) {
+        return AlertDialog(
+          title: const Text('Random Assign'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Select categories'),
+                const SizedBox(height: 6),
+                ...cats.map((c) => CheckboxListTile(value: catSel.contains(c.id), onChanged: (v) => set(() { if (v == true) {
+                  catSel.add(c.id);
+                } else {
+                  catSel.remove(c.id);
+                }} ), title: Text(c.name))),
+                const Divider(),
+                const Text('Select subcategories'),
+                const SizedBox(height: 6),
+                ...subs.map((s) => CheckboxListTile(value: subSel.contains(s.id), onChanged: (v) => set(() { if (v == true) {
+                  subSel.add(s.id);
+                } else {
+                  subSel.remove(s.id);
+                }} ), title: Text(s.name))),
+                const SizedBox(height: 8),
+                TextField(controller: catCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Per-category count')),
+                TextField(controller: subCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Per-subcategory count')),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Run')),
+          ],
+        );
+      }),
+    );
+    if (ok == true) {
+      final perC = int.tryParse(catCtrl.text.trim()) ?? 0;
+      final perS = int.tryParse(subCtrl.text.trim()) ?? 0;
+      await repo.randomAssign(categoryIds: catSel.toList(), subcategoryIds: subSel.toList(), perCategory: perC, perSubcategory: perS);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Random assignment complete')));
+      await _load();
+    }
+  }
+}
+
+
+
+
+
+
+

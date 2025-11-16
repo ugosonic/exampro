@@ -1,0 +1,106 @@
+              ),
+          ]));
+    }
+    return (_db.select(_db.subcategories)..where((s) => s.categoryId.equals(categoryId))).watch();
+  }
+  Future<List<Subcategory>> allSubcategories() async => _db.select(_db.subcategories).get();
+
+  Future<List<Category>> categories() async {
+    return await _db.select(_db.categories).get();
+  }
+
+  // Users — prefer online database when API is configured; fall back to local
+  Stream<List<DbUser>> watchUsers() {
+    if (_adminApi != null) {
+      return Stream.fromFuture(() async {
+        try {
+          final rows = await _adminApi.users();
+          return [
+            for (final m in rows)
+              DbUser(
+                id: (m['id'] as num).toInt(),
+                email: (m['email'] as String?) ?? '',
+                password: '',
+                role: (m['role'] as String?) ?? 'user',
+                isPro: false,
+              )
+          ];
+        } catch (_) {
+          return _db.select(_db.users).get();
+        }
+      }());
+    }
+    return _db.select(_db.users).watch();
+  }
+  Future<List<DbUser>> allUsers() async {
+    if (_adminApi != null) {
+      try {
+        final rows = await _adminApi.users();
+        return [
+          for (final m in rows)
+            DbUser(
+              id: (m['id'] as num).toInt(),
+              email: (m['email'] as String?) ?? '',
+              password: '',
+              role: (m['role'] as String?) ?? 'user',
+              isPro: false,
+            )
+        ];
+      } catch (_) {
+        return _db.select(_db.users).get();
+      }
+    }
+    return _db.select(_db.users).get();
+  }
+
+  Future<void> updateCategory(int id, {String? name, int? order, int? passPercent, String? imageUrl}) async {
+    if (_adminApi != null) {
+      await _adminApi.updateCategory(id, name: name, order: order, passPercent: passPercent, imageUrl: imageUrl);
+      try {
+        await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(
+              name: name != null ? drift.Value(name) : const drift.Value.absent(),
+              order: order != null ? drift.Value(order) : const drift.Value.absent(),
+              passPercent: passPercent != null ? drift.Value(passPercent) : const drift.Value.absent(),
+              imageUrl: imageUrl != null ? drift.Value(imageUrl) : const drift.Value.absent(),
+            ));
+      } catch (_) {}
+      return;
+    }
+    await (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(CategoriesCompanion(
+          name: name != null ? drift.Value(name) : const drift.Value.absent(),
+          order: order != null ? drift.Value(order) : const drift.Value.absent(),
+          passPercent: passPercent != null ? drift.Value(passPercent) : const drift.Value.absent(),
+          imageUrl: imageUrl != null ? drift.Value(imageUrl) : const drift.Value.absent(),
+        ));
+  }
+
+  Future<void> deleteCategory(int id) async {
+    if (_adminApi != null) { await _adminApi.deleteCategory(id); try { await (_db.delete(_db.categories)..where((c) => c.id.equals(id))).go(); } catch (_) {} return; }
+    await (_db.delete(_db.categories)..where((c) => c.id.equals(id))).go();
+  }
+
+  Future<Category?> getCategory(int id) async {
+    return await (_db.select(_db.categories)..where((c) => c.id.equals(id))).getSingleOrNull();
+  }
+
+  Future<void> updateSubcategory(int id, {String? name, int? order, String? imageUrl, bool? locked}) async {
+    if (_adminApi != null) {
+      await _adminApi.updateSubcategory(id, name: name, order: order, imageUrl: imageUrl, locked: locked);
+      try {
+        await (_db.update(_db.subcategories)..where((s) => s.id.equals(id))).write(SubcategoriesCompanion(
+              name: name != null ? drift.Value(name) : const drift.Value.absent(),
+              order: order != null ? drift.Value(order) : const drift.Value.absent(),
+              imageUrl: imageUrl != null ? drift.Value(imageUrl) : const drift.Value.absent(),
+              locked: locked != null ? drift.Value(locked) : const drift.Value.absent(),
+            ));
+      } catch (_) {}
+      return;
+    }
+    await (_db.update(_db.subcategories)..where((s) => s.id.equals(id))).write(SubcategoriesCompanion(
+          name: name != null ? drift.Value(name) : const drift.Value.absent(),
+          order: order != null ? drift.Value(order) : const drift.Value.absent(),
+          imageUrl: imageUrl != null ? drift.Value(imageUrl) : const drift.Value.absent(),
+          locked: locked != null ? drift.Value(locked) : const drift.Value.absent(),
+        ));
+  }
+

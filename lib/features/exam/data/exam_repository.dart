@@ -315,42 +315,122 @@ class ExamRepository {
     ));
   }
 
+  // ---------- Practice (category) progress/answers ----------
+  Future<int> practiceProgress({required int categoryId, required String userEmail}) async {
+    try {
+      final row = await _db.customSelect(
+        'SELECT index FROM practice_progress WHERE category_id = ? AND user_email = ? LIMIT 1',
+        variables: [drift.Variable(categoryId), drift.Variable(userEmail)],
+      ).getSingleOrNull();
+      return (row == null) ? 0 : (((row.data['index'] as num?) ?? 0).toInt());
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> savePracticeProgress({required int categoryId, required String userEmail, required int index}) async {
+    try {
+      await _db.customStatement(
+        'INSERT INTO practice_progress(category_id, user_email, index, updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) '
+        'ON CONFLICT(user_email, category_id) DO UPDATE SET index = excluded.index, updated_at = excluded.updated_at',
+        [categoryId, userEmail, index],
+      );
+    } catch (_) {}
+  }
+
+  Future<void> resetPracticeProgress({required int categoryId, required String userEmail}) async {
+    try {
+      await _db.customStatement('DELETE FROM practice_progress WHERE category_id = ? AND user_email = ?', [categoryId, userEmail]);
+    } catch (_) {}
+  }
+
+  Future<void> savePracticeAnswer({
+    required int categoryId,
+    required int questionId,
+    required String userEmail,
+    required bool isCorrect,
+  }) async {
+    try {
+      await _db.customStatement(
+        'INSERT INTO practice_answers(user_email, category_id, question_id, is_correct, updated_at) VALUES (?,?,?,?,CURRENT_TIMESTAMP) '
+        'ON CONFLICT(user_email, question_id) DO UPDATE SET is_correct = excluded.is_correct, updated_at = excluded.updated_at',
+        [userEmail, categoryId, questionId, isCorrect ? 1 : 0],
+      );
+    } catch (_) {}
+  }
+
   Future<void> submitAttempt(int attemptId) async {
+    // Gather answers (latest per question)
     final answers = await (_db.select(_db.attemptAnswers)
           ..where((a) => a.attemptId.equals(attemptId))
           ..orderBy([(a) => drift.OrderingTerm.asc(a.id)]))
         .get();
-    final attempt =
-        await (_db.select(_db.attempts)..where((a) => a.id.equals(attemptId))).getSingle();
-    final exam =
-        await (_db.select(_db.exams)..where((e) => e.id.equals(attempt.examId))).getSingle();
+    final attempt = await (_db.select(_db.attempts)..where((a) => a.id.equals(attemptId))).getSingle();
 
-    final totalPoints = await (_db
-            .customSelect(
-              'SELECT SUM(points) AS p FROM exam_questions WHERE exam_id = ?',
-              variables: [drift.Variable(exam.id)],
-            )
-            .getSingle())
-        .then((r) => (r.data['p'] as int?) ?? 0);
+    // Try local exam first; fall back to remote metadata
+    Exam? exam = await (_db.select(_db.exams)..where((e) => e.id.equals(attempt.examId))).getSingleOrNull();
+    int passPercent = 60;
+    if (exam == null && _remote != null) {
+      try {
+        final rows = await _remote!.exams();
+        final m = rows.firstWhere((e) => _asInt(e['id']) == attempt.examId, orElse: () => const <String, dynamic>{});
+        if (m.isNotEmpty) {
+          passPercent = _asInt(m['pass_percent']) ?? 60;
+        }
+      } catch (_) {}
+    } else if (exam != null) {
+      passPercent = exam.passPercent;
+    }
+
+    // Compute total points; local join sum if present, else from remote order length/points, else answers count
+    int totalPoints = 0;
+    try {
+      totalPoints = await (_db
+              .customSelect(
+                'SELECT COALESCE(SUM(points),0) AS p FROM exam_questions WHERE exam_id = ?',
+                variables: [drift.Variable(attempt.examId)],
+              )
+              .getSingle())
+          .then((r) => (r.data['p'] as int?) ?? 0);
+    } catch (_) {
+      totalPoints = 0;
+    }
+    if (totalPoints == 0 && _remote != null) {
+      try {
+        final data = await _remote!.examQuestions(attempt.examId);
+        final order = _asListOfMap(data['order']);
+        // Sum provided points if present, otherwise 1 per question
+        totalPoints = order.fold<int>(0, (s, j) => s + (_asInt(j['points']) ?? 1));
+        if (totalPoints == 0) totalPoints = order.length;
+        if (totalPoints == 0) totalPoints = answers.length; // last resort
+      } catch (_) {
+        totalPoints = answers.length; // last resort
+      }
+    }
 
     final latest = <int, AttemptAnswer>{};
     for (final a in answers) {
       latest[a.questionId] = a;
     }
-    final scored =
-        latest.values.fold<int>(0, (s, a) => s + (a.isCorrect ? a.points : 0));
-    final percent = totalPoints == 0 ? 0 : ((scored * 100) ~/ totalPoints);
+    final scored = latest.values.fold<int>(0, (s, a) => s + (a.isCorrect ? (a.points) : 0));
+    final percent = totalPoints <= 0 ? 0 : ((scored * 100) ~/ totalPoints);
 
-    final bands = await (_db.select(_db.examGradeBands)
-          ..where((b) => b.examId.equals(exam.id))
-          ..orderBy([(b) => drift.OrderingTerm.desc(b.minPercent)]))
-        .get();
+    // Grade label: use bands if available locally; otherwise simple pass/fail against passPercent
     String label = '';
-    for (final b in bands) {
-      if (percent >= b.minPercent) {
-        label = b.label;
-        break;
+    try {
+      final bands = await (_db.select(_db.examGradeBands)
+            ..where((b) => b.examId.equals(attempt.examId))
+            ..orderBy([(b) => drift.OrderingTerm.desc(b.minPercent)]))
+          .get();
+      for (final b in bands) {
+        if (percent >= b.minPercent) {
+          label = b.label;
+          break;
+        }
       }
+    } catch (_) {}
+    if (label.isEmpty && passPercent > 0) {
+      label = percent >= passPercent ? 'Pass' : '';
     }
 
     await (_db.update(_db.attempts)..where((t) => t.id.equals(attemptId))).write(

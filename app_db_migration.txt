@@ -1,0 +1,59 @@
+              await m.createTable(appSettings);
+            }
+            if (!await _tableExists('payments')) {
+              await m.createTable(payments);
+            }
+          }
+          if (from < 11) {
+            if (!await _columnExists('attempts', 'user_email')) {
+              await customStatement("ALTER TABLE attempts ADD COLUMN user_email TEXT NOT NULL DEFAULT 'guest@local'");
+            }
+          }
+          if (from < 12) {
+            if (!await _tableExists('translations')) {
+              await customStatement('CREATE TABLE IF NOT EXISTS translations (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL, entity_id INTEGER NOT NULL, lang TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL)');
+            }
+          }
+          if (from < 13) {
+            // Add pdf_url column to exams if missing (idempotent)
+            if (!await _columnExists('exams', 'pdf_url')) {
+              await m.addColumn(exams, exams.pdfUrl);
+            }
+          }
+          if (from < 14) {
+            // Create pdf_progress table for per-user PDF reading progress
+            if (!await _tableExists('pdf_progress')) {
+              await customStatement(
+                'CREATE TABLE IF NOT EXISTS pdf_progress ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                'exam_id INTEGER NOT NULL, '
+                'user_email TEXT NOT NULL, '
+                'page INTEGER NOT NULL DEFAULT 0, '
+                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'UNIQUE(user_email, exam_id)'
+                ')',
+              );
+            }
+          }
+        },
+      );
+
+  Future<bool> _columnExists(String table, String column) async {
+    final rows = await customSelect('PRAGMA table_info("$table")').get();
+    for (final r in rows) {
+      final name = r.data['name'] as String?;
+      if (name == column) return true;
+    }
+    return false;
+  }
+
+  Future<bool> _tableExists(String table) async {
+    final rows = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable<String>(table)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+}
+
+QueryExecutor openConnection() => driftDatabase(name: 'exampro.sqlite');

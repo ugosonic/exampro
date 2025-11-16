@@ -1,0 +1,140 @@
+          onPressed: () {
+            final next = mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+            ref.read(themeModeProvider.notifier).state = next;
+          },
+          icon: Icon(mode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode),
+        )
+      ]),
+      body: NeonBackground(
+        child: SafeArea(
+          child: user == null
+              ? _signedOutHome(context)
+              : Stack(children: [
+                  // Header gradient (match onboarding dark gradient)
+                  Container(
+                    height: 260,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF2A2E79), Color(0xFF161A4F)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                  // Scrollable content
+                  ListView(
+                    controller: _scroll,
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // Auto-sync enabled: no manual update card
+                      // Main white card slides subtly with scroll
+                      AnimatedSlide(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        offset: Offset(0, (_offset / 400).clamp(0, 0.25)),
+                        child: NeonGlassCard(child: _greetingAndProgress(context, ref)),
+                      ),
+                      const SizedBox(height: 16),
+                      NeonGlassCard(child: _quickActionsGrid(context, ref)),
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Center(
+                          child: Text(
+                            'Select Country',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.white.withValues(alpha: 0.95)
+                                      : Colors.black.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      NeonGlassCard(child: _homeCategoriesGrid(context)),
+                      const SizedBox(height: 20),
+                      NeonGlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Your Progress', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w700,
+                                )),
+                            const SizedBox(height: 8),
+                            _progressChart(context),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      NeonGlassCard(
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Recent attempts', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
+                                      fontWeight: FontWeight.w700,
+                                    )),
+                                TextButton(onPressed: () => context.go('/attempts'), child: const Text('View all')),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            _recentAttempts(context, ref),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Center(child: _zenovFooter(context)),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _signedOutHome(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        NeonGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Welcome', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('Sign in to sync progress across devices, or explore categories without an account.', style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.9) : Colors.black.withValues(alpha: 0.75))),
+                const SizedBox(height: 12),
+                Row(children: [
+                  FilledButton(onPressed: () => GoRouter.of(context).go('/auth'), child: const Text('Sign in')),
+                  const SizedBox(width: 8),
+                  OutlinedButton(onPressed: () => GoRouter.of(context).go('/categories'), child: const Text('Explore')),
+                ])
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _homeCategoriesGrid(BuildContext context) {
+    return Consumer(builder: (context, ref, _) {
+      final catsAsync = ref.watch(categoriesProvider);
+      final db = ref.watch(dbProvider);
+      final user = ref.watch(currentUserProvider);
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return catsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, st) => Text('Failed to load categories: $e'),
+        data: (cats) {
+          return FutureBuilder<bool>(
+            future: () async {
+              if (user == null) return false;

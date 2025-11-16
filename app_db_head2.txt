@@ -1,0 +1,149 @@
+    Subcategories,
+    Exams,
+    Questions,
+    Choices,
+    ExamQuestions,
+    ExamGradeBands,
+    QuestionCategories,
+    QuestionSubcategories,
+    Attempts,
+    AttemptAnswers,
+    Users,
+    SavedQuestions,
+    Reports,
+    DailyGoals,
+    AppSettings,
+    Payments,
+  ],
+)
+  class AppDatabase extends _$AppDatabase {
+    AppDatabase() : super(openConnection());
+    @override
+    int get schemaVersion => 14;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async => await m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            // Drop legacy tables from v1
+            await m.deleteTable('attempt_answers');
+            await m.deleteTable('attempts');
+            await m.deleteTable('exams');
+            await m.deleteTable('categories');
+            await m.createAll();
+          }
+          if (from < 3) {
+            // Add passPercent to categories (idempotent)
+            if (!await _columnExists('categories', 'pass_percent')) {
+              await m.addColumn(categories, categories.passPercent);
+            }
+          }
+          if (from < 4) {
+            // Add question_categories (idempotent)
+            if (!await _tableExists('question_categories')) {
+              await m.createTable(questionCategories);
+            }
+          }
+          if (from < 5) {
+            if (!await _columnExists('exams', 'theme_key')) {
+              await m.addColumn(exams, exams.themeKey);
+            }
+          }
+          if (from < 6) {
+            if (!await _tableExists('saved_questions')) {
+              await m.createTable(savedQuestions);
+            }
+            if (!await _tableExists('reports')) {
+              await m.createTable(reports);
+            }
+          }
+          if (from < 8) {
+            if (!await _tableExists('daily_goals')) {
+              await m.createTable(dailyGoals);
+            }
+          }
+          if (from < 9) {
+            if (!await _columnExists('categories', 'image_url')) {
+              await m.addColumn(categories, categories.imageUrl);
+            }
+            if (!await _columnExists('subcategories', 'image_url')) {
+              await m.addColumn(subcategories, subcategories.imageUrl);
+            }
+            if (!await _tableExists('question_subcategories')) {
+              await m.createTable(questionSubcategories);
+            }
+          }
+          if (from < 10) {
+            if (!await _columnExists('categories', 'locked')) {
+              await m.addColumn(categories, categories.locked);
+            }
+            if (!await _columnExists('subcategories', 'locked')) {
+              await m.addColumn(subcategories, subcategories.locked);
+            }
+            if (!await _columnExists('questions', 'locked')) {
+              await m.addColumn(questions, questions.locked);
+            }
+            if (!await _columnExists('users', 'is_pro')) {
+              await m.addColumn(users, users.isPro);
+            }
+            if (!await _tableExists('app_settings')) {
+              await m.createTable(appSettings);
+            }
+            if (!await _tableExists('payments')) {
+              await m.createTable(payments);
+            }
+          }
+          if (from < 11) {
+            if (!await _columnExists('attempts', 'user_email')) {
+              await customStatement("ALTER TABLE attempts ADD COLUMN user_email TEXT NOT NULL DEFAULT 'guest@local'");
+            }
+          }
+          if (from < 12) {
+            if (!await _tableExists('translations')) {
+              await customStatement('CREATE TABLE IF NOT EXISTS translations (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL, entity_id INTEGER NOT NULL, lang TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL)');
+            }
+          }
+          if (from < 13) {
+            // Add pdf_url column to exams if missing (idempotent)
+            if (!await _columnExists('exams', 'pdf_url')) {
+              await m.addColumn(exams, exams.pdfUrl);
+            }
+          }
+          if (from < 14) {
+            // Create pdf_progress table for per-user PDF reading progress
+            if (!await _tableExists('pdf_progress')) {
+              await customStatement(
+                'CREATE TABLE IF NOT EXISTS pdf_progress ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                'exam_id INTEGER NOT NULL, '
+                'user_email TEXT NOT NULL, '
+                'page INTEGER NOT NULL DEFAULT 0, '
+                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'UNIQUE(user_email, exam_id)'
+                ')',
+              );
+            }
+          }
+        },
+      );
+
+  Future<bool> _columnExists(String table, String column) async {
+    final rows = await customSelect('PRAGMA table_info("$table")').get();
+    for (final r in rows) {
+      final name = r.data['name'] as String?;
+      if (name == column) return true;
+    }
+    return false;
+  }
+
+  Future<bool> _tableExists(String table) async {
+    final rows = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable<String>(table)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+}
+
+QueryExecutor openConnection() => driftDatabase(name: 'exampro.sqlite');

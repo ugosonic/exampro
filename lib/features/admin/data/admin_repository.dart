@@ -241,26 +241,31 @@ class AdminRepository {
     return await _db.select(_db.categories).get();
   }
 
-  // Users — prefer online database when API is configured; fall back to local
+  // Users – prefer online database when API is configured; fall back to local
+  // When using the API, poll periodically to pick up new users.
   Stream<List<DbUser>> watchUsers() {
     if (_adminApi != null) {
-      return Stream.fromFuture(() async {
-        try {
-          final rows = await _adminApi.users();
-          return [
-            for (final m in rows)
-              DbUser(
-                id: (m['id'] as num).toInt(),
-                email: (m['email'] as String?) ?? '',
-                password: '',
-                role: (m['role'] as String?) ?? 'user',
-                isPro: false,
-              )
-          ];
-        } catch (_) {
-          return _db.select(_db.users).get();
+      return () async* {
+        while (true) {
+          try {
+            final rows = await _adminApi!.users();
+            yield [
+              for (final m in rows)
+                DbUser(
+                  id: (m['id'] as num).toInt(),
+                  email: (m['email'] as String?) ?? '',
+                  password: '',
+                  role: (m['role'] as String?) ?? 'user',
+                  isPro: false,
+                )
+            ];
+          } catch (_) {
+            // Fall back to local snapshot on error
+            yield await _db.select(_db.users).get();
+          }
+          await Future.delayed(const Duration(seconds: 10));
         }
-      }());
+      }();
     }
     return _db.select(_db.users).watch();
   }

@@ -87,11 +87,12 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final _scroll = ScrollController();
+  double _offset = 0.0;
 
   @override
   void initState() {
     super.initState();
-    // No rebuilds on every scroll tick; use AnimatedBuilder in the widget tree instead
+    _scroll.addListener(() => setState(() => _offset = _scroll.offset));
     // Ensure recent attempts sync from server so progress is portable across devices
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final u = ref.read(currentUserProvider);
@@ -143,22 +144,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   // Scrollable content
                   ListView(
                     controller: _scroll,
-                    physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                     padding: const EdgeInsets.all(16),
                     children: [
                       // Auto-sync enabled: no manual update card
                       // Main white card slides subtly with scroll
-                      AnimatedBuilder(
-                        animation: _scroll,
-                        builder: (_, __) {
-                          final off = _scroll.hasClients ? (_scroll.offset / 400).clamp(0.0, 0.25) : 0.0;
-                          return AnimatedSlide(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                            offset: Offset(0, off as double),
-                            child: NeonGlassCard(child: _greetingAndProgress(context, ref)),
-                          );
-                        },
+                      AnimatedSlide(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        offset: Offset(0, (_offset / 400).clamp(0, 0.25)),
+                        child: NeonGlassCard(child: _greetingAndProgress(context, ref)),
                       ),
                       const SizedBox(height: 16),
                       NeonGlassCard(child: _quickActionsGrid(context, ref)),
@@ -520,7 +514,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _categoryProgressBlock(BuildContext context, WidgetRef ref) {
     final email = (ref.watch(currentUserProvider)?.email) ?? 'guest@local';
-    final async = ref.watch(liveCategoryProgressProvider(email));
+    final async = ref.watch(categoryProgressProvider(email));
     return async.when(
       data: (items) {
         if (items.isEmpty) return const Text('No categories yet');

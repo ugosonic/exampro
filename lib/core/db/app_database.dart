@@ -189,7 +189,7 @@ class Payments extends Table {
   class AppDatabase extends _$AppDatabase {
     AppDatabase() : super(openConnection());
     @override
-    int get schemaVersion => 14;
+    int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -291,6 +291,37 @@ class Payments extends Table {
                 'page INTEGER NOT NULL DEFAULT 0, '
                 'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
                 'UNIQUE(user_email, exam_id)'
+                ')',
+              );
+            }
+          }
+          if (from < 15) {
+            // Practice progress per user/category (for "Practice all")
+            if (!await _tableExists('practice_progress')) {
+              await customStatement(
+                'CREATE TABLE IF NOT EXISTS practice_progress ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                'category_id INTEGER NOT NULL, '
+                'user_email TEXT NOT NULL, '
+                'index INTEGER NOT NULL DEFAULT 0, '
+                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'UNIQUE(user_email, category_id)'
+                ')',
+              );
+            }
+          }
+          if (from < 16) {
+            // Practice answers per user/category/question (counts towards dashboard progress)
+            if (!await _tableExists('practice_answers')) {
+              await customStatement(
+                'CREATE TABLE IF NOT EXISTS practice_answers ('
+                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+                'user_email TEXT NOT NULL, '
+                'category_id INTEGER NOT NULL, '
+                'question_id INTEGER NOT NULL, '
+                'is_correct INTEGER NOT NULL DEFAULT 0, '
+                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'UNIQUE(user_email, question_id)'
                 ')',
               );
             }

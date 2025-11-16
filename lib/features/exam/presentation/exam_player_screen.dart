@@ -6,6 +6,7 @@ import 'package:citizentest/core/db/app_database.dart';
 import 'package:citizentest/core/db/db_provider.dart';
 import 'package:citizentest/features/exam/data/exam_repository.dart';
 import 'package:citizentest/features/sync/data/sync_repository.dart';
+import 'package:citizentest/features/dashboard/data/progress_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -110,6 +111,34 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         _exam = exam;
         _attempt = att;
       });
+      // Practice-all resume prompt
+      if (widget.categoryId != null) {
+        final user = ref.read(currentUserProvider);
+        final email = user?.email ?? 'guest@local';
+        final saved = await repo.practiceProgress(categoryId: widget.categoryId!, userEmail: email);
+        if (saved > 0 && saved < _questions.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!mounted) return;
+            final cont = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Continue practice?'),
+                content: Text('You stopped at question ${saved + 1} of ${_questions.length}. Continue or start over?'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Start over')),
+                  FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Continue')),
+                ],
+              ),
+            );
+            if (cont == true) {
+              setState(() => index = saved);
+            } else {
+              await repo.resetPracticeProgress(categoryId: widget.categoryId!, userEmail: email);
+              setState(() => index = 0);
+            }
+          });
+        }
+      }
       // If current index points to a locked question and user isn't pro, redirect
       _ensureUnlockedIndex();
       _startTimer();
@@ -381,6 +410,26 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               final u = ref.read(currentUserProvider);
                               _queueSync(u?.email ?? 'guest@local');
                               _skipped.remove(q.id);
+                              // Ping dashboard pies
+                              ref.read(progressTickProvider.notifier).state++;
+                            }
+                          } else if (widget.categoryId != null) {
+                            // Practice-all: save progress to next index if selected
+                            final sel = _selections[q.id] ?? <int>{};
+                            if (sel.isNotEmpty) {
+                              final opts = _options[q.id]!;
+                              final correct = opts.where((x) => x.isCorrect).map((x) => x.id).toSet();
+                              final ok = _isSelectionCorrect(q, sel, correct);
+                              final u = ref.read(currentUserProvider);
+                              final email = u?.email ?? 'guest@local';
+                              await ref.read(examRepositoryProvider).savePracticeAnswer(
+                                    categoryId: widget.categoryId!,
+                                    questionId: q.id,
+                                    userEmail: email,
+                                    isCorrect: ok,
+                                  );
+                              // Ping dashboard pies
+                              ref.read(progressTickProvider.notifier).state++;
                             }
                           }
 
@@ -398,6 +447,11 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               if (mounted) context.go('/upgrade');
                             } else {
                               setState(() => index = i);
+                              if (widget.categoryId != null) {
+                                final u = ref.read(currentUserProvider);
+                                final email = u?.email ?? 'guest@local';
+                                await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: i);
+                              }
                             }
                           } else {
                             final pending = _firstSkippedPendingIndex();
@@ -407,6 +461,10 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               ref.read(analyticsProvider).event('exam_submit', params: {'examId': widget.examId});
                               final u = ref.read(currentUserProvider);
                               _queueSync(u?.email ?? 'guest@local');
+                              if (widget.categoryId != null) {
+                                final email = (u?.email ?? 'guest@local');
+                                await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: _questions.length);
+                              }
                               await _autoSubmit();
                             }
                           }
@@ -492,6 +550,22 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
             final u = ref.read(currentUserProvider);
             _queueSync(u?.email ?? 'guest@local');
             _skipped.remove(q.id);
+            ref.read(progressTickProvider.notifier).state++;
+          } else if (widget.categoryId != null) {
+            final options = _options[q.id]!;
+            final correct = options.where((x) => x.isCorrect).map((x) => x.id).toSet();
+            final sel = _selections[q.id] ?? <int>{};
+            final ok = _isSelectionCorrect(q, sel, correct);
+            final u = ref.read(currentUserProvider);
+            final email = u?.email ?? 'guest@local';
+            await ref.read(examRepositoryProvider).savePracticeAnswer(
+                  categoryId: widget.categoryId!,
+                  questionId: q.id,
+                  userEmail: email,
+                  isCorrect: ok,
+                );
+            await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: index);
+            ref.read(progressTickProvider.notifier).state++;
           }
         },
         child: AnimatedContainer(

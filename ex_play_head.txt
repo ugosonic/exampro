@@ -1,0 +1,220 @@
+
+import 'dart:async';
+import 'package:citizentest/common/widgets/tap_scale.dart';
+import 'package:citizentest/core/analytics/analytics.dart';
+import 'package:citizentest/core/db/app_database.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/features/exam/data/exam_repository.dart';
+import 'package:citizentest/features/sync/data/sync_repository.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+
+class ExamPlayerScreen extends ConsumerStatefulWidget {
+  final String examId;
+  final int? attemptId;
+  final String? mode; // 'practice' (default) or 'assignment'
+  final int? categoryId; // when practicing entire category
+  const ExamPlayerScreen({super.key, required this.examId, this.attemptId, this.mode, this.categoryId});
+
+  @override
+  ConsumerState<ExamPlayerScreen> createState() => _ExamPlayerScreenState();
+}
+
+class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
+  int index = 0;
+  int? attemptId;
+  late final int examId;
+  List<Question> _questions = const [];
+  Map<int, List<Choice>> _options = const {};
+  final Map<int, Set<int>> _selections = {}; // questionId -> selected option IDs
+  final Set<int> _revealed = {}; // questionIds whose explanation is revealed
+  Exam? _exam;
+  Attempt? _attempt;
+  Timer? _ticker;
+  Timer? _syncDebounce;
+  int _remainingSec = 0;
+  bool _autoSubmitted = false;
+  bool _isPro = false;
+  String _mode = 'practice';
+  final Set<int> _skipped = {}; // skipped question IDs
+
+  @override
+  void initState() {
+    super.initState();
+    examId = int.tryParse(widget.examId) ?? 0;
+    ref.read(analyticsProvider).event('exam_start', params: {'examId': widget.examId});
+    _load();
+  }  Future<void> _load() async {
+    try {
+      _mode = (widget.mode ?? 'practice');
+      final repo = ref.read(examRepositoryProvider);
+      // start or resume attempt
+      if (widget.attemptId != null) {
+        attemptId = widget.attemptId;
+        // jump to next unanswered index
+        final answered = await repo.countAnswers(attemptId!);
+        setState(() => index = answered);
+      } else if (widget.categoryId == null && _mode != 'practice') {
+        // Only create attempt for assignment (or exam-bound practice), never for category practice
+        final user = ref.read(currentUserProvider);
+        final email = user?.email ?? 'guest@local';
+        attemptId = await repo.startAttempt(examId: examId, mode: _mode, userEmail: email);
+        _queueSync(email);
+      }
+      // load questions and options
+      final list = (widget.categoryId != null)
+          ? await repo.questionsForCategory(widget.categoryId!)
+          : await repo.questionsForExam(examId);
+      if (list.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('No questions available for this exam yet')));
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            if (widget.categoryId != null) {
+              context.go('/categories/${widget.categoryId}');
+            } else if (examId != 0) {
+              context.go('/exam/$examId');
+            } else {
+              context.go('/dashboard');
+            }
+          });
+        }
+        return;
+      }
+      // load exam and attempt
+      final db = ref.read(dbProvider);
+      final exam = await repo.getExam(examId);
+      Attempt? att;
+      if (attemptId != null) {
+        att = await (db.select(db.attempts)..where((t) => t.id.equals(attemptId!))).getSingleOrNull();
+      }
+      // determine pro
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        final row = await (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull();
+        _isPro = row?.isPro ?? false;
+      } else {
+        _isPro = false;
+      }
+      // load previous selections if resuming
+      if (attemptId != null && widget.attemptId != null) {
+        final saved = await repo.loadSelections(attemptId!);
+        _selections.addAll({for (final e in saved.entries) e.key: e.value.toSet()});
+      }
+      setState(() {
+        _questions = [for (final q in list) q.question];
+        _options = {for (final q in list) q.question.id: q.options};
+        _exam = exam;
+        _attempt = att;
+      });
+      // If current index points to a locked question and user isn't pro, redirect
+      _ensureUnlockedIndex();
+      _startTimer();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load exam: $e')));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (widget.categoryId != null) {
+          context.go('/categories/${widget.categoryId}');
+        } else if (examId != 0) {
+          context.go('/exam/$examId');
+        } else {
+          context.go('/dashboard');
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _syncDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _queueSync(String email) {
+    _syncDebounce?.cancel();
+    _syncDebounce = Timer(const Duration(seconds: 1), () async {
+      try {
+        await ref.read(syncRepositoryProvider).pushUserProgress(email);
+      } catch (_) {}
+    });
+  }
+
+  void _ensureUnlockedIndex() {
+    if (_questions.isEmpty) return;
+    if (!_isPro && _questions[index].locked) {
+      // find next unlocked forward, or back to previous unlocked; if none, route to upgrade
+      int? next;
+      for (var i = index; i < _questions.length; i++) {
+        if (!_questions[i].locked) { next = i; break; }
+      }
+      next ??= () {
+        for (var i = index - 1; i >= 0; i--) {
+          if (!_questions[i].locked) return i;
+        }
+        return null;
+      }();
+      if (next == null) {
+        if (mounted) context.go('/upgrade');
+      } else {
+        setState(() => index = next!);
+      }
+    }
+  }
+
+  void _startTimer() {
+    if (_mode == 'practice') return; // practice is always untimed
+    final ex = _exam;
+    final att = _attempt;
+    if (ex == null || att == null) return;
+    final limitSec = (ex.timeLimitMinutes) * 60;
+    if (limitSec <= 0) return; // no timer
+    final elapsed = DateTime.now().difference(att.startedAt).inSeconds;
+    final remaining = limitSec - elapsed;
+    if (remaining <= 0) {
+      _autoSubmit();
+      return;
+    }
+    setState(() => _remainingSec = remaining);
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (t) async {
+      if (!mounted) return;
+      if (_remainingSec <= 1) {
+        t.cancel();
+        await _autoSubmit();
+      } else {
+        setState(() => _remainingSec--);
+      }
+    });
+  }
+
+  int? _firstSkippedPendingIndex() {
+    if (_skipped.isEmpty) return null;
+    for (var i = 0; i < _questions.length; i++) {
+      if (_skipped.contains(_questions[i].id)) return i;
+    }
+    return null;
+  }
+
+  Future<void> _autoSubmit() async {
+    if (_autoSubmitted) return;
+    _autoSubmitted = true;
+    if (attemptId != null) {
+      await ref.read(examRepositoryProvider).submitAttempt(attemptId!);
+      if (mounted) context.go('/result/$attemptId');
+    } else if (mounted) {
+      if (widget.categoryId != null) {
+        context.go('/categories/${widget.categoryId}');
+      } else {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {

@@ -1,0 +1,120 @@
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          DropdownButton<int>(
+            value: _template,
+            items: const [
+              DropdownMenuItem(value: 1, child: Text('Template 1: Welcome')),
+              DropdownMenuItem(value: 2, child: Text('Template 2: Update')),
+            ],
+            onChanged: (v) => setState(() => _template = v ?? 1),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.send),
+            label: const Text('Send Email'),
+            onPressed: _selected.isEmpty ? null : () => _sendEmails(context),
+          ),
+          OutlinedButton(
+            onPressed: () => setState(() => _selected.clear()),
+            child: const Text('Clear Selection'),
+          )
+        ]),
+      ),
+      Expanded(
+        child: StreamBuilder(
+          stream: repo.watchUsers(),
+          builder: (context, snap) {
+            final users = snap.data ?? const [];
+            if (users.isEmpty) return const Center(child: Text('No users')); 
+            return ListView.separated(
+              itemCount: users.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final u = users[i];
+                final sel = _selected.contains(u.id);
+                return CheckboxListTile(
+                  value: sel,
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _selected.add(u.id);
+                    } else {
+                      _selected.remove(u.id);
+                    }
+                  }),
+                  title: Text(u.email),
+                  subtitle: Text('Role: ${u.role} • ${u.isPro ? 'Pro' : 'Free'}'),
+                  secondary: IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'Manage user',
+                    onPressed: () => _manageUser(context, u),
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                );
+              },
+            );
+          },
+        ),
+      ),
+    ]);
+  }
+
+  Future<void> _manageUser(BuildContext context, DbUser u) async {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return SingleChildScrollView(controller: scrollController, child: _ManageUserSheet(user: u));
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _sendEmails(BuildContext context) async {
+    final repo = ref.read(adminRepositoryProvider);
+    final users = await repo.allUsers();
+    final emails = users.where((u) => _selected.contains(u.id)).map((u) => u.email).toList();
+    if (emails.isEmpty) return;
+    final subject = _template == 1 ? 'Welcome to Citizenship Test' : 'Citizenship Test Update';
+    final text = _template == 1 ? _tplWelcome() : _tplUpdate();
+    final html = _template == 1 ? _tplWelcomeHtml() : _tplUpdateHtml();
+    try {
+      await ref.read(emailApiProvider).sendEmail(to: emails, subject: subject, text: text, html: html);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email sent')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
+      }
+    }
+  }
+
+  String _tplWelcome() =>
+      'Hello,\n\nWelcome to Citizenship Test!\n\nStart practicing by exploring categories and selecting an exam.\n\nBest regards,\nCitizenship Test Team';
+  String _tplUpdate() =>
+      'Hello,\n\nWe have added new practice exams and performance analytics.\nLog in to check them out!\n\nBest regards,\nCitizenship Test Team';
+  String _tplWelcomeHtml() =>
+      '<html><body style="font-family: Arial, sans-serif"><h2>Welcome to Citizenship Test</h2><p>Start practicing by exploring categories and selecting an exam.</p><p>Best regards,<br/>Citizenship Test Team</p></body></html>';
+  String _tplUpdateHtml() =>
+      '<html><body style="font-family: Arial, sans-serif"><h2>Latest Updates</h2><p>We added new practice exams and performance analytics. Log in to check them out!</p><p>Best regards,<br/>Citizenship Test Team</p></body></html>';
+}
+
+class _ManageUserSheet extends ConsumerStatefulWidget {
+  final DbUser user;
+  const _ManageUserSheet({required this.user});
+  @override
+  ConsumerState<_ManageUserSheet> createState() => _ManageUserSheetState();
+}
+
+class _ManageUserSheetState extends ConsumerState<_ManageUserSheet> {
+  String _currency = 'GBP';
+  bool _busy = false;
+  final _subjectCtrl = TextEditingController();

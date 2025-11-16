@@ -1,0 +1,53 @@
+  bool _isSelectionCorrect(Question q, Set<int> selected, Set<int> correct) {
+    if (q.multiple) {
+      return selected.isNotEmpty && selected.length == correct.length && selected.containsAll(correct);
+    }
+    return selected.length == 1 && correct.contains(selected.first);
+  }
+
+  String _formatTime(int seconds) {
+    if (seconds <= 0) return '00:00';
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  Gradient? _themeGradient(int key) {
+    switch (key) {
+      case 1:
+        return const LinearGradient(colors: [Color(0xFFFFD194), Color(0xFFD1913C)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      case 2:
+        return const LinearGradient(colors: [Color(0xFF00B4DB), Color(0xFF0083B0)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      case 3:
+        return const LinearGradient(colors: [Color(0xFF56ab2f), Color(0xFFa8e063)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      case 4:
+        return const LinearGradient(colors: [Color(0xFFDAE2F8), Color(0xFFD6A4A4)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      case 5:
+        return const LinearGradient(colors: [Color(0xFFFF5F6D), Color(0xFFFFC371)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      default:
+        return null;
+    }
+  }
+
+  Future<String?> _promptComment(BuildContext context) async {
+    final c = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Report exam'),
+        content: TextField(controller: c, autofocus: true, maxLines: 4, decoration: const InputDecoration(hintText: 'Describe the issue')),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(c.text), child: const Text('Send')),
+        ],
+      ),
+    );
+  }
+}
+
+
+
+
+
+
+

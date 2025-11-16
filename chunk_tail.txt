@@ -1,72 +1,24 @@
-import 'package:citizentest/features/admin/data/admin_repository.dart';
-import 'package:citizentest/core/db/app_database.dart';
-import 'package:citizentest/core/db/db_provider.dart';
-import 'package:citizentest/features/exam/data/exam_repository.dart';
-import 'package:citizentest/core/config/env_loader.dart';
-import 'package:citizentest/core/network/dio_client.dart';
-import 'package:citizentest/features/exam/presentation/pdf_viewer_screen.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-class ExamEditorScreen extends ConsumerStatefulWidget {
-  final int examId;
-  const ExamEditorScreen({super.key, required this.examId});
-  @override
-  ConsumerState<ExamEditorScreen> createState() => _ExamEditorScreenState();
-}
-
-class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
-  Exam? _exam;
-  List<({int id, String body})> _items = [];
-  bool _loading = true;
-  // controls
-  final _titleCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  final _timeCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _pdfCtrl = TextEditingController();
-  bool _published = false;
-  bool _readonly = false;
-
-  @override
-  void initState() {
-    super.initState();
     _load();
   }
 
   Future<void> _load() async {
-    try {
-      final adminRepo = ref.read(adminRepositoryProvider);
-      final examRepo = ref.read(examRepositoryProvider);
-      // Load exam via repository (supports remote)
-      final ex = await examRepo.getExam(widget.examId);
-      // Load readonly flag (local toggle) and questions list (supports remote)
-      final results = await Future.wait([
-        adminRepo.getExamReadOnly(widget.examId),
-        examRepo.questionsForExam(widget.examId),
-      ]);
-      final ro = results[0] as bool;
-      final list = results[1] as List<QuestionWithOptions>;
-      if (!mounted) return;
-      setState(() {
-        _exam = ex;
-        _titleCtrl.text = ex?.title ?? '';
-        _descCtrl.text = ex?.description ?? '';
-        _timeCtrl.text = (ex?.timeLimitMinutes ?? 0).toString();
-        _passCtrl.text = (ex?.passPercent ?? 60).toString();
-        _pdfCtrl.text = ex?.pdfUrl ?? '';
-        _published = ex?.published ?? false;
-        _readonly = ro;
-        _items = [for (final r in list) (id: r.question.id, body: r.question.body)];
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load exam: $e')));
-    }
+    final repo = ref.read(adminRepositoryProvider);
+    final db = ref.read(dbProvider);
+    final ex = await (db.select(db.exams)..where((e) => e.id.equals(widget.examId))).getSingle();
+    final ro = await repo.getExamReadOnly(widget.examId);
+    final rows = await repo.examQuestions(widget.examId);
+    setState(() {
+      _exam = ex;
+      _titleCtrl.text = ex.title;
+      _descCtrl.text = ex.description;
+      _timeCtrl.text = ex.timeLimitMinutes.toString();
+      _passCtrl.text = ex.passPercent.toString();
+      _pdfCtrl.text = ex.pdfUrl;
+      _published = ex.published;
+      _readonly = ro;
+      _items = [for (final r in rows) (id: r.question.id, body: r.question.body)];
+      _loading = false;
+    });
   }
 
   @override
@@ -75,9 +27,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       appBar: AppBar(title: const Text('Edit Exam')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ReorderableListView.builder(
-              padding: const EdgeInsets.only(bottom: 96, top: 8),
-              header: Padding(
+          : Column(children: [
+              Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Exam settings', style: Theme.of(context).textTheme.titleMedium),
@@ -149,33 +100,39 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                   const Align(alignment: Alignment.centerLeft, child: Text('Reorder or remove questions')),
                 ]),
               ),
-              itemBuilder: (_, i) {
-                final item = _items[i];
-                return Dismissible(
-                  key: ValueKey(item.id),
-                  background: Container(color: Colors.redAccent),
-                  onDismissed: (_) async {
-                    await ref.read(adminRepositoryProvider).removeQuestionFromExam(widget.examId, item.id);
-                    setState(() => _items.removeAt(i));
+              Expanded(
+                child: ReorderableListView.builder(
+                  itemBuilder: (_, i) {
+                    final item = _items[i];
+                    return Dismissible(
+                      key: ValueKey(item.id),
+                      background: Container(color: Colors.redAccent),
+                      onDismissed: (_) async {
+                        await ref.read(adminRepositoryProvider).removeQuestionFromExam(widget.examId, item.id);
+                        setState(() => _items.removeAt(i));
+                      },
+                      child: ListTile(
+                        key: ValueKey('tile-${item.id}'),
+                        title: Text(item.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        trailing: const Icon(Icons.drag_handle),
+                        onTap: () async {
+                          // For brevity: navigate to builder to add new questions; editing existing in-place would reuse dialog
+                        },
+                      ),
+                    );
                   },
-                  child: ListTile(
-                    key: ValueKey('tile-${item.id}'),
-                    title: Text(item.body, maxLines: 2, overflow: TextOverflow.ellipsis),
-                    trailing: const Icon(Icons.drag_handle),
-                    onTap: () async {},
-                  ),
-                );
-              },
-              itemCount: _items.length,
-              onReorder: (oldIndex, newIndex) async {
-                final idx = newIndex > oldIndex ? newIndex - 1 : newIndex;
-                setState(() {
-                  final it = _items.removeAt(oldIndex);
-                  _items.insert(idx, it);
-                });
-                await ref.read(adminRepositoryProvider).reorderExamQuestions(widget.examId, _items.map((e) => e.id).toList());
-              },
-            ),
+                  itemCount: _items.length,
+                  onReorder: (oldIndex, newIndex) async {
+                    final idx = newIndex > oldIndex ? newIndex - 1 : newIndex;
+                    setState(() {
+                      final it = _items.removeAt(oldIndex);
+                      _items.insert(idx, it);
+                    });
+                    await ref.read(adminRepositoryProvider).reorderExamQuestions(widget.examId, _items.map((e) => e.id).toList());
+                  },
+                ),
+              ),
+            ]),
       floatingActionButton: FloatingActionButton(
         onPressed: _addQuestion,
         child: const Icon(Icons.add),
