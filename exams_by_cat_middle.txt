@@ -1,0 +1,64 @@
+          final completed = (data.completed as Set);
+          if (exams.isEmpty) {
+            return const Center(child: Text('No exams yet in this category'));
+          }
+          // Build grouped list: Practice All, spacing, heading, then subcategory sections
+          final bySub = <int?, List<dynamic>>{};
+          for (final e in exams) {
+            final k = e.subcategoryId as int?;
+            (bySub[k] ??= []).add(e);
+          }
+          String labelFor(int? sid) {
+            if (sid == null || sid == 0) return 'General';
+            final m = subs.firstWhere(
+              (e) => ((e['id'] as num).toInt() == sid),
+              orElse: () => const <String, dynamic>{},
+            );
+            return (m['name'] as String?) ?? 'General';
+          }
+
+          final children = <Widget>[
+            Card(
+              child: ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.play_circle_outline)),
+                title: const Text('Practice all questions in this category (untimed)'),
+                subtitle: const Text('Immediate feedback • No timer'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.go('/player/0?mode=practice&cat=$id'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('Take a test', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+          ];
+          final keys = bySub.keys.toList()
+            ..sort((a, b) => labelFor(a).compareTo(labelFor(b)));
+          for (final k in keys) {
+            children.add(Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6.0),
+              child: Text(labelFor(k), style: Theme.of(context).textTheme.labelLarge),
+            ));
+            for (final e in bySub[k]!) {
+              final locked = !isPro && (catLocked || (e.subcategoryId != null && (subLocked[e.subcategoryId] == true)));
+              final grad = _themeGradient(e.themeKey ?? 0);
+              children.add(Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: grad ?? LinearGradient(colors: [
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.10),
+                    Theme.of(context).colorScheme.secondary.withValues(alpha: 0.08),
+                  ], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                ),
+                child: ListTile(
+                  leading: CircleAvatar(backgroundColor: Colors.white.withValues(alpha: 0.2), child: Icon(_iconForExam(e.id), color: Colors.white)),
+                  title: Text(e.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  subtitle: Text('${e.questionCount} questions', style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
+                  trailing: locked
+                      ? const Icon(Icons.lock, color: Colors.white)
+                      : (completed.contains(e.id)
+                          ? const Icon(Icons.check_circle, color: Colors.white)
+                          : const Icon(Icons.chevron_right, color: Colors.white)),
+                  onTap: () => locked ? context.go('/upgrade') : context.go('/exam/${e.id}'),
+                ),
+              ));

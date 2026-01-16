@@ -5,9 +5,17 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_secure_storage_windows
   sqlite3_flutter_libs
+<<<<<<< HEAD
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+=======
+  url_launcher_windows
+)
+
+list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  flutter_local_notifications_windows
+>>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

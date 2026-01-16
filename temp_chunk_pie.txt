@@ -1,0 +1,85 @@
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w700, color: on.withValues(alpha: 0.95), fontSize: big ? 16 : 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedPie extends StatefulWidget {
+  final int completed;
+  final int total;
+  final Color color;
+  final Color? pendingColor;
+  final bool showCounts;
+  const _AnimatedPie({required this.completed, required this.total, required this.color, this.pendingColor, this.showCounts = false});
+  @override
+  State<_AnimatedPie> createState() => _AnimatedPieState();
+}
+
+class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderStateMixin {
+  late final AnimationController _ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..forward();
+  @override
+  void dispose() { _ac.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.total == 0 ? 1 : widget.total;
+    final completed = widget.completed.clamp(0, total);
+    return AnimatedBuilder(
+      animation: _ac,
+      builder: (_, __) {
+        final t = Curves.easeOutCubic.transform(_ac.value);
+        final done = (completed * t).toDouble();
+        final remain = (total.toDouble() - done).clamp(0.0, total.toDouble()).toDouble();
+        final percent = ((done / total) * 100).round();
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            PieChart(PieChartData(
+              sectionsSpace: 2,
+              centerSpaceRadius: 48,
+              sections: [
+                PieChartSectionData(
+                  color: widget.color,
+                  value: done,
+                  title: '',
+                  radius: 64,
+                ),
+                PieChartSectionData(
+                  color: widget.pendingColor ?? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.14),
+                  value: remain,
+                  title: '',
+                  radius: 58,
+                ),
+              ],
+            )),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$percent%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                if (widget.showCounts)
+                  Text('${widget.completed}/${widget.total}', style: TextStyle(color: Colors.white.withValues(alpha: 0.95), fontSize: 12)),
+              ],
+            )
+          ],
+        );
+      },
+    );
+  }
+}
+
+Widget _zenovFooter(BuildContext context) {
+  final on = Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87;
+  final sub = on.withValues(alpha: 0.75);
+  return Column(
+    children: [
+      Text('Developed by ZenovTech (c) 2025', style: TextStyle(color: sub, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      Text('info@zenovtech.com', style: TextStyle(color: sub)),
+      const SizedBox(height: 4),
+      Text('Contact for websites and mobile app development', style: TextStyle(color: sub)),
+    ],
+  );
+}

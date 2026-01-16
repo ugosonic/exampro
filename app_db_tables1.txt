@@ -1,0 +1,100 @@
+
+class QuestionSubcategories extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get questionId => integer().references(Questions, #id)();
+  IntColumn get subcategoryId => integer().references(Subcategories, #id)();
+}
+
+// Attempts & answers
+class Attempts extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get examId => integer().references(Exams, #id)();
+  TextColumn get mode => text()();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get endedAt => dateTime().nullable()();
+  IntColumn get score => integer().nullable()();
+  IntColumn get scorePercent => integer().withDefault(const Constant(0))();
+  TextColumn get gradeLabel => text().withDefault(const Constant(''))();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
+  // Associate attempts with a user; 'guest@local' for anonymous
+  TextColumn get userEmail => text().withDefault(const Constant('guest@local'))();
+}
+
+class AttemptAnswers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get attemptId => integer().references(Attempts, #id)();
+  IntColumn get questionId => integer().references(Questions, #id)();
+  TextColumn get selected => text()(); // json array of choice IDs
+  IntColumn get timeMs => integer().withDefault(const Constant(0))();
+  BoolColumn get isCorrect => boolean().withDefault(const Constant(false))();
+  IntColumn get points => integer().withDefault(const Constant(0))();
+}
+
+// Local auth
+@DataClassName('DbUser')
+class Users extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get email => text().unique()();
+  TextColumn get password => text()();
+  TextColumn get role => text().withDefault(const Constant('user'))();
+  BoolColumn get isPro => boolean().withDefault(const Constant(false))();
+}
+
+class SavedQuestions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get questionId => integer().references(Questions, #id)();
+  TextColumn get userEmail => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class Reports extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get examId => integer().references(Exams, #id)();
+  TextColumn get userEmail => text()();
+  TextColumn get comment => text()();
+  BoolColumn get resolved => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class DailyGoals extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get minutesTarget => integer().withDefault(const Constant(15))();
+  BoolColumn get notify => boolean().withDefault(const Constant(false))();
+  IntColumn get reminderHour => integer().withDefault(const Constant(9))();
+  IntColumn get reminderMinute => integer().withDefault(const Constant(0))();
+  DateTimeColumn get examDate => dateTime().nullable()();
+  BoolColumn get active => boolean().withDefault(const Constant(true))();
+}
+
+class AppSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text().withDefault(const Constant(''))();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+class Payments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get userEmail => text()();
+  IntColumn get amountMinor => integer()();
+  TextColumn get currency => text()();
+  TextColumn get stripePaymentIntentId => text().withDefault(const Constant(''))();
+  TextColumn get status => text().withDefault(const Constant('paid'))();
+  BoolColumn get refunded => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+@DriftDatabase(
+  tables: [
+    Categories,
+    Subcategories,
+    Exams,
+    Questions,
+    Choices,
+    ExamQuestions,
+    ExamGradeBands,
+    QuestionCategories,
+    QuestionSubcategories,
+    Attempts,
+    AttemptAnswers,

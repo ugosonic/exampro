@@ -1,0 +1,80 @@
+        .customSelect(sql, readsFrom: { _db.exams, _db.appSettings })
+        .watch()
+        .map((rows) => [for (final r in rows) _db.exams.map(r.data)]);
+  }
+  Future<void> setExamPublished(int examId, bool published) async {
+    await (_db.update(_db.exams)..where((t) => t.id.equals(examId))).write(ExamsCompanion(published: drift.Value(published)));
+  }
+  Future<void> deleteExam(int examId) async {
+    if (_adminApi != null) {
+      await _adminApi.deleteExam(examId);
+      return;
+    }
+    await _db.transaction(() async {
+      // Remove attempt answers, attempts, joins, grade bands, reports, then exam
+      final attemptsForExam = await (_db.select(_db.attempts)..where((a) => a.examId.equals(examId))).get();
+      final attemptIds = attemptsForExam.map((a) => a.id).toList();
+      if (attemptIds.isNotEmpty) {
+        await (_db.delete(_db.attemptAnswers)..where((aa) => aa.attemptId.isIn(attemptIds))).go();
+        await (_db.delete(_db.attempts)..where((a) => a.id.isIn(attemptIds))).go();
+      }
+      await (_db.delete(_db.examQuestions)..where((eq) => eq.examId.equals(examId))).go();
+      await (_db.delete(_db.examGradeBands)..where((g) => g.examId.equals(examId))).go();
+      await (_db.delete(_db.reports)..where((r) => r.examId.equals(examId))).go();
+      await (_db.delete(_db.exams)..where((e) => e.id.equals(examId))).go();
+    });
+  }
+  Future<List<({Question question, List<Choice> options, ExamQuestion join})>> examQuestions(int examId) async {
+    final joins = await (_db.select(_db.examQuestions)
+          ..where((e) => e.examId.equals(examId))
+          ..orderBy([(t) => drift.OrderingTerm.asc(t.order)])).
+        get();
+    final qIds = joins.map((j) => j.questionId).toList();
+    if (qIds.isEmpty) return [];
+    final qs = await (_db.select(_db.questions)..where((q) => q.id.isIn(qIds))).get();
+    final opts = await (_db.select(_db.choices)..where((o) => o.questionId.isIn(qIds))).get();
+    return [
+      for (final j in joins)
+        (
+          question: qs.firstWhere((q) => q.id == j.questionId),
+          options: opts.where((o) => o.questionId == j.questionId).toList(),
+          join: j,
+        )
+    ];
+  }
+
+  Future<void> reorderExamQuestions(int examId, List<int> questionIds) async {
+    await _db.transaction(() async {
+      for (var i = 0; i < questionIds.length; i++) {
+        await (_db.update(_db.examQuestions)
+              ..where((t) => t.examId.equals(examId) & t.questionId.equals(questionIds[i])))
+            .write(ExamQuestionsCompanion(order: drift.Value(i)));
+      }
+    });
+  }
+
+  Future<void> removeQuestionFromExam(int examId, int questionId) async {
+    if (_adminApi != null) {
+      await _adminApi.deleteQuestionFromExam(examId: examId, questionId: questionId);
+      return;
+    }
+    await (_db.delete(_db.examQuestions)..where((t) => t.examId.equals(examId) & t.questionId.equals(questionId))).go();
+    final count = await _db.customSelect('SELECT COUNT(*) AS c FROM exam_questions WHERE exam_id = ?', variables: [drift.Variable(examId)])
+        .getSingle()
+        .then((r) => (r.data['c'] as int?) ?? 0);
+    await (_db.update(_db.exams)..where((e) => e.id.equals(examId))).write(ExamsCompanion(questionCount: drift.Value(count)));
+  }
+
+  Future<void> updateQuestionAndOptions({required int questionId, required String body, String explanation = '', required List<({String text, bool correct})> options}) async {
+    if (_adminApi != null) {
+      await _adminApi.updateQuestionAndOptions(questionId: questionId, body: body, explanation: explanation, options: options);
+      return;
+    }
+    await _db.transaction(() async {
+      await (_db.update(_db.questions)..where((q) => q.id.equals(questionId))).write(QuestionsCompanion(body: drift.Value(body), explanation: drift.Value(explanation)));
+      await (_db.delete(_db.choices)..where((o) => o.questionId.equals(questionId))).go();
+      await _db.batch((b) {
+        b.insertAll(_db.choices, [
+          for (var i = 0; i < options.length; i++)
+            ChoicesCompanion.insert(questionId: questionId, label: options[i].text, isCorrect: drift.Value(options[i].correct), order: drift.Value(i))
+        ]);

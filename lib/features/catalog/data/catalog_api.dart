@@ -1,6 +1,12 @@
 import 'package:dio/dio.dart';
+<<<<<<< HEAD
 import 'package:exampro/core/network/dio_client.dart';
 import 'package:exampro/features/catalog/domain/models.dart';
+=======
+import 'package:citizentest/core/network/dio_client.dart';
+import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/features/catalog/domain/models.dart';
+>>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 abstract class CatalogApi {
@@ -50,8 +56,18 @@ class CatalogApiMock implements CatalogApi {
 }
 
 final catalogApiProvider = Provider<CatalogApi>((ref) {
+<<<<<<< HEAD
   final dio = ref.watch(dioProvider);
   return CatalogApiImpl(dio);
   // return CatalogApiMock();
 });
 
+=======
+  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  if (env == null || !env.environment.toLowerCase().contains('prod')) {
+    return CatalogApiMock();
+  }
+  final dio = ref.watch(dioProvider);
+  return CatalogApiImpl(dio);
+});
+>>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

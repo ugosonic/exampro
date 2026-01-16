@@ -1,0 +1,165 @@
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                  // Scrollable content
+                  ListView(
+                    controller: _scroll,
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // Auto-sync enabled: no manual update card
+                      // Main white card slides subtly with scroll
+                      AnimatedSlide(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        offset: Offset(0, (_offset / 400).clamp(0, 0.25)),
+                        child: NeonGlassCard(child: _greetingAndProgress(context, ref)),
+                      ),
+                      const SizedBox(height: 16),
+                      NeonGlassCard(child: _quickActionsGrid(context, ref)),
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Center(
+                          child: Text(
+                            'Select Country',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.white.withValues(alpha: 0.95)
+                                      : Colors.black.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      NeonGlassCard(child: _homeCategoriesGrid(context)),
+                      const SizedBox(height: 20),
+                      NeonGlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Your Progress', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w700,
+                                )),
+                            const SizedBox(height: 8),
+                            _progressChart(context),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      NeonGlassCard(
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Recent attempts', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
+                                      fontWeight: FontWeight.w700,
+                                    )),
+                                TextButton(onPressed: () => context.go('/attempts'), child: const Text('View all')),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            _recentAttempts(context, ref),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Center(child: _zenovFooter(context)),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _signedOutHome(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        NeonGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Welcome', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('Sign in to sync progress across devices, or explore categories without an account.', style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.9) : Colors.black.withValues(alpha: 0.75))),
+                const SizedBox(height: 12),
+                Row(children: [
+                  FilledButton(onPressed: () => GoRouter.of(context).go('/auth'), child: const Text('Sign in')),
+                  const SizedBox(width: 8),
+                  OutlinedButton(onPressed: () => GoRouter.of(context).go('/categories'), child: const Text('Explore')),
+                ])
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _homeCategoriesGrid(BuildContext context) {
+    return Consumer(builder: (context, ref, _) {
+      final catsAsync = ref.watch(categoriesProvider);
+      final db = ref.watch(dbProvider);
+      final user = ref.watch(currentUserProvider);
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return catsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, st) => Text('Failed to load categories: $e'),
+        data: (cats) {
+          return FutureBuilder<bool>(
+            future: () async {
+              if (user == null) return false;
+              final row = await (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull();
+              return row?.isPro ?? false;
+            }(),
+            builder: (context, snap) {
+              final isPro = snap.data ?? false;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(0),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.1,
+                ),
+                itemCount: cats.length,
+                itemBuilder: (context, i) {
+                  final c = cats[i];
+                  final icon = [Icons.biotech, Icons.science, Icons.bubble_chart, Icons.functions][i % 4];
+                  return TapScale(
+                    onTap: () {
+                      context.go('/categories/${c.id}');
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: c.imageUrl.isEmpty
+                            ? LinearGradient(colors: [
+                                Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                                Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
+                              ], begin: Alignment.topLeft, end: Alignment.bottomRight)
+                            : null,
+                      ),
+                      child: Card(
+                        elevation: 0,
+                        color: Colors.transparent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        child: Stack(children: [
+                          if (c.locked && !isPro)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.all(6),
+                                child: const Icon(Icons.lock, size: 16, color: Colors.white),
+                              ),

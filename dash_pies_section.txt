@@ -1,0 +1,120 @@
+          ),
+        ),
+      );
+
+  Widget _examTile(BuildContext context, String title, int mins) => Card(
+        child: ListTile(
+          title: Text(title),
+          subtitle: Text('$mins mins'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {},
+        ),
+      );
+
+  
+  // New greeting + search + animated category progress pies
+  Widget _greetingAndProgress(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Hello, ${user?.email.split('@').first ?? 'User'}!', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 6),
+      Text('Start a new Test', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 12),
+      _searchBar(context),
+      const SizedBox(height: 16),
+      _categoryProgressBlock(context, ref),
+    ]);
+  }
+
+  Widget _searchBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(40),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(children: [
+        const SizedBox(width: 8),
+        const Icon(Icons.search, color: Colors.black38),
+        const SizedBox(width: 8),
+        const Expanded(
+          child: TextField(
+            decoration: InputDecoration.collapsed(hintText: 'Search a course'),
+          ),
+        ),
+        InkWell(
+          onTap: () => GoRouter.of(context).go('/categories'),
+          borderRadius: BorderRadius.circular(30),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            padding: const EdgeInsets.all(10),
+            child: const Icon(Icons.arrow_forward, color: Colors.white),
+          ),
+        )
+      ]),
+    );
+  }
+
+  Widget _categoryProgressBlock(BuildContext context, WidgetRef ref) {
+    final email = (ref.watch(currentUserProvider)?.email) ?? 'guest@local';
+    final async = ref.watch(categoryProgressProvider(email));
+    return async.when(
+      data: (items) {
+        if (items.isEmpty) return const Text('No categories yet');
+        final hasMany = items.length > 1;
+        final controller = PageController(viewportFraction: 0.88);
+        final height = 280.0;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: height,
+              child: PageView.builder(
+                controller: controller,
+                itemCount: items.length,
+                itemBuilder: (_, i) {
+                  final color = _piePalette[i % _piePalette.length];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                    child: _PieCard.big(item: items[i], color: color),
+                  );
+                },
+              ),
+            ),
+            if (hasMany)
+              Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: Text('Swipe to see more ▶', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+              ),
+          ],
+        );
+      },
+      loading: () => const SizedBox(height: 200, child: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Text('Failed to load progress: $e'),
+    );
+  }
+  Widget _progressChart(BuildContext context) {
+    return SizedBox(
+      height: 160,
+      child: Consumer(builder: (context, ref, _) {
+        final db = ref.watch(dbProvider);
+        final user = ref.watch(currentUserProvider);
+        final email = user?.email ?? 'guest@local';
+        return FutureBuilder(
+          future: (db.select(db.attempts)
+                ..where((t) => t.endedAt.isNotNull() & t.userEmail.equals(email))
+                ..orderBy([(t) => drift.OrderingTerm.desc(t.startedAt)])
+                ..limit(7))
+              .get(),
+          builder: (context, snap) {
+            final items = (snap.data ?? const <Attempt>[]).reversed.toList();
+            if (items.isEmpty) {
+              return NeonGlassCard(
+                padding: const EdgeInsets.all(12),
+                child: const Center(child: Padding(padding: EdgeInsets.all(12.0), child: Text('No attempts yet'))),
+              );
+            }
+            final isDark = Theme.of(context).brightness == Brightness.dark;

@@ -1,0 +1,24 @@
+        final rows = await _db.customSelect(
+          'SELECT q.id FROM questions q '
+          'WHERE q.id NOT IN (SELECT question_id FROM question_subcategories WHERE subcategory_id = ?) '
+          'ORDER BY RANDOM() LIMIT ?',
+          variables: [drift.Variable(sid), drift.Variable(perSubcategory)],
+          readsFrom: { _db.questions, _db.questionSubcategories },
+        ).get();
+        final ids = rows.map((r) => r.data['id'] as int).toList();
+        await _db.batch((b) {
+          b.insertAll(_db.questionSubcategories, [for (final id in ids) QuestionSubcategoriesCompanion.insert(questionId: id, subcategoryId: sid)]);
+        });
+      }
+    });
+  }
+}
+
+final adminRepositoryProvider = Provider<AdminRepository>((ref) {
+  final dbi = ref.watch(dbProvider);
+  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  final hasApi = env != null && env.apiBaseUrl.isNotEmpty;
+  final adminApi = hasApi ? ref.watch(adminApiProvider) : null;
+  final contentApi = hasApi ? ref.watch(contentApiProvider) : null;
+  return AdminRepository(dbi, adminApi, contentApi);
+});

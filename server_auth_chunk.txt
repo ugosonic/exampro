@@ -1,0 +1,60 @@
+  try {
+    const r = await client.query('SELECT id, password_hash, role FROM users WHERE email = $1', [email]);
+    if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_credentials' });
+    const { id, password_hash: hash, role } = r.rows[0];
+    const ok = await bcrypt.compare(password, hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+    const roleClaim = ADMIN_SET.has(String(email).toLowerCase()) ? 'admin' : role;
+    const tokens = signTokens({ id, email, role: roleClaim });
+    return res.json(tokens);
+  } finally { client.release(); }
+});
+
+app.post('/auth/refresh', async (req, res) => {
+  const { refresh } = req.body || {};
+  if (!refresh) return res.status(400).json({ error: 'invalid_input' });
+  try {
+    const { sub } = jwt.verify(refresh, JWT_SECRET, { audience: 'exampro-mobile', issuer: 'exampro-auth' });
+    const client = await pool.connect();
+    try {
+      const r = await client.query('SELECT email, role FROM users WHERE id = $1', [sub]);
+      if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_token' });
+      const user = { id: sub, email: r.rows[0].email, role: r.rows[0].role };
+      const tokens = signTokens(user);
+      return res.json(tokens);
+    } finally { client.release(); }
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+});
+
+app.get('/auth/me', auth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT id, email, role FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'not_found' });
+    return res.json(r.rows[0]);
+  } finally { client.release(); }
+});
+
+// Content version
+app.get('/sync/version', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT version FROM content_meta WHERE id = 1');
+    if (r.rowCount === 0) {
+      await client.query('INSERT INTO content_meta(id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+    }
+    const r2 = await client.query('SELECT version FROM content_meta WHERE id = 1');
+    return res.json({ version: r2.rows[0].version });
+  } finally { client.release(); }
+});
+
+const TABLES = ['categories','subcategories','exams','questions','choices','exam_questions','exam_grade_bands'];
+
+// Full snapshot
+app.get('/sync/snapshot', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const ver = await client.query('SELECT version FROM content_meta WHERE id = 1');
+    const data = { version: ver.rows[0]?.version };

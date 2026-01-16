@@ -1,0 +1,24 @@
+              return _softSlide(state, ExamDetailScreen(examId: id));
+            },
+          ),
+          GoRoute(
+            path: '/player/:id',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id'] ?? '0';
+              final aid = int.tryParse(state.uri.queryParameters['aid'] ?? '');
+              final mode = state.uri.queryParameters['mode'];
+              final cat = int.tryParse(state.uri.queryParameters['cat'] ?? '');
+              return _softSlide(state, ExamPlayerScreen(examId: id, attemptId: aid, mode: mode, categoryId: cat));
+            },
+          ),
+          GoRoute(
+            path: '/result/:attemptId',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['attemptId'] ?? '0';
+              return _softSlide(state, ExamResultScreen(attemptId: id));
+            },
+          ),
+          GoRoute(
+            path: '/saved',
+            pageBuilder: (context, state) => _softSlide(state, const SavedQuestionsScreen()),
+          ),

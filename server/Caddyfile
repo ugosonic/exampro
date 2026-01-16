@@ -1,0 +1,19 @@
+{
+  email you@example.com
+}
+
+# Replace api.example.com with your domain
+api.example.com {
+  encode gzip
+  route /media/* {
+    uri strip_prefix /media
+    root * /srv/media
+    file_server browse
+  }
+  reverse_proxy /* api:8000 {
+    header_up Host {host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+  # Simple health
+  respond /health 200
+}

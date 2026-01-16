@@ -1,0 +1,60 @@
+      await (_db.delete(_db.examQuestions)..where((t) => t.questionId.equals(questionId))).go();
+      await (_db.delete(_db.questionCategories)..where((t) => t.questionId.equals(questionId))).go();
+      await (_db.delete(_db.questions)..where((t) => t.id.equals(questionId))).go();
+    });
+  }
+
+  // Exams
+  Stream<List<Exam>> watchExams() => _contentApi != null
+      ? Stream.fromFuture(_contentApi.exams().then((rows) => [
+            for (final m in rows)
+              Exam(
+                id: (m['id'] as num).toInt(),
+                title: m['title'] as String,
+                description: (m['description'] as String?) ?? '',
+                categoryId: (m['category_id'] as num).toInt(),
+                subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
+                questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
+                published: (m['published'] as bool?) ?? false,
+                timeLimitMinutes: (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
+                shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
+                negativeMarking: (m['negative_marking'] as bool?) ?? false,
+                passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
+                themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
+                pdfUrl: (m['pdf_url'] as String?) ?? '',
+              ),
+          ]))
+      : _db.select(_db.exams).watch();
+
+  // Localized exams stream: reacts to language and translation changes immediately
+  Stream<List<Exam>> watchExamsLocalized() {
+    if (_contentApi != null) {
+      return Stream.fromFuture(_contentApi.exams().then((rows) => [
+            for (final m in rows)
+              Exam(
+                id: (m['id'] as num).toInt(),
+                title: m['title'] as String,
+                description: (m['description'] as String?) ?? '',
+                categoryId: (m['category_id'] as num).toInt(),
+                subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
+                questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
+                published: (m['published'] as bool?) ?? false,
+                timeLimitMinutes: (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
+                shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
+                negativeMarking: (m['negative_marking'] as bool?) ?? false,
+                passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
+                themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
+                pdfUrl: (m['pdf_url'] as String?) ?? '',
+              ),
+          ]));
+    }
+    const sql =
+        'SELECT e.id, '
+        "COALESCE(NULLIF(t.v, ''), e.title) AS title, "
+        'e.description, e.category_id, e.subcategory_id, e.question_count, e.published, '
+        'e.time_limit_minutes, e.shuffle_options, e.negative_marking, e.pass_percent, e.theme_key, e.pdf_url '
+        'FROM exams e '
+        "LEFT JOIN app_settings s ON s.key = 'lang_code' "
+        "LEFT JOIN translations t ON t.entity = 'exams' AND t.entity_id = e.id AND t.k = 'title' AND t.lang = COALESCE(s.value, 'en') "
+        'ORDER BY e.id DESC';
+    return _db

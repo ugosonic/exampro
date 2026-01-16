@@ -1,0 +1,300 @@
+    if (_questions.isEmpty) {
+      return const Scaffold(
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+    final q = _questions[index];
+    final options = _options[q.id]!;
+    final correctIds = options.where((o) => o.isCorrect).map((o) => o.id).toSet();
+    final selected = _selections[q.id] ?? <int>{};
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Q ${index + 1}/${_questions.length}'),
+        actions: [
+          IconButton(
+            tooltip: 'Save',
+            icon: const Icon(Icons.bookmark_outline),
+            onPressed: () async {
+              final user = ref.read(currentUserProvider);
+              final email = user?.email ?? 'guest@local';
+              final q = _questions[index];
+              await ref.read(examRepositoryProvider).toggleSaved(questionId: q.id, userEmail: email);
+              _queueSync(email);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated saved questions')));
+              }
+            },
+          ),
+          if (widget.categoryId == null)
+            IconButton(
+              tooltip: 'Report',
+              icon: const Icon(Icons.flag_outlined),
+              onPressed: () async {
+                final comment = await _promptComment(context);
+                if (comment == null || comment.trim().isEmpty) return;
+                final user = ref.read(currentUserProvider);
+                final email = user?.email ?? 'guest@local';
+                await ref.read(examRepositoryProvider).submitReport(examId: examId, userEmail: email, comment: comment.trim());
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent')));
+                }
+              },
+            ),
+          if ((_exam?.timeLimitMinutes ?? 0) > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14),
+              child: Text(_formatTime(_remainingSec)),
+            ),
+        ],
+      ),
+      body: SafeArea(
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: _themeGradient(_exam?.themeKey ?? 0),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          q.body,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontSize: () {
+                                  final w = MediaQuery.of(context).size.width;
+                                  final v = (w * 0.06).clamp(18.0, 22.0);
+                                  return (v is double) ? v : (v as num).toDouble();
+                                }(),
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...options.map((o) => _option(context, o, correctIds.contains(o.id))),
+                        if (_mode == 'practice' && _revealed.contains(q.id))
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 250),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: _isSelectionCorrect(q, selected, correctIds)
+                                    ? Colors.green.withValues(alpha: 0.1)
+                                    : Colors.red.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(q.explanation.isEmpty ? ' ' : q.explanation),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    OutlinedButton(
+                      onPressed: () {
+                        _skipped.add(q.id);
+                        if (index < _questions.length - 1) {
+                          final i = index + 1;
+                          if (!_isPro && _questions[i].locked) {
+                            context.go('/upgrade');
+                          } else {
+                            setState(() => index = i);
+                          }
+                        } else {
+                          final pending = _firstSkippedPendingIndex();
+                          if (pending != null) {
+                            setState(() => index = pending);
+                          }
+                        }
+                      },
+                      child: const Text('Skip'),
+                    ),
+                    const Spacer(),
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                          foregroundColor: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        onPressed: index > 0
+                            ? () {
+                                final i = index - 1;
+                                if (!_isPro && _questions[i].locked) {
+                                  context.go('/upgrade');
+                                } else {
+                                  setState(() => index = i);
+                                }
+                              }
+                            : null,
+                        child: const Text('Back'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                        onPressed: () async {
+                          // Save answer (if any)
+                          if (attemptId != null) {
+                            final opts = _options[q.id]!;
+                            final correct = opts.where((x) => x.isCorrect).map((x) => x.id).toSet();
+                            final sel = _selections[q.id] ?? <int>{};
+                            final ok = _isSelectionCorrect(q, sel, correct);
+                            if (sel.isNotEmpty) {
+                              await ref.read(examRepositoryProvider).saveAnswer(
+                                    attemptId: attemptId!,
+                                    questionId: q.id,
+                                    selectedOptionIds: sel.toList(),
+                                    points: ok ? 1 : 0,
+                                    isCorrect: ok,
+                                  );
+                              final u = ref.read(currentUserProvider);
+                              _queueSync(u?.email ?? 'guest@local');
+                              _skipped.remove(q.id);
+                            }
+                          }
+
+                          if (_mode == 'practice') {
+                            if (!_revealed.contains(q.id)) {
+                              setState(() => _revealed.add(q.id));
+                              return;
+                            }
+                          }
+
+                          // Next / Submit or revisit skipped
+                          if (index < _questions.length - 1) {
+                            final i = index + 1;
+                            if (!_isPro && _questions[i].locked) {
+                              if (mounted) context.go('/upgrade');
+                            } else {
+                              setState(() => index = i);
+                            }
+                          } else {
+                            final pending = _firstSkippedPendingIndex();
+                            if (pending != null) {
+                              setState(() => index = pending);
+                            } else {
+                              ref.read(analyticsProvider).event('exam_submit', params: {'examId': widget.examId});
+                              final u = ref.read(currentUserProvider);
+                              _queueSync(u?.email ?? 'guest@local');
+                              await _autoSubmit();
+                            }
+                          }
+                        },
+                        child: Text(() {
+                          if (_mode == 'practice') {
+                            return !_revealed.contains(q.id)
+                                ? 'Check'
+                                : (index < _questions.length - 1 ? 'Next' : (_skipped.isNotEmpty ? 'Review Skipped' : 'Submit'));
+                          }
+                          return index < _questions.length - 1 ? 'Next' : (_skipped.isNotEmpty ? 'Review Skipped' : 'Submit');
+                        }()),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _option(BuildContext context, Choice o, bool isCorrect) {
+    final q = _questions[index];
+    final selected = _selections[q.id] ?? <int>{};
+    final isSelected = selected.contains(o.id);
+    final showCorrect = (_mode == 'practice') && _revealed.contains(q.id);
+    Color? bg;
+    Color? border;
+    Color iconColor = Theme.of(context).colorScheme.primary;
+    if (showCorrect) {
+      if (isCorrect) {
+        bg = Colors.green.withValues(alpha: 0.12);
+        border = Colors.green.withValues(alpha: 0.6);
+        iconColor = Colors.green;
+      } else if (isSelected) {
+        bg = Colors.red.withValues(alpha: 0.10);
+        border = Colors.red.withValues(alpha: 0.5);
+        iconColor = Colors.red;
+      }
+    } else {
+      if (isSelected) {
+        bg = Theme.of(context).colorScheme.primary.withValues(alpha: 0.10);
+        border = Theme.of(context).colorScheme.primary.withValues(alpha: 0.4);
+        iconColor = Theme.of(context).colorScheme.primary;
+      }
+    }
+    bg ??= Theme.of(context).cardTheme.color;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TapScale(
+        onTap: () async {
+          if (_mode == 'practice' && _revealed.contains(q.id)) return; // lock changes after reveal
+          setState(() {
+            final sel = _selections.putIfAbsent(q.id, () => <int>{});
+            if (q.multiple) {
+              if (sel.contains(o.id)) {
+                sel.remove(o.id);
+              } else {
+                sel.add(o.id);
+              }
+            } else {
+              sel
+                ..clear()
+                ..add(o.id);
+            }
+          });
+          if (attemptId != null) {
+            final options = _options[q.id]!;
+            final correct = options.where((x) => x.isCorrect).map((x) => x.id).toSet();
+            final sel = _selections[q.id] ?? <int>{};
+            final ok = _isSelectionCorrect(q, sel, correct);
+            await ref.read(examRepositoryProvider).saveAnswer(
+                  attemptId: attemptId!,
+                  questionId: q.id,
+                  selectedOptionIds: sel.toList(),
+                  points: ok ? 1 : 0,
+                  isCorrect: ok,
+                );
+            final u = ref.read(currentUserProvider);
+            _queueSync(u?.email ?? 'guest@local');
+            _skipped.remove(q.id);
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: bg,
+              border: Border.all(color: border ?? Colors.black12)),
+          child: Row(
+            children: [
+              Icon(
+                q.multiple
+                    ? (isSelected ? Icons.check_box : Icons.check_box_outline_blank)
+                    : (isSelected ? Icons.radio_button_checked : Icons.radio_button_off),
+                color: iconColor,
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(o.label)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+

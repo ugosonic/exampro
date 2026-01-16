@@ -1,0 +1,734 @@
+import express from 'express';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import pkg from 'pg';
+import jwt from 'jsonwebtoken';
+import Stripe from 'stripe';
+import nodemailer from 'nodemailer';
+import bcrypt from 'bcryptjs';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+
+// Load .env next to this file regardless of PM2/working directory
+try {
+  // Resolve .env relative to this file so PM2/working directory doesn't matter
+  const __dirname = (await import('path')).default.dirname(fileURLToPath(import.meta.url));
+  const join = (await import('path')).default.join;
+  dotenv.config({ path: join(__dirname, '.env') });
+} catch (_) {
+  dotenv.config();
+}
+const { Pool } = pkg;
+
+const { DATABASE_URL, SYNC_ADMIN_TOKEN, PORT = 8000, JWT_SECRET = 'change-me', ADMIN_EMAILS = '', STRIPE_SECRET_KEY = '', STRIPE_SUCCESS_URL = 'https://example.com/success', STRIPE_CANCEL_URL = 'https://example.com/cancel', SMTP_HOST = '', SMTP_PORT = '', SMTP_USER = '', SMTP_PASS = '', FROM_EMAIL = '' } = process.env;
+const ADMIN_SET = new Set(String(ADMIN_EMAILS).split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+if (!DATABASE_URL) { throw new Error('DATABASE_URL not set'); }
+const pool = new Pool({ connectionString: DATABASE_URL, ssl: DATABASE_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined });
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) : null;
+let mailer = null;
+if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  try {
+    mailer = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT || 465),
+      secure: (SMTP_PORT || '465') === '465',
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+  } catch (_) { mailer = null; }
+}
+
+const app = express();
+app.use(express.json({ limit: '25mb' }));
+
+// File uploads (PDFs)
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
+try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, UPLOAD_DIR); },
+  filename: function (req, file, cb) {
+    const safe = `${Date.now()}_${(file.originalname || 'file').replace(/[^\w.\-]+/g, '_')}`;
+    cb(null, safe);
+  }
+});
+const upload = multer({ storage });
+app.use('/files', express.static(UPLOAD_DIR));
+
+// JWT helpers
+const signTokens = (user) => {
+  const roleClaim = ADMIN_SET.has(String(user.email || '').toLowerCase()) ? 'admin' : (user.role || 'user');
+  const payload = { sub: String(user.id), email: user.email, role: roleClaim };
+  const access = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m', audience: 'exampro-mobile', issuer: 'exampro-auth' });
+  const refresh = jwt.sign({ sub: payload.sub }, JWT_SECRET, { expiresIn: '30d', audience: 'exampro-mobile', issuer: 'exampro-auth' });
+  return { access, refresh };
+};
+const auth = async (req, res, next) => {
+  const hdr = req.get('Authorization') || '';
+  if (!hdr.startsWith('Bearer ')) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const token = hdr.slice(7);
+    const decoded = jwt.verify(token, JWT_SECRET, { audience: 'exampro-mobile', issuer: 'exampro-auth' });
+    req.user = decoded;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+};
+
+// Allow either: (1) JWT with role=admin, or (2) SYNC_ADMIN_TOKEN bearer
+const adminGuard = async (req, res, next) => {
+  const hdr = req.get('Authorization') || '';
+  if (hdr.startsWith('Bearer ')) {
+    const token = hdr.slice(7);
+    if (SYNC_ADMIN_TOKEN && token === SYNC_ADMIN_TOKEN) {
+      req.user = { role: 'admin' };
+      return next();
+    }
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET, { audience: 'exampro-mobile', issuer: 'exampro-auth' });
+      if ((decoded.role || 'user') !== 'admin') return res.status(403).json({ error: 'forbidden' });
+      req.user = decoded;
+      return next();
+    } catch (_) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+  }
+  return res.status(401).json({ error: 'unauthorized' });
+};
+
+// Auth endpoints
+app.post('/auth/register', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password || password.length < 6) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    // Ensure table exists
+    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    const hash = await bcrypt.hash(password, 10);
+    const role = ADMIN_SET.has(String(email).toLowerCase()) ? 'admin' : 'user';
+    const r = await client.query('INSERT INTO users(email, password_hash, role) VALUES($1,$2,$3) ON CONFLICT (email) DO NOTHING RETURNING id', [email, hash, role]);
+    if (r.rowCount === 0) return res.status(409).json({ error: 'email_exists' });
+    const id = r.rows[0].id;
+    const tokens = signTokens({ id, email, role });
+    return res.json(tokens);
+  } finally { client.release(); }
+});
+
+app.post('/auth/sign-in', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT id, password_hash, role FROM users WHERE email = $1', [email]);
+    if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_credentials' });
+    const { id, password_hash: hash, role } = r.rows[0];
+    const ok = await bcrypt.compare(password, hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+    const roleClaim = ADMIN_SET.has(String(email).toLowerCase()) ? 'admin' : role;
+    const tokens = signTokens({ id, email, role: roleClaim });
+    return res.json(tokens);
+  } finally { client.release(); }
+});
+
+app.post('/auth/refresh', async (req, res) => {
+  const { refresh } = req.body || {};
+  if (!refresh) return res.status(400).json({ error: 'invalid_input' });
+  try {
+    const { sub } = jwt.verify(refresh, JWT_SECRET, { audience: 'exampro-mobile', issuer: 'exampro-auth' });
+    const client = await pool.connect();
+    try {
+      const r = await client.query('SELECT email, role FROM users WHERE id = $1', [sub]);
+      if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_token' });
+      const user = { id: sub, email: r.rows[0].email, role: r.rows[0].role };
+      const tokens = signTokens(user);
+      return res.json(tokens);
+    } finally { client.release(); }
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+});
+
+app.get('/auth/me', auth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT id, email, role FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'not_found' });
+    return res.json(r.rows[0]);
+  } finally { client.release(); }
+});
+
+// Content version
+app.get('/sync/version', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT version FROM content_meta WHERE id = 1');
+    if (r.rowCount === 0) {
+      await client.query('INSERT INTO content_meta(id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+    }
+    const r2 = await client.query('SELECT version FROM content_meta WHERE id = 1');
+    return res.json({ version: r2.rows[0].version });
+  } finally { client.release(); }
+});
+
+const TABLES = ['categories','subcategories','exams','questions','choices','exam_questions','exam_grade_bands'];
+
+// Full snapshot
+app.get('/sync/snapshot', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const ver = await client.query('SELECT version FROM content_meta WHERE id = 1');
+    const data = { version: ver.rows[0]?.version };
+    for (const t of TABLES) {
+      const rows = await client.query(`SELECT * FROM ${t}`);
+      data[t] = rows.rows;
+    }
+    return res.json(data);
+  } finally { client.release(); }
+});
+
+// Progress endpoints
+app.post('/sync/user-progress', async (req, res) => {
+  const { email, data } = req.body || {};
+  if (!email || !data) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("CREATE TABLE IF NOT EXISTS user_attempts (user_email TEXT NOT NULL, local_id INT NOT NULL, exam_id INT NOT NULL, mode TEXT NOT NULL, started_at TIMESTAMPTZ NOT NULL, ended_at TIMESTAMPTZ NULL, score INT NULL, score_percent INT NOT NULL DEFAULT 0, grade_label TEXT NOT NULL DEFAULT '' , PRIMARY KEY(user_email, local_id))");
+    await client.query("CREATE TABLE IF NOT EXISTS user_attempt_answers (user_email TEXT NOT NULL, local_attempt_id INT NOT NULL, question_id INT NOT NULL, selected TEXT NOT NULL, time_ms INT NOT NULL DEFAULT 0, is_correct BOOLEAN NOT NULL DEFAULT FALSE, points INT NOT NULL DEFAULT 0, PRIMARY KEY(user_email, local_attempt_id, question_id))");
+    await client.query("CREATE TABLE IF NOT EXISTS user_saved_questions (user_email TEXT NOT NULL, question_id INT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(user_email, question_id))");
+    for (const m of (data.attempts || [])) {
+      await client.query('INSERT INTO user_attempts(user_email, local_id, exam_id, mode, started_at, ended_at, score, score_percent, grade_label) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(user_email, local_id) DO UPDATE SET exam_id=EXCLUDED.exam_id, mode=EXCLUDED.mode, started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at, score=EXCLUDED.score, score_percent=EXCLUDED.score_percent, grade_label=EXCLUDED.grade_label', [email, m.id, m.exam_id, m.mode, m.started_at, m.ended_at, m.score, m.score_percent, m.grade_label]);
+    }
+    for (const m of (data.answers || [])) {
+      await client.query('INSERT INTO user_attempt_answers(user_email, local_attempt_id, question_id, selected, time_ms, is_correct, points) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(user_email, local_attempt_id, question_id) DO UPDATE SET selected=EXCLUDED.selected, time_ms=EXCLUDED.time_ms, is_correct=EXCLUDED.is_correct, points=EXCLUDED.points', [email, m.attempt_id, m.question_id, m.selected, m.time_ms, m.is_correct, m.points]);
+    }
+    for (const m of (data.saved || [])) {
+      await client.query('INSERT INTO user_saved_questions(user_email, question_id, created_at) VALUES ($1,$2,$3) ON CONFLICT(user_email, question_id) DO UPDATE SET created_at=EXCLUDED.created_at', [email, m.question_id, m.created_at]);
+    }
+    await client.query('COMMIT');
+    return res.json({ ok: true });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    return res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+app.get('/sync/user-progress', async (req, res) => {
+  const email = req.query.email;
+  if (!email) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const attempts = (await client.query('SELECT local_id AS id, exam_id, mode, started_at, ended_at, score, score_percent, grade_label FROM user_attempts WHERE user_email = $1 ORDER BY started_at', [email])).rows;
+    const answers = (await client.query('SELECT local_attempt_id AS attempt_id, question_id, selected, time_ms, is_correct, points FROM user_attempt_answers WHERE user_email = $1 ORDER BY local_attempt_id, question_id', [email])).rows;
+    const saved = (await client.query('SELECT question_id, created_at FROM user_saved_questions WHERE user_email = $1', [email])).rows;
+    return res.json({ attempts, answers, saved });
+  } finally { client.release(); }
+});
+
+// Public catalog endpoints (read-only)
+app.get('/catalog/categories', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT id, name, "order", pass_percent, image_url, locked FROM categories ORDER BY "order", name');
+    return res.json(r.rows);
+  } finally { client.release(); }
+});
+
+app.get('/catalog/subcategories', async (req, res) => {
+  const { category_id } = req.query;
+  const client = await pool.connect();
+  try {
+    const sql = 'SELECT id, category_id, name, "order", image_url, locked FROM subcategories' + (category_id ? ' WHERE category_id = $1' : '') + ' ORDER BY "order", name';
+    const params = category_id ? [category_id] : [];
+    const r = await client.query(sql, params);
+    return res.json(r.rows);
+  } finally { client.release(); }
+});
+
+app.get('/catalog/exams', async (req, res) => {
+  const { category_id, subcategory_id } = req.query;
+  const client = await pool.connect();
+  try {
+    const where = [];
+    const params = [];
+    if (category_id) { params.push(category_id); where.push(`category_id = $${params.length}`); }
+    if (subcategory_id) { params.push(subcategory_id); where.push(`subcategory_id = $${params.length}`); }
+    const sql = `SELECT id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key FROM exams ${where.length ? ('WHERE ' + where.join(' AND ')) : ''} ORDER BY id`;
+    const r = await client.query(sql, params);
+    return res.json(r.rows);
+  } finally { client.release(); }
+});
+
+app.get('/catalog/exam/:id/questions', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid_id' });
+  const client = await pool.connect();
+  try {
+    const joins = await client.query('SELECT question_id, "order", points FROM exam_questions WHERE exam_id = $1 ORDER BY "order"', [id]);
+    if (joins.rowCount === 0) return res.json({ order: [], questions: [], choices: [] });
+    const qids = [...new Set(joins.rows.map(r => r.question_id))];
+    const qs = await client.query('SELECT id, body, explanation, multiple, locked FROM questions WHERE id = ANY($1::int[])', [qids]);
+    const cs = await client.query('SELECT id, question_id, label, is_correct, "order" FROM choices WHERE question_id = ANY($1::int[]) ORDER BY question_id, "order"', [qids]);
+    return res.json({ order: joins.rows, questions: qs.rows, choices: cs.rows });
+  } finally { client.release(); }
+});
+
+// Admin: bump content version
+app.post('/admin/bump-version', async (req, res) => {
+  if (!SYNC_ADMIN_TOKEN) return res.status(403).json({ error: 'Not configured' });
+  const authz = req.get('Authorization') || '';
+  if (!authz.startsWith('Bearer ')) return res.status(401).json({ error: 'Missing token' });
+  const token = authz.slice(7);
+  if (token !== SYNC_ADMIN_TOKEN) return res.status(403).json({ error: 'Invalid token' });
+  const client = await pool.connect();
+  try {
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    return res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+// Admin: import snapshot into Neon via server (uses DATABASE_URL of API)
+app.post('/admin/import-snapshot', adminGuard, async (req, res) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
+    const snap = req.body || {};
+    // Prepare media (category/subcategory images) from snapshot for hosting on VPS
+    // Snapshot may contain: media_files: [{ entity: 'categories'|'subcategories', entity_id: <id>, filename, content_base64 }]
+    const media = Array.isArray(snap.media_files) ? snap.media_files : [];
+    const mediaMap = new Map(); // key: `${entity}:${id}` => '/files/<name>'
+    try {
+      for (const m of media) {
+        const entity = m.entity;
+        const id = m.entity_id;
+        const b64 = m.content_base64 || '';
+        if (!entity || !id || !b64) continue;
+        const safeName = `${entity}_${id}_${(m.filename || 'file').replace(/[^\w.\-]+/g, '_')}`;
+        const dest = path.join(UPLOAD_DIR, safeName);
+        try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch {}
+        fs.writeFileSync(dest, Buffer.from(b64, 'base64'));
+        mediaMap.set(`${entity}:${id}`, `/files/${safeName}`);
+      }
+    } catch (_) { /* non-fatal */ }
+    const client = await pool.connect();
+    try {
+      // Ensure content_meta exists so we can bump version at the end
+      await client.query("CREATE TABLE IF NOT EXISTS content_meta (id INT PRIMARY KEY, version TIMESTAMPTZ NOT NULL DEFAULT now())");
+      await client.query("INSERT INTO content_meta(id) VALUES (1) ON CONFLICT (id) DO NOTHING");
+      await client.query('BEGIN');
+      // Clear existing content tables in dependency order
+      await client.query('DELETE FROM exam_grade_bands');
+      await client.query('DELETE FROM exam_questions');
+      await client.query('DELETE FROM choices');
+      await client.query('DELETE FROM questions');
+      await client.query('DELETE FROM exams');
+      await client.query('DELETE FROM question_categories');
+      await client.query('DELETE FROM question_subcategories');
+      await client.query('DELETE FROM subcategories');
+      await client.query('DELETE FROM categories');
+      await client.query('CREATE TABLE IF NOT EXISTS translations (id BIGSERIAL PRIMARY KEY, entity TEXT NOT NULL, entity_id BIGINT NOT NULL, lang TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL)');
+      await client.query('DELETE FROM translations');
+
+      const cats = snap.categories || [];
+      for (const c of cats) {
+        // Prefer uploaded media URL if provided; otherwise keep HTTP(S) URLs; ignore device-local paths
+        const hosted = mediaMap.get(`categories:${c.id}`);
+        const img = hosted || ((c.image_url && /^https?:/i.test(c.image_url)) ? c.image_url : '');
+        await client.query('INSERT INTO categories(id, name, "order", pass_percent, image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, "order"=EXCLUDED."order", pass_percent=EXCLUDED.pass_percent, image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [c.id, c.name, c.order || 0, c.pass_percent || 60, img, c.locked || false]);
+      }
+      const subs = snap.subcategories || [];
+      for (const s of subs) {
+        const hosted = mediaMap.get(`subcategories:${s.id}`);
+        const img = hosted || ((s.image_url && /^https?:/i.test(s.image_url)) ? s.image_url : '');
+        await client.query('INSERT INTO subcategories(id, category_id, name, "order", image_url, locked) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET category_id=EXCLUDED.category_id, name=EXCLUDED.name, "order"=EXCLUDED."order", image_url=EXCLUDED.image_url, locked=EXCLUDED.locked', [s.id, s.category_id, s.name, s.order || 0, img, s.locked || false]);
+      }
+      const exams = snap.exams || [];
+      for (const e of exams) {
+        await client.query('INSERT INTO exams(id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, pdf_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, \'\')) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, category_id=EXCLUDED.category_id, subcategory_id=EXCLUDED.subcategory_id, question_count=EXCLUDED.question_count, published=EXCLUDED.published, time_limit_minutes=EXCLUDED.time_limit_minutes, shuffle_options=EXCLUDED.shuffle_options, negative_marking=EXCLUDED.negative_marking, pass_percent=EXCLUDED.pass_percent, theme_key=EXCLUDED.theme_key, pdf_url=EXCLUDED.pdf_url', [e.id, e.title, e.description || '', e.category_id, e.subcategory_id, e.question_count || 0, e.published || false, e.time_limit_minutes || 0, e.shuffle_options ?? true, e.negative_marking || false, e.pass_percent || 60, e.theme_key || 0, e.pdf_url || '']);
+      }
+      const qs = snap.questions || [];
+      for (const q of qs) {
+        await client.query('INSERT INTO questions(id, body, explanation, multiple, locked) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET body=EXCLUDED.body, explanation=EXCLUDED.explanation, multiple=EXCLUDED.multiple, locked=EXCLUDED.locked', [q.id, q.body, q.explanation || '', q.multiple || false, q.locked || false]);
+      }
+      const ch = snap.choices || [];
+      for (const c of ch) {
+        await client.query('INSERT INTO choices(id, question_id, label, is_correct, "order") VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET question_id=EXCLUDED.question_id, label=EXCLUDED.label, is_correct=EXCLUDED.is_correct, "order"=EXCLUDED."order"', [c.id, c.question_id, c.label, c.is_correct || false, c.order || 0]);
+      }
+      const eq = snap.exam_questions || [];
+      for (const j of eq) {
+        await client.query('INSERT INTO exam_questions(id, exam_id, question_id, "order", points) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET exam_id=EXCLUDED.exam_id, question_id=EXCLUDED.question_id, "order"=EXCLUDED."order", points=EXCLUDED.points', [j.id, j.exam_id, j.question_id, j.order || 0, j.points || 1]);
+      }
+      const bands = snap.exam_grade_bands || [];
+      for (const b of bands) {
+        await client.query('INSERT INTO exam_grade_bands(id, exam_id, min_percent, label, color) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET exam_id=EXCLUDED.exam_id, min_percent=EXCLUDED.min_percent, label=EXCLUDED.label, color=EXCLUDED.color', [b.id, b.exam_id, b.min_percent, b.label, b.color || '#4CAF50']);
+      }
+      const trans = snap.translations || [];
+      for (const t of trans) {
+        await client.query('INSERT INTO translations(entity, entity_id, lang, k, v) VALUES($1,$2,$3,$4,$5)', [t.entity, t.entity_id, t.lang, t.k, t.v]);
+      }
+      await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+      await client.query('COMMIT');
+      return res.json({ ok: true });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
+      console.error('import-snapshot failed inner:', e);
+      return res.status(500).json({ error: 'failed' });
+    } finally { client.release(); }
+  } catch (e) {
+    console.error('import-snapshot failed outer:', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Admin: upload PDF (JWT required, admin role)
+app.post('/admin/upload/pdf', auth, (req, res) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
+    upload.single('file')(req, res, function (err) {
+      if (err) return res.status(400).json({ error: 'upload_failed' });
+      if (!req.file) return res.status(400).json({ error: 'no_file' });
+      const url = `/files/${req.file.filename}`;
+      return res.json({ url });
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Admin: upload generic image (JWT required, admin role)
+app.post('/admin/upload/image', auth, (req, res) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin')) return res.status(403).json({ error: 'forbidden' });
+    upload.single('file')(req, res, function (err) {
+      if (err) return res.status(400).json({ error: 'upload_failed' });
+      if (!req.file) return res.status(400).json({ error: 'no_file' });
+      const url = `/files/${req.file.filename}`;
+      return res.json({ url });
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Public config (allows toggling upgrade prompts globally)
+app.get('/config', async (req, res) => {
+  const upgradeDisabled = (process.env.UPGRADE_DISABLED || '0') === '1';
+  res.json({ upgrade_disabled: upgradeDisabled });
+});
+
+// Simple success/cancel landing pages for Stripe (used only for redirect detection in app)
+app.get('/success', (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send('<html><body><h2>Payment success</h2><p>You can close this page.</p></body></html>');
+});
+app.get('/cancel', (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send('<html><body><h2>Payment canceled</h2><p>You can close this page.</p></body></html>');
+});
+
+// Store a payment record in Postgres (used by app after checkout success)
+app.post('/payments/record', auth, async (req, res) => {
+  const { amount_minor = 0, currency = 'GBP', session_id = '', payment_intent_id = '' } = req.body || {};
+  const email = (req.user && req.user.email) || '';
+  if (!email || !amount_minor || amount_minor <= 0) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+    const stripeId = payment_intent_id || session_id || '';
+    await client.query('INSERT INTO payments(user_email, amount_minor, currency, stripe_session_id, status) VALUES($1,$2,$3,$4,$5)', [email, amount_minor, String(currency).toUpperCase(), stripeId, 'paid']);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('payments/record error', e);
+    return res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+// Admin: list payments
+app.get('/admin/payments', adminGuard, async (req, res) => {
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+    const rows = await client.query('SELECT id, user_email, amount_minor, currency, stripe_session_id, status, refunded, created_at FROM payments ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
+    return res.json(rows.rows);
+  } finally { client.release(); }
+});
+
+// Admin: refund a payment via Stripe (full amount)
+app.post('/admin/refund', adminGuard, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY, user_email TEXT NOT NULL, amount_minor INT NOT NULL, currency TEXT NOT NULL, stripe_session_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'paid', refunded BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+    const r = await client.query('SELECT amount_minor, stripe_session_id, refunded FROM payments WHERE id = $1', [id]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'not_found' });
+    const row = r.rows[0];
+    if (row.refunded) return res.json({ ok: true });
+    const pi = row.stripe_session_id; // stores PaymentIntent id for PaymentSheet
+    if (!pi) return res.status(400).json({ error: 'missing_payment_intent' });
+    await stripe.refunds.create({ payment_intent: pi, amount: row.amount_minor });
+    await client.query("UPDATE payments SET refunded = TRUE, status = 'refunded' WHERE id = $1", [id]);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('admin/refund error', e);
+    return res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+// Admin: send email via SMTP (Hostinger). Authorization: Bearer <SYNC_ADMIN_TOKEN> or admin JWT
+app.post('/admin/send-email', adminGuard, async (req, res) => {
+  if (!mailer || !FROM_EMAIL) return res.status(503).json({ error: 'smtp_not_configured' });
+  const { to = [], subject = '', text = '', html = '' } = req.body || {};
+  try {
+    if (!Array.isArray(to) || to.length === 0 || !subject) return res.status(400).json({ error: 'invalid_input' });
+    await mailer.sendMail({
+      from: FROM_EMAIL,
+      to: to.join(','),
+      subject,
+      text: text || undefined,
+      html: html || undefined,
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('send-email error', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Payments: create Stripe Checkout Session with server-side secret
+app.post('/payments/checkout', auth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  try {
+    const { currency = 'GBP', amount_minor = 0, product_name = 'Pro Upgrade' } = req.body || {};
+    const amount = Number(amount_minor) || 0;
+    if (amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: String(currency).toLowerCase(),
+          unit_amount: amount,
+          product_data: { name: product_name },
+        },
+        quantity: 1,
+      }],
+      success_url: `${STRIPE_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${STRIPE_CANCEL_URL}`,
+    });
+    return res.json({ url: session.url, id: session.id });
+  } catch (e) {
+    console.error('stripe checkout error', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Payments: create PaymentIntent for PaymentSheet (native in-app)
+app.post('/payments/intent', auth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'stripe_not_configured' });
+  try {
+    const { currency = 'GBP', amount_minor = 0 } = req.body || {};
+    const amount = Number(amount_minor) || 0;
+    if (amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
+    const intent = await stripe.paymentIntents.create({
+      amount,
+      currency: String(currency).toLowerCase(),
+      automatic_payment_methods: { enabled: true },
+    });
+    return res.json({ client_secret: intent.client_secret });
+  } catch (e) {
+    console.error('stripe intent error', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Admin CRUD for content (create/update/delete)
+app.post('/admin/categories', adminGuard, async (req, res) => {
+  const { name, order = 0, pass_percent = 60, image_url = '' } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const r = await client.query('INSERT INTO categories(name, "order", pass_percent, image_url) VALUES ($1,$2,$3,$4) RETURNING id', [name, order, pass_percent, image_url]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ id: r.rows[0].id });
+  } finally { client.release(); }
+});
+
+app.put('/admin/categories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'invalid_id' });
+  const fields = ['name','order','pass_percent','image_url','locked'];
+  const sets = [];
+  const vals = [];
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
+      vals.push(req.body[f]);
+      sets.push(`${f === 'order' ? '"order"' : f} = $${vals.length}`);
+    }
+  }
+  const client = await pool.connect();
+  try {
+    if (sets.length) await client.query(`UPDATE categories SET ${sets.join(', ')} WHERE id = $${vals.length + 1}`, [...vals, id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/categories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM categories WHERE id=$1', [id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/admin/subcategories', adminGuard, async (req, res) => {
+  const { category_id, name, order = 0, image_url = '' } = req.body || {};
+  if (!category_id || !name) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const r = await client.query('INSERT INTO subcategories(category_id, name, "order", image_url) VALUES ($1,$2,$3,$4) RETURNING id', [category_id, name, order, image_url]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ id: r.rows[0].id });
+  } finally { client.release(); }
+});
+
+app.put('/admin/subcategories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const fields = ['name','order','image_url','locked'];
+  const sets = [];
+  const vals = [];
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) {
+      vals.push(req.body[f]);
+      sets.push(`${f === 'order' ? '"order"' : f} = $${vals.length}`);
+    }
+  }
+  const client = await pool.connect();
+  try {
+    if (sets.length) await client.query(`UPDATE subcategories SET ${sets.join(', ')} WHERE id = $${vals.length + 1}`, [...vals, id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/subcategories/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM subcategories WHERE id=$1', [id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/admin/exams', adminGuard, async (req, res) => {
+  const { title, description = '', category_id, subcategory_id = null, time_limit_minutes = 0, pass_percent = 60, shuffle_options = true, negative_marking = false, published = false, theme_key = 0, pdf_url = '' } = req.body || {};
+  if (!title || !category_id) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    const r = await client.query('INSERT INTO exams(title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id', [title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url]);
+    const id = r.rows[0].id;
+    await client.query("INSERT INTO exam_grade_bands(exam_id, min_percent, label) VALUES ($1,90,'Distinction'), ($1,75,'Merit'), ($1,$2,'Pass')", [id, pass_percent]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ id });
+  } finally { client.release(); }
+});
+
+app.put('/admin/exams/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const fields = ['title','description','category_id','subcategory_id','time_limit_minutes','pass_percent','shuffle_options','negative_marking','published','theme_key','pdf_url'];
+  const sets = [];
+  const vals = [];
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, f)) { vals.push(req.body[f]); sets.push(`${f} = $${vals.length}`); }
+  }
+  const client = await pool.connect();
+  try {
+    if (sets.length) await client.query(`UPDATE exams SET ${sets.join(', ')} WHERE id = $${vals.length + 1}`, [...vals, id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/exams/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM exams WHERE id=$1', [id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/admin/exams/:id/questions', adminGuard, async (req, res) => {
+  const examId = Number(req.params.id);
+  const { text, explanation = '', options = [], points = 1, order = 0 } = req.body || {};
+  if (!text || !Array.isArray(options) || options.length === 0) return res.status(400).json({ error: 'invalid_input' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const q = await client.query('INSERT INTO questions(body, explanation) VALUES ($1,$2) RETURNING id', [text, explanation]);
+    const qid = q.rows[0].id;
+    for (let i = 0; i < options.length; i++) {
+      const o = options[i];
+      await client.query('INSERT INTO choices(question_id, label, is_correct, "order") VALUES ($1,$2,$3,$4)', [qid, (o.text || ''), !!o.correct, i]);
+    }
+    await client.query('INSERT INTO exam_questions(exam_id, question_id, "order", points) VALUES ($1,$2,$3,$4)', [examId, qid, order, points]);
+    await client.query('UPDATE exams SET question_count = (SELECT COUNT(*) FROM exam_questions WHERE exam_id = $1) WHERE id = $1', [examId]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    await client.query('COMMIT');
+    res.json({ id: qid });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+app.put('/admin/questions/:id', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const { body, explanation = '', options = [] } = req.body || {};
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (body != null) await client.query('UPDATE questions SET body=$1, explanation=$2 WHERE id=$3', [body, explanation, id]);
+    await client.query('DELETE FROM choices WHERE question_id = $1', [id]);
+    for (let i = 0; i < options.length; i++) {
+      const o = options[i];
+      await client.query('INSERT INTO choices(question_id, label, is_correct, "order") VALUES ($1,$2,$3,$4)', [id, (o.text || ''), !!o.correct, i]);
+    }
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/exams/:examId/questions/:questionId', adminGuard, async (req, res) => {
+  const examId = Number(req.params.examId); const qid = Number(req.params.questionId);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM exam_questions WHERE exam_id=$1 AND question_id=$2', [examId, qid]);
+    await client.query('UPDATE exams SET question_count = (SELECT COUNT(*) FROM exam_questions WHERE exam_id = $1) WHERE id = $1', [examId]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+// Admin: list registered users (from online DB)
+app.get('/admin/users', adminGuard, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    const rows = await client.query('SELECT id, email, role FROM users ORDER BY id DESC');
+    return res.json(rows.rows);
+  } finally { client.release(); }
+});
+
+// Bind explicitly on IPv4 so clients that use IPv4 addresses can connect even if the OS reports '::'
+app.listen(PORT, '0.0.0.0', () => console.log(`API listening on ${PORT}`));

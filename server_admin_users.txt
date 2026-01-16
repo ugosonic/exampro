@@ -1,0 +1,34 @@
+      await client.query('INSERT INTO choices(question_id, label, is_correct, "order") VALUES ($1,$2,$3,$4)', [id, (o.text || ''), !!o.correct, i]);
+    }
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: 'failed' });
+  } finally { client.release(); }
+});
+
+app.delete('/admin/exams/:examId/questions/:questionId', adminGuard, async (req, res) => {
+  const examId = Number(req.params.examId); const qid = Number(req.params.questionId);
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM exam_questions WHERE exam_id=$1 AND question_id=$2', [examId, qid]);
+    await client.query('UPDATE exams SET question_count = (SELECT COUNT(*) FROM exam_questions WHERE exam_id = $1) WHERE id = $1', [examId]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+// Admin: list registered users (from online DB)
+app.get('/admin/users', adminGuard, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    const rows = await client.query('SELECT id, email, role FROM users ORDER BY id DESC');
+    return res.json(rows.rows);
+  } finally { client.release(); }
+});
+
+// Bind explicitly on IPv4 so clients that use IPv4 addresses can connect even if the OS reports '::'
+app.listen(PORT, '0.0.0.0', () => console.log(`API listening on ${PORT}`));

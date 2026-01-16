@@ -1,0 +1,250 @@
+  @override
+  Widget build(BuildContext context) {
+    final color = (Theme.of(context).brightness == Brightness.dark)
+        ? const Color(0xFF69B7FF)
+        : const Color(0xFF9ED7FF);
+    final child = CustomPaint(
+      size: const Size(120, 140),
+      painter: _DotsPainter(color.withValues(alpha: 0.8)),
+    );
+    return Positioned(top: top, right: right, bottom: bottom, left: left, child: child);
+  }
+}
+
+class _DotsPainter extends CustomPainter {
+  final Color c;
+  _DotsPainter(this.c);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = c
+      ..style = PaintingStyle.fill;
+    const spacing = 12.0;
+    const r = 2.0;
+    for (double y = 0; y < size.height; y += spacing) {
+      for (double x = 0; x < size.width; x += spacing) {
+        canvas.drawCircle(Offset(x, y), r, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DotsPainter oldDelegate) => false;
+}
+
+/// Big title with gradient word
+class _HeroTitle extends StatelessWidget {
+  final bool isDark;
+  final double? fontSize;
+  const _HeroTitle({required this.isDark, this.fontSize});
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).textTheme.headlineMedium?.copyWith(
+          fontWeight: FontWeight.w900,
+          height: 1.05,
+          fontSize: fontSize,
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Discover the best',
+          style: base?.copyWith(
+            color: isDark ? Colors.white : const Color(0xFF0B2540),
+          ),
+        ),
+        _GradientWord('citizenship', style: base),
+        Text(
+          'practice tests',
+          style: base?.copyWith(color: const Color(0xFFFFC107)),
+        ),
+      ],
+    );
+  }
+}
+
+class _GradientWord extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  const _GradientWord(this.text, {this.style});
+  @override
+  Widget build(BuildContext context) {
+    const gradient =
+        LinearGradient(colors: [Color(0xFF22D3EE), Color(0xFF2EA5FF)]);
+    return ShaderMask(
+      shaderCallback: (bounds) =>
+          gradient.createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
+      child: Text(
+        text,
+        style: (style ?? const TextStyle()).copyWith(color: Colors.white),
+      ),
+    );
+  }
+}
+
+/// Rotating set of waving flags placed at bottom-right
+class _FlagCycler extends StatefulWidget {
+  const _FlagCycler();
+  @override
+  State<_FlagCycler> createState() => _FlagCyclerState();
+}
+
+class _FlagCyclerState extends State<_FlagCycler>
+    with TickerProviderStateMixin {
+  late final AnimationController _wave;
+  int _index = 0;
+  Timer? _timer;
+  static const _flags = ['🇨🇦', '🇬🇧', '🇦🇺', '🇺🇸'];
+
+  @override
+  void initState() {
+    super.initState();
+    _wave = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      setState(() => _index = (_index + 1) % _flags.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _wave.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = isDark ? Colors.white : const Color(0xFF0B2540);
+    return AnimatedBuilder(
+      animation: _wave,
+      builder: (context, _) {
+        final angle = 0.06 * (2 * (_wave.value - 0.5));
+        return Transform.rotate(
+          angle: angle,
+          child: Text(
+            _flags[_index],
+            style: TextStyle(
+              fontSize: 38,
+              shadows: [
+                Shadow(color: color.withValues(alpha: 0.25), blurRadius: 4),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Countries & tests ticker with slide-in animation every 2 seconds
+class _PracticeTestsTicker extends StatefulWidget {
+  const _PracticeTestsTicker();
+  @override
+  State<_PracticeTestsTicker> createState() => _PracticeTestsTickerState();
+}
+
+class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
+    with SingleTickerProviderStateMixin {
+  static const _items = [
+    (
+      flag: '🇬🇧',
+      country: 'United Kingdom',
+      test: 'Life in the UK Test',
+      desc:
+          'A test on British history, culture, and government. Applicants also need a secure English test (e.g., IELTS Life Skills, Trinity GESE).',
+    ),
+    (
+      flag: '🇺🇸',
+      country: 'United States',
+      test: 'American Civics & English',
+      desc:
+          'Includes an English test (speaking, reading, writing) and an oral civics test on U.S. history and government.',
+    ),
+    (
+      flag: '🇨🇦',
+      country: 'Canada',
+      test: 'Canadian Citizenship Test',
+      desc:
+          'Assesses knowledge of Canada’s history, geography, government, and citizenship rights and responsibilities.',
+    ),
+    (
+      flag: '🇦🇺',
+      country: 'Australia',
+      test: 'Australian Citizenship Test',
+      desc: 'Covers Australian values, history, and symbols.',
+    ),
+  ];
+
+  late final AnimationController _ac =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _ac.forward();
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      await _ac.reverse();
+      setState(() => _index = (_index + 1) % _items.length);
+      _ac.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final on = isDark ? Colors.white : const Color(0xFF0B2540);
+    final sub = on.withValues(alpha: 0.78);
+    final item = _items[_index];
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: AnimatedBuilder(
+          animation: _ac,
+          builder: (context, _) {
+            final dx = (1 - _ac.value) * -18.0;
+            final op = _ac.value;
+            return Opacity(
+              opacity: op,
+              child: Transform.translate(
+                offset: Offset(dx, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.flag, style: const TextStyle(fontSize: 30)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${item.country} • ${item.test}',
+                            style: TextStyle(
+                              color: on,
+                              fontWeight: FontWeight.w900,
+                              height: 1.2,

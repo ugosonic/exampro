@@ -1,0 +1,80 @@
+                    Switch(value: _readonly, onChanged: (v) => setState(() => _readonly = v)),
+                    const SizedBox(width: 6), const Text('Read-only (PDF mode)'),
+                  ]),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.save),
+                      label: const Text('Save'),
+                      onPressed: _saveSettings,
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  const Align(alignment: Alignment.centerLeft, child: Text('Reorder or remove questions')),
+                ]),
+              ),
+              Expanded(
+                child: ReorderableListView.builder(
+                  itemBuilder: (_, i) {
+                    final item = _items[i];
+                    return Dismissible(
+                      key: ValueKey(item.id),
+                      background: Container(color: Colors.redAccent),
+                      onDismissed: (_) async {
+                        await ref.read(adminRepositoryProvider).removeQuestionFromExam(widget.examId, item.id);
+                        setState(() => _items.removeAt(i));
+                      },
+                      child: ListTile(
+                        key: ValueKey('tile-${item.id}'),
+                        title: Text(item.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        trailing: const Icon(Icons.drag_handle),
+                        onTap: () async {
+                          // For brevity: navigate to builder to add new questions; editing existing in-place would reuse dialog
+                        },
+                      ),
+                    );
+                  },
+                  itemCount: _items.length,
+                  onReorder: (oldIndex, newIndex) async {
+                    final idx = newIndex > oldIndex ? newIndex - 1 : newIndex;
+                    setState(() {
+                      final it = _items.removeAt(oldIndex);
+                      _items.insert(idx, it);
+                    });
+                    await ref.read(adminRepositoryProvider).reorderExamQuestions(widget.examId, _items.map((e) => e.id).toList());
+                  },
+                ),
+              ),
+            ]),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addQuestion,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Future<void> _addQuestion() async {
+    final body = TextEditingController();
+    final opts = List.generate(4, (i) => {'label': '', 'correct': false});
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        return AlertDialog(
+          title: const Text('Add Question'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                TextField(controller: body, decoration: const InputDecoration(labelText: 'Question text')),
+                const SizedBox(height: 8),
+                for (var i = 0; i < opts.length; i++)
+                  Row(children: [
+                    Expanded(child: TextField(onChanged: (v) => opts[i]['label'] = v, decoration: InputDecoration(labelText: 'Option ${i + 1}'))),
+                    const SizedBox(width: 8),
+                    Checkbox(value: (opts[i]['correct'] as bool?) ?? false, onChanged: (v) => set(() => opts[i]['correct'] = v ?? false)),
+                  ]),
+                TextButton.icon(onPressed: () => set(() => opts.add({'label': '', 'correct': false})), icon: const Icon(Icons.add), label: const Text('Add option')),
+              ]),
+            ),
+          ),
