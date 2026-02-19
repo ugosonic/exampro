@@ -82,7 +82,7 @@ jobs:
               exit 1
             fi
             # Clean up old fixed-name containers from earlier deployments.
-            docker rm -f exampro_api citizentest_api exampro_caddy citizentest_caddy 2>/dev/null || true
+            docker rm -f exampro_api citizentest_api exampro_caddy citizentest_caddy citizentest-api-1 citizentest-caddy-1 2>/dev/null || true
             docker compose -p citizentest down --remove-orphans || true
             docker compose -p citizentest pull || true
             docker compose -p citizentest up -d --build --remove-orphans
