@@ -81,7 +81,10 @@ jobs:
               echo "ERROR: $APP_DIR/.env is missing. Create it on VPS first."
               exit 1
             fi
-            docker compose pull || true
-            docker compose up -d --build
+            # Clean up old fixed-name containers from earlier deployments.
+            docker rm -f exampro_api citizentest_api exampro_caddy citizentest_caddy 2>/dev/null || true
+            docker compose -p citizentest down --remove-orphans || true
+            docker compose -p citizentest pull || true
+            docker compose -p citizentest up -d --build --remove-orphans
             docker system prune -f
 
