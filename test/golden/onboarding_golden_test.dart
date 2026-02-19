@@ -1,18 +1,24 @@
-<<<<<<< HEAD
-import 'package:exampro/app/app.dart';
+import 'package:citizentest/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_test/flutter_test.dart';
-=======
-import 'package:citizentest/app/app.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 import 'package:golden_toolkit/golden_toolkit.dart';
 
 void main() {
   testGoldens('Onboarding golden', (tester) async {
     await loadAppFonts();
-    final widget = const ProviderScope(child: ExamProApp());
-    await tester.pumpWidgetBuilder(widget);
+    const widget = ProviderScope(
+      child: MaterialApp(
+        home: TickerMode(
+          enabled: false,
+          child: OnboardingScreen(),
+        ),
+      ),
+    );
+    await tester.pumpWidgetBuilder(
+      widget,
+      surfaceSize: const Size(430, 932),
+    );
+    await tester.pump();
     await screenMatchesGolden(tester, 'onboarding_initial');
   });
 }

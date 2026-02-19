@@ -39,7 +39,7 @@ class AppShell extends ConsumerWidget {
         width: double.infinity,
         color: Colors.orange.withValues(alpha: 0.9),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: const SafeArea(top: true, bottom: false, child: Text('No internet connection. Please reconnect.', style: TextStyle(color: Colors.white))),
+        child: const SafeArea(top: true, bottom: false, child: Text('Cannot reach server. Check connection or try again.', style: TextStyle(color: Colors.white))),
       ),
       orElse: () => const SizedBox.shrink(),
     );

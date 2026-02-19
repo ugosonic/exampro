@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-
-class ExamDetailScreen extends StatelessWidget {
-=======
 import 'package:citizentest/core/i18n/tr_text.dart';
 import 'package:citizentest/core/db/app_database.dart';
 import 'package:citizentest/core/db/db_provider.dart';
@@ -16,45 +10,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 class ExamDetailScreen extends ConsumerWidget {
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
   final String examId;
   const ExamDetailScreen({super.key, required this.examId});
 
   @override
-<<<<<<< HEAD
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Exam')),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Mock Exam $examId', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              const Text('#questions: 50   •   Time: 60 mins   •   Pass: 50%'),
-              const SizedBox(height: 16),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'practice', label: Text('Practice')),
-                  ButtonSegment(value: 'mock', label: Text('Mock')),
-                  ButtonSegment(value: 'adaptive', label: Text('Adaptive')),
-                ],
-                selected: const {'practice'},
-                onSelectionChanged: (s) {},
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => context.go('/player/$examId'),
-                  child: const Text('Start'),
-                ),
-              )
-            ],
-          ),
-=======
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(dbProvider);
     final repo = ref.watch(examRepositoryProvider);
@@ -219,7 +178,7 @@ class ExamDetailScreen extends ConsumerWidget {
                                     },
                                   );
                                 },
-                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                separatorBuilder: (context, index) => const Divider(height: 1),
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -250,7 +209,8 @@ class ExamDetailScreen extends ConsumerWidget {
                                       final user = ref.read(currentUserProvider);
                                       final email = user?.email ?? 'guest@local';
                                       final existing = ongoing.isNotEmpty ? ongoing.first : await repo.findOngoingAttemptForExam(id, email);
-                                      if (existing != null && context.mounted) {
+                                      if (existing != null) {
+                                        if (!context.mounted) return;
                                         final choice = await showDialog<String>(
                                           context: context,
                                           builder: (ctx) => AlertDialog(
@@ -262,12 +222,14 @@ class ExamDetailScreen extends ConsumerWidget {
                                             ],
                                           ),
                                         );
+                                        if (!context.mounted) return;
                                         if (choice == 'resume') {
                                           context.go('/player/$examId?aid=${existing.id}&mode=assignment');
                                         } else if (choice == 'new') {
                                           context.go('/player/$examId?mode=assignment');
                                         }
                                       } else {
+                                        if (!context.mounted) return;
                                         context.go('/player/$examId?mode=assignment');
                                       }
                                     },
@@ -286,15 +248,12 @@ class ExamDetailScreen extends ConsumerWidget {
               },
             );
           },
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
         ),
       ),
     );
   }
 }
 
-<<<<<<< HEAD
-=======
 IconData _iconForExam(int examId) {
   const icons = [
     Icons.menu_book,
@@ -344,4 +303,3 @@ Future<String?> _promptComment(BuildContext context) async {
 
 
 
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

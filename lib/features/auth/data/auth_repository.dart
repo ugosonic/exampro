@@ -1,39 +1,5 @@
-<<<<<<< HEAD
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/core/security/credential_encryptor.dart';
-import 'package:exampro/features/auth/data/auth_api.dart';
-import 'package:exampro/features/auth/domain/models.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-class AuthRepository {
-  final AuthApi _api;
-  final TokenStore _tokenStore;
-  final CredentialEncryptor _encryptor;
-  AuthRepository(this._api, this._tokenStore, this._encryptor);
-
-  Future<User> signIn(String email, String password) async {
-    final tokens = await _api.signIn(email: email, password: password);
-    await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
-    return _api.me();
-  }
-
-  Future<User> signUp(String email, String password) async {
-    final encryptedEmail = _encryptor.encryptToBase64(email.trim());
-    final encryptedPassword = _encryptor.encryptToBase64(password);
-    final tokens = await _api.signUp(email: encryptedEmail, password: encryptedPassword);
-    await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
-    return _api.me();
-  }
-
-  Future<User> me() => _api.me();
-
-  Future<void> requestDeleteCode(String email) => _api.requestDeleteCode(email: email.trim());
-
-  Future<void> deleteAccount({required String email, required String code}) async {
-    await _api.deleteAccount(email: email.trim(), code: code.trim());
-    await _tokenStore.clear();
-=======
 import 'dart:math';
+import 'dart:convert';
 
 import 'package:citizentest/core/auth/token_store.dart';
 import 'package:citizentest/core/db/app_database.dart' as db;
@@ -48,149 +14,196 @@ class AuthRepository {
   final db.AppDatabase _db;
   final TokenStore _tokenStore;
   final AuthApi? _remote;
-  final String _adminEmailsCsv;
-  AuthRepository(this._db, this._tokenStore, [this._remote, this._adminEmailsCsv = '']);
+  AuthRepository(this._db, this._tokenStore, [this._remote]);
 
   Future<auth_models.User> signIn(String email, String password) async {
     if (_remote != null) {
       final tokens = await _remote.signIn(email: email, password: password);
-      // Save tokens first so /auth/me can authorize
-      await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
-      final me = await _remote.me();
-      // Re-save with identity details
-      await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh, userId: me.id, email: me.email));
-      // Respect local admin override for same email
-      final local = await (_db.select(_db.users)..where((u) => u.email.equals(me.email))).getSingleOrNull();
-      final envAdmins = _adminEmailsCsv.split(',').map((e) => e.trim().toLowerCase()).toSet();
-      final role = (local?.role == 'admin' || envAdmins.contains(me.email.toLowerCase())) ? 'admin' : me.role;
-      // Persist/update local user row for role/pro checks used by UI
-      try {
-        await _db.into(_db.users).insertOnConflictUpdate(
-              db.UsersCompanion.insert(
-                email: me.email,
-                password: '',
-                role: drift.Value(role),
-              ),
-            );
-      } catch (_) {}
-      return auth_models.User(id: me.id, email: me.email, role: role);
+      await _tokenStore.save(
+        TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh),
+      );
+      final user = await _remoteUser(tokens.access, fallbackEmail: email);
+      await _upsertLocalUser(user, password: password);
+      return user;
     }
-    final existing = await (_db.select(_db.users)..where((u) => u.email.equals(email))).getSingleOrNull();
+    final existing = await (_db.select(
+      _db.users,
+    )..where((u) => u.email.equals(email))).getSingleOrNull();
     if (existing == null || existing.password != password) {
       throw Exception('Invalid credentials');
     }
     final uid = existing.id.toString();
-    await _tokenStore.save(TokenBundle(
-      accessToken: _randToken('access', uid),
-      refreshToken: _randToken('refresh', uid),
-      userId: uid,
-    ));
-    return auth_models.User(id: uid, email: existing.email, role: existing.role);
+    await _tokenStore.save(
+      TokenBundle(
+        accessToken: randToken('access', uid),
+        refreshToken: randToken('refresh', uid),
+        userId: uid,
+      ),
+    );
+    return auth_models.User(
+      id: uid,
+      email: existing.email,
+      role: existing.role,
+    );
   }
 
   Future<auth_models.User> register(String email, String password) async {
     if (_remote != null) {
       final tokens = await _remote.register(email: email, password: password);
-      // Save tokens first so /auth/me can authorize
-      await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
-      final me = await _remote.me();
-      // Re-save with identity details
-      await _tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh, userId: me.id, email: me.email));
-      // Persist local row so role/is_pro checks work
-      final envAdmins = _adminEmailsCsv.split(',').map((e) => e.trim().toLowerCase()).toSet();
-      final role = envAdmins.contains(me.email.toLowerCase()) ? 'admin' : me.role;
-      try {
-        await _db.into(_db.users).insertOnConflictUpdate(
-              db.UsersCompanion.insert(
-                email: me.email,
-                password: '',
-                role: drift.Value(role),
-              ),
-            );
-      } catch (_) {}
-      return auth_models.User(id: me.id, email: me.email, role: role);
+      await _tokenStore.save(
+        TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh),
+      );
+      final user = await _remoteUser(tokens.access, fallbackEmail: email);
+      await _upsertLocalUser(user, password: password);
+      return user;
     }
-    final count = await _db.customSelect('SELECT COUNT(*) AS c FROM users').getSingle().then((r) => r.data['c'] as int);
+    final count = await _db
+        .customSelect('SELECT COUNT(*) AS c FROM users')
+        .getSingle()
+        .then((r) => r.data['c'] as int);
     final role = count == 0 ? 'admin' : 'user';
     final id = await _db
         .into(_db.users)
-        .insert(db.UsersCompanion.insert(email: email, password: password, role: drift.Value(role)));
+        .insert(
+          db.UsersCompanion.insert(
+            email: email,
+            password: password,
+            role: drift.Value(role),
+          ),
+        );
     final uid = id.toString();
-    await _tokenStore.save(TokenBundle(
-      accessToken: _randToken('access', uid),
-      refreshToken: _randToken('refresh', uid),
-      userId: uid,
-    ));
+    await _tokenStore.save(
+      TokenBundle(
+        accessToken: randToken('access', uid),
+        refreshToken: randToken('refresh', uid),
+        userId: uid,
+      ),
+    );
     return auth_models.User(id: uid, email: email, role: role);
   }
 
   Future<auth_models.User> me() async {
     if (_remote != null) {
-      try {
-        final me = await _remote.me();
-        final local = await (_db.select(_db.users)..where((u) => u.email.equals(me.email))).getSingleOrNull();
-        final envAdmins = _adminEmailsCsv.split(',').map((e) => e.trim().toLowerCase()).toSet();
-        final role = (local?.role == 'admin' || envAdmins.contains(me.email.toLowerCase())) ? 'admin' : me.role;
-        // Upsert local row for downstream checks
-        try {
-          await _db.into(_db.users).insertOnConflictUpdate(
-                db.UsersCompanion.insert(
-                  email: me.email,
-                  password: '',
-                  role: drift.Value(role),
-                ),
-              );
-        } catch (_) {}
-        return auth_models.User(id: me.id, email: me.email, role: role);
-      } catch (_) {
-        // Dev-only fallback: if using mock API, reconstruct user from stored tokens
-        if (_remote is AuthApiMock) {
-          final email = await _tokenStore.getEmail();
-          if (email != null && email.isNotEmpty) {
-            final local = await (_db.select(_db.users)..where((u) => u.email.equals(email))).getSingleOrNull();
-            final envAdmins = _adminEmailsCsv.split(',').map((e) => e.trim().toLowerCase()).toSet();
-            final role = (local?.role == 'admin' || envAdmins.contains(email.toLowerCase())) ? 'admin' : (local?.role ?? 'user');
-            final uid = await _tokenStore.getUserId() ?? (local?.id.toString() ?? 'u_local');
-            return auth_models.User(id: uid, email: email, role: role);
-          }
-        }
-        rethrow;
-      }
+      final user = await _remote.me();
+      await _upsertLocalUser(user);
+      return user;
     }
     final uid = await _tokenStore.getUserId();
     if (uid == null) throw Exception('No session');
-    final row = await (_db.select(_db.users)..where((u) => u.id.equals(int.parse(uid)))).getSingle();
+    final row = await (_db.select(
+      _db.users,
+    )..where((u) => u.id.equals(int.parse(uid)))).getSingle();
     return auth_models.User(id: uid, email: row.email, role: row.role);
   }
 
   Future<void> forgotPassword(String email) async {
-    if (_remote == null) throw Exception('Forgot password requires network');
+    if (_remote == null) {
+      throw Exception('Forgot password requires network');
+    }
     await _remote.requestPasswordReset(email: email);
   }
 
-  String _randToken(String pfx, String uid) {
+  Future<void> requestDeleteCode(String email) async {
+    if (_remote != null) {
+      throw Exception('Delete account requires server support');
+    }
+  }
+
+  Future<void> deleteAccount({
+    required String email,
+    required String code,
+  }) async {
+    if (_remote != null) {
+      throw Exception('Delete account requires server support');
+    }
+    await (_db.delete(_db.users)..where((u) => u.email.equals(email))).go();
+    await _tokenStore.clear();
+  }
+
+  String randToken(String pfx, String uid) {
     final rng = Random();
-    final n = List.generate(16, (_) => rng.nextInt(16).toRadixString(16)).join();
+    final n = List.generate(
+      16,
+      (_) => rng.nextInt(16).toRadixString(16),
+    ).join();
     return 'local-$pfx-$uid-$n';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
+  }
+
+  Future<auth_models.User> _remoteUser(
+    String accessToken, {
+    required String fallbackEmail,
+  }) async {
+    try {
+      return await _remote!.me(accessToken: accessToken);
+    } catch (_) {
+      final user = _userFromJwt(accessToken, fallbackEmail: fallbackEmail);
+      if (user != null) return user;
+      rethrow;
+    }
+  }
+
+  auth_models.User? _userFromJwt(
+    String token, {
+    required String fallbackEmail,
+  }) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      final payload =
+          jsonDecode(
+                utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+              )
+              as Map<String, dynamic>;
+      final id = (payload['sub']?.toString() ?? '').trim();
+      if (id.isEmpty) return null;
+      final email = (payload['email']?.toString() ?? fallbackEmail).trim();
+      final role = (payload['role']?.toString() ?? 'user').trim();
+      return auth_models.User(id: id, email: email, role: role);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _upsertLocalUser(
+    auth_models.User user, {
+    String? password,
+  }) async {
+    final existing = await (_db.select(
+      _db.users,
+    )..where((u) => u.email.equals(user.email))).getSingleOrNull();
+    if (existing == null) {
+      await _db
+          .into(_db.users)
+          .insert(
+            db.UsersCompanion.insert(
+              email: user.email,
+              password: password ?? '',
+              role: drift.Value(user.role),
+            ),
+            mode: drift.InsertMode.insertOrIgnore,
+          );
+      return;
+    }
+    await (_db.update(
+      _db.users,
+    )..where((u) => u.email.equals(user.email))).write(
+      db.UsersCompanion(
+        role: drift.Value(user.role),
+        password: password != null
+            ? drift.Value(password)
+            : const drift.Value.absent(),
+      ),
+    );
   }
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-<<<<<<< HEAD
-  final api = ref.watch(authApiProvider);
-  final store = ref.watch(tokenStoreProvider);
-  final encryptor = ref.watch(credentialEncryptorProvider);
-  return AuthRepository(api, store, encryptor);
-});
-=======
   final dbi = ref.watch(dbProvider);
   final store = ref.watch(tokenStoreProvider);
-  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  final env = ref
+      .watch(envLoaderProvider)
+      .maybeWhen(data: (e) => e, orElse: () => null);
   final hasApi = env != null && (env.apiBaseUrl.isNotEmpty);
   final remote = hasApi ? ref.watch(authApiProvider) : null;
-  final admins = env?.adminEmails ?? '';
-  return AuthRepository(dbi, store, remote, admins);
+  return AuthRepository(dbi, store, remote);
 });
-
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

@@ -1,19 +1,5 @@
 import 'dart:async';
 
-<<<<<<< HEAD
-import 'package:exampro/app/router_notifier.dart';
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/features/admin/presentation/admin_console_screen.dart';
-import 'package:exampro/features/auth/presentation/delete_account_screen.dart';
-import 'package:exampro/features/auth/presentation/sign_in_screen.dart';
-import 'package:exampro/features/auth/presentation/sign_up_screen.dart';
-import 'package:exampro/features/catalog/presentation/categories_screen.dart';
-import 'package:exampro/features/dashboard/presentation/dashboard_screen.dart';
-import 'package:exampro/features/exam/presentation/exam_detail_screen.dart';
-import 'package:exampro/features/exam/presentation/exam_player_screen.dart';
-import 'package:exampro/features/onboarding/presentation/onboarding_screen.dart';
-=======
 import 'package:citizentest/app/router_notifier.dart';
 import 'package:citizentest/app/app_shell.dart';
 import 'package:citizentest/core/auth/token_store.dart';
@@ -37,13 +23,10 @@ import 'package:drift/drift.dart' as drift;
 import 'package:citizentest/core/db/app_database.dart';
 import 'package:citizentest/features/profile/presentation/profile_screen.dart';
 import 'package:citizentest/features/auth/presentation/sign_up_screen.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-<<<<<<< HEAD
-=======
 bool _didRestoreLastRoute = false;
 
 class _RouteSaver extends NavigatorObserver {
@@ -80,52 +63,12 @@ class _RouteSaver extends NavigatorObserver {
     super.didPop(route, previousRoute);
   }
 }
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
   final tokenStore = ref.watch(tokenStoreProvider);
   return GoRouter(
     initialLocation: '/onboarding',
     refreshListenable: notifier,
-<<<<<<< HEAD
-    redirect: (context, state) => _redirect(ref, tokenStore, state),
-    routes: [
-      GoRoute(
-        path: '/onboarding',
-        pageBuilder: (context, state) => _fade(state, const OnboardingScreen()),
-      ),
-      GoRoute(
-        path: '/auth',
-        pageBuilder: (context, state) => _softSlide(state, const SignInScreen()),
-      ),
-      GoRoute(
-        path: '/register',
-        pageBuilder: (context, state) => _softSlide(state, const SignUpScreen()),
-      ),
-      GoRoute(
-        path: '/delete-account',
-        pageBuilder: (context, state) => _softSlide(state, const DeleteAccountScreen()),
-      ),
-      GoRoute(
-        path: '/dashboard',
-        pageBuilder: (context, state) => _fade(state, const DashboardScreen()),
-      ),
-      GoRoute(
-        path: '/categories',
-        pageBuilder: (context, state) => _softSlide(state, const CategoriesScreen()),
-      ),
-      GoRoute(
-        path: '/exam/:id',
-        pageBuilder: (context, state) => _softSlide(state, ExamDetailScreen(examId: state.pathParameters['id']!)),
-      ),
-      GoRoute(
-        path: '/player/:id',
-        pageBuilder: (context, state) => _softSlide(state, ExamPlayerScreen(examId: state.pathParameters['id']!)),
-      ),
-      GoRoute(
-        path: '/admin',
-        pageBuilder: (context, state) => _fade(state, const AdminConsoleScreen()),
-=======
     observers: [_RouteSaver(ref)],
     redirect: (context, state) => _redirect(ref, tokenStore, state),
     routes: [
@@ -223,7 +166,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => _fade(state, const AdminConsoleScreen()),
           ),
         ],
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
       ),
     ],
   );
@@ -232,21 +174,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) async {
   final user = ref.read(currentUserProvider);
   final hasTokens = await tokens.hasTokens();
-<<<<<<< HEAD
-  final loggingIn = state.matchedLocation == '/auth';
-  final onboarding = state.matchedLocation == '/onboarding';
-  final registering = state.matchedLocation == '/register';
-  final deleting = state.matchedLocation == '/delete-account';
-  final goingAdmin = state.matchedLocation.startsWith('/admin');
-
-  if (!hasTokens) {
-    if (loggingIn || onboarding || registering || deleting) return null;
-    return '/onboarding';
-  }
-  // Has tokens
-  if (loggingIn || onboarding) return '/dashboard';
-  if (goingAdmin && (user == null || user.role != 'admin')) return '/dashboard';
-=======
   final signedIn = hasTokens && user != null;
   final loc = state.matchedLocation;
   final loggingIn = loc == '/auth';
@@ -282,7 +209,6 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
     final active = ref.read(paymentFlowActiveProvider);
     if (!active) return '/dashboard';
   }
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
   return null;
 }
 
@@ -306,7 +232,4 @@ CustomTransitionPage _softSlide(GoRouterState state, Widget child) => CustomTran
         );
       },
     );
-<<<<<<< HEAD
-=======
 
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

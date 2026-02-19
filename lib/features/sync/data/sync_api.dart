@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:citizentest/core/config/env_loader.dart';
 import 'package:citizentest/core/network/dio_client.dart';
 import 'package:citizentest/features/sync/data/pg_content_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -61,8 +62,28 @@ class PgSyncApi extends SyncApi {
   Future<Map<String, dynamic>> fetchUserProgress(String email) => _pg.fetchUserProgress(email);
 }
 
+class DisabledSyncApi extends SyncApi {
+  DisabledSyncApi() : super(Dio());
+
+  @override
+  Future<Map<String, dynamic>> snapshot() async {
+    throw StateError('Sync API is disabled because API_BASE_URL is not configured.');
+  }
+
+  @override
+  Future<String> version() async => '';
+
+  @override
+  Future<void> upsertUserProgress(String email, Map<String, dynamic> data) async {}
+
+  @override
+  Future<Map<String, dynamic>> fetchUserProgress(String email) async => <String, dynamic>{};
+}
+
 final syncApiProvider = Provider<SyncApi>((ref) {
-  // Always use HTTP API hosted on the VPS so client devices don’t need
-  // direct Postgres access or a local DATABASE_URL.
+  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  if (env == null || env.apiBaseUrl.isEmpty) {
+    return DisabledSyncApi();
+  }
   return SyncApi(ref.watch(dioProvider));
 });

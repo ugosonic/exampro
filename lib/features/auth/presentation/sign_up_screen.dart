@@ -1,31 +1,3 @@
-<<<<<<< HEAD
-import 'package:exampro/features/auth/presentation/sign_up_state.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
-class SignUpScreen extends ConsumerWidget {
-  const SignUpScreen({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(signUpControllerProvider);
-    final controller = ref.read(signUpControllerProvider.notifier);
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                key: const Key('signup_email_field'),
-                keyboardType: TextInputType.emailAddress,
-                enabled: !state.loading,
-                decoration: InputDecoration(labelText: 'Email', errorText: state.emailError),
-=======
 import 'package:citizentest/features/auth/presentation/sign_up_state.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
@@ -94,17 +66,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF4DA3FF))),
                   errorText: state.emailError,
                 ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
                 onChanged: controller.onEmailChanged,
               ),
               const SizedBox(height: 12),
               TextField(
-<<<<<<< HEAD
-                key: const Key('signup_password_field'),
-                obscureText: true,
-                enabled: !state.loading,
-                decoration: InputDecoration(labelText: 'Password', errorText: state.passwordError),
-=======
                 obscureText: _obscure1,
                 enabled: !state.loading,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black87),
@@ -122,34 +87,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     onPressed: () => setState(() => _obscure1 = !_obscure1),
                   ),
                 ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
                 onChanged: controller.onPasswordChanged,
               ),
               const SizedBox(height: 12),
               TextField(
-<<<<<<< HEAD
-                key: const Key('signup_confirm_field'),
-                obscureText: true,
-                enabled: !state.loading,
-                decoration: InputDecoration(labelText: 'Confirm password', errorText: state.confirmError),
-                onChanged: controller.onConfirmChanged,
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: state.canSubmit && !state.loading
-                    ? () async {
-                        final ok = await controller.submit();
-                        if (ok && context.mounted) context.go('/dashboard');
-                      }
-                    : null,
-                child: state.loading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Register'),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: state.loading ? null : () => context.go('/auth'),
-=======
                 obscureText: _obscure2,
                 enabled: !state.loading,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black87),
@@ -196,23 +137,17 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => context.go('/auth'),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
                 child: const Text('Already have an account? Sign in'),
               ),
               if (state.errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Text(state.errorMessage!, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)),
-<<<<<<< HEAD
-              ],
-            ],
-=======
               ]
             ],
                   ),
                 ),
               ),
             ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
           ),
         ),
       ),

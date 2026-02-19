@@ -1,17 +1,9 @@
-<<<<<<< HEAD
-import 'package:exampro/core/utils/validators.dart';
-import 'package:exampro/features/auth/data/auth_repository.dart';
-import 'package:exampro/features/auth/domain/models.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-=======
 import 'package:citizentest/core/utils/validators.dart';
 import 'package:citizentest/features/auth/data/auth_repository.dart';
 import 'package:citizentest/features/auth/domain/models.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 
 class SignInState {
   final String email;
@@ -24,18 +16,16 @@ class SignInState {
     this.email = '',
     this.password = '',
     this.loading = false,
-<<<<<<< HEAD
-    this.emailError = null,
-    this.passwordError = null,
-    this.errorMessage = null,
-=======
     this.emailError,
     this.passwordError,
     this.errorMessage,
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
   });
 
-  bool get canSubmit => email.isNotEmpty && password.isNotEmpty && emailError == null && passwordError == null;
+  bool get canSubmit =>
+      email.isNotEmpty &&
+      password.isNotEmpty &&
+      emailError == null &&
+      passwordError == null;
 
   SignInState copyWith({
     String? email,
@@ -44,15 +34,14 @@ class SignInState {
     String? emailError,
     String? passwordError,
     String? errorMessage,
-  }) =>
-      SignInState(
-        email: email ?? this.email,
-        password: password ?? this.password,
-        loading: loading ?? this.loading,
-        emailError: emailError,
-        passwordError: passwordError,
-        errorMessage: errorMessage,
-      );
+  }) => SignInState(
+    email: email ?? this.email,
+    password: password ?? this.password,
+    loading: loading ?? this.loading,
+    emailError: emailError,
+    passwordError: passwordError,
+    errorMessage: errorMessage,
+  );
 }
 
 class SignInController extends StateNotifier<SignInState> {
@@ -86,27 +75,34 @@ class SignInController extends StateNotifier<SignInState> {
       state = state.copyWith(loading: false);
       return true;
     } catch (e) {
-<<<<<<< HEAD
-      state = state.copyWith(loading: false, errorMessage: 'Failed to sign in');
-=======
       var message = 'Failed to sign in';
       if (e is DioException) {
         final code = e.response?.statusCode ?? 0;
         if (code == 401) {
           message = 'Invalid email or password';
+        } else if (code == 400 || code == 404) {
+          final apiError = e.response?.data;
+          if (apiError is Map && apiError['error'] != null) {
+            message = 'Sign-in error: ${apiError['error']}';
+          } else {
+            message = 'Sign-in request failed ($code)';
+          }
         } else {
-          message = 'Cannot reach server. Check API_BASE_URL and that the backend is running.';
+          message =
+              'Cannot reach server. Check API_BASE_URL and backend status.';
         }
+      } else {
+        message = e.toString().replaceFirst('Exception: ', '');
       }
       state = state.copyWith(loading: false, errorMessage: message);
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
       return false;
     }
   }
 }
 
-final signInControllerProvider = StateNotifierProvider<SignInController, SignInState>((ref) {
-  final repo = ref.watch(authRepositoryProvider);
-  final user = ref.watch(currentUserProvider.notifier);
-  return SignInController(repo, user);
-});
+final signInControllerProvider =
+    StateNotifierProvider<SignInController, SignInState>((ref) {
+      final repo = ref.watch(authRepositoryProvider);
+      final user = ref.watch(currentUserProvider.notifier);
+      return SignInController(repo, user);
+    });

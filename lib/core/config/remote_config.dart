@@ -1,3 +1,4 @@
+import 'package:citizentest/core/config/env_loader.dart';
 import 'package:citizentest/core/network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,6 +21,10 @@ class RemoteConfig {
 }
 
 final remoteConfigProvider = FutureProvider<RemoteConfig>((ref) async {
+  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  if (env == null || env.apiBaseUrl.isEmpty) {
+    return const RemoteConfig(upgradeDisabled: false);
+  }
   final dio = ref.watch(dioProvider);
   try {
     final res = await dio.get('/config');

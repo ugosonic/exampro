@@ -1,19 +1,3 @@
-<<<<<<< HEAD
-import 'package:exampro/app/theme/theme_controller.dart';
-import 'package:exampro/common/widgets/tap_scale.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
-class DashboardScreen extends ConsumerWidget {
-  const DashboardScreen({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(themeModeProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('ExamPro'), actions: [
-=======
 import 'package:citizentest/app/theme/theme_controller.dart';
 import 'package:citizentest/common/widgets/tap_scale.dart';
 import 'package:flutter/material.dart';
@@ -26,12 +10,12 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:citizentest/core/db/db_provider.dart';
 import 'package:citizentest/core/db/app_database.dart';
 import 'package:drift/drift.dart' as drift;
-import 'package:citizentest/core/notifications/notifications.dart';
 import 'package:citizentest/common/widgets/neon_glass.dart';
 import 'package:citizentest/features/sync/data/sync_repository.dart';
 import 'package:citizentest/features/dashboard/data/progress_repository.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:citizentest/core/config/env_loader.dart';
+import 'package:citizentest/core/review/review_prompt.dart';
 
 // Top-level helper widget for category thumbnails (supports file or https URLs)
 class _CategoryImage extends ConsumerWidget {
@@ -42,10 +26,16 @@ class _CategoryImage extends ConsumerWidget {
     const w = 90.0, h = 60.0;
     final border = BorderRadius.circular(10);
     final resolved = src.trim();
-    if (resolved.isEmpty) return _fallback(w, h);
+    if (resolved.isEmpty) return fallback(w, h);
     Widget network(String url) => ClipRRect(
           borderRadius: border,
-          child: Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h)),
+          child: Image.network(
+            url,
+            width: w,
+            height: h,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => fallback(w, h),
+          ),
         );
     if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
       return network(resolved);
@@ -63,7 +53,7 @@ class _CategoryImage extends ConsumerWidget {
         final url = '${base.endsWith('/') ? base.substring(0, base.length - 1) : base}$resolved';
         return network(url);
       }
-      return _fallback(w, h);
+      return fallback(w, h);
     }
     final uri = Uri.tryParse(resolved);
     if (uri != null && uri.scheme == 'file') {
@@ -83,10 +73,10 @@ class _CategoryImage extends ConsumerWidget {
       final url = '$normalizedBase/$path';
       return network(url);
     }
-    return _fallback(w, h);
+    return fallback(w, h);
   }
 
-  Widget _fallback(double w, double h) => Container(
+  Widget fallback(double w, double h) => Container(
         width: w,
         height: h,
         color: Colors.white.withValues(alpha: 0.06),
@@ -110,6 +100,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     // No rebuilds on every scroll tick; use AnimatedBuilder in the widget tree instead
     // Ensure recent attempts sync from server so progress is portable across devices
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted) {
+        await ReviewPrompt.maybeShow(context, ref);
+      }
       final u = ref.read(currentUserProvider);
       final email = u?.email;
       if (email != null && email.isNotEmpty) {
@@ -131,7 +124,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final mode = ref.watch(themeModeProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Citizen Test'), actions: [
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
         IconButton(
           tooltip: 'Theme',
           onPressed: () {
@@ -141,32 +133,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           icon: Icon(mode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode),
         )
       ]),
-<<<<<<< HEAD
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _dailyGoal(context),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _card(context, 'Categories', Icons.category, onTap: () => context.go('/categories'))),
-                const SizedBox(width: 12),
-                Expanded(child: _card(context, 'Continue', Icons.play_arrow, onTap: () {})),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text('Recent exams', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _examTile(context, 'Biology Mock A', 45),
-            _examTile(context, 'Physics Practice', 12),
-            const SizedBox(height: 24),
-            TextButton(
-              onPressed: () => context.go('/delete-account'),
-              child: const Text('Delete account'),
-            ),
-          ],
-=======
       body: NeonBackground(
         child: SafeArea(
           child: user == null
@@ -193,12 +159,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       // Main white card slides subtly with scroll
                       AnimatedBuilder(
                         animation: _scroll,
-                        builder: (_, __) {
+                        builder: (context, child) {
                           final off = _scroll.hasClients ? (_scroll.offset / 400).clamp(0.0, 0.25) : 0.0;
                           return AnimatedSlide(
                             duration: const Duration(milliseconds: 200),
                             curve: Curves.easeOut,
-                            offset: Offset(0, off as double),
+                            offset: Offset(0, off),
                             child: NeonGlassCard(child: _greetingAndProgress(context, ref)),
                           );
                         },
@@ -262,33 +228,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ],
                   ),
                 ]),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
         ),
       ),
     );
   }
 
-<<<<<<< HEAD
-  Widget _dailyGoal(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          const Icon(Icons.local_fire_department, color: Colors.orange),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-              Text('Daily Goal', style: TextStyle(fontWeight: FontWeight.w600)),
-              SizedBox(height: 4),
-              Text('15 mins • Streak: 3 days')
-            ]),
-          ),
-          FilledButton(onPressed: () {}, child: const Text('Start'))
-        ],
-      ),
-    );
-=======
   Widget _signedOutHome(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -405,142 +349,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     });
   }
 
-  Widget _dailyGoal(BuildContext context) {
-    return Consumer(builder: (context, ref, _) {
-      final db = ref.watch(dbProvider);
-      return FutureBuilder(
-        future: (db.select(db.dailyGoals)..limit(1)).getSingleOrNull(),
-        builder: (context, snap) {
-          final g = snap.data;
-          final target = g?.minutesTarget ?? 15;
-          final notify = g?.notify ?? false;
-          return Container(
-            decoration: BoxDecoration(
-              gradient: _softGradients[0],
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3))],
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Icons.local_fire_department, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Daily Goal', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black.withValues(alpha: 0.85))),
-                    const SizedBox(height: 4),
-                    Text('$target mins • Notifications: ${notify ? 'On' : 'Off'}', style: TextStyle(color: Colors.black.withValues(alpha: 0.6)))
-                  ]),
-                ),
-                FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Theme.of(context).colorScheme.primary),
-                  onPressed: () => _editGoal(context, ref),
-                  child: const Text('Edit'),
-                )
-              ],
-            ),
-          );
-        },
-      );
-    });
-  }
-
-  Future<void> _editGoal(BuildContext context, WidgetRef ref) async {
-    final db = ref.read(dbProvider);
-    final existing = await (db.select(db.dailyGoals)..limit(1)).getSingleOrNull();
-    final minutes = TextEditingController(text: (existing?.minutesTarget ?? 15).toString());
-    bool notify = existing?.notify ?? false;
-    int hour = existing?.reminderHour ?? 9;
-    int minute = existing?.reminderMinute ?? 0;
-    DateTime? examDate = existing?.examDate;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
-        return AlertDialog(
-          title: const Text('Daily Goal'),
-          content: SizedBox(
-            width: 420,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: minutes, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Minutes per day')),
-              const SizedBox(height: 8),
-              SwitchListTile(value: notify, onChanged: (v) => set(() => notify = v), title: const Text('Daily reminder')),
-              Row(children: [
-                const Text('Reminder time:'),
-                const SizedBox(width: 8),
-                DropdownButton<int>(value: hour, items: [for (var h=0;h<24;h++) DropdownMenuItem(value: h, child: Text(h.toString().padLeft(2,'0')))], onChanged: (v) => set(() => hour = v ?? hour)),
-                const Text(':'),
-                DropdownButton<int>(value: minute, items: [for (var m=0;m<60;m+=5) DropdownMenuItem(value: m, child: Text(m.toString().padLeft(2,'0')))], onChanged: (v) => set(() => minute = v ?? minute)),
-              ]),
-              const SizedBox(height: 8),
-              Row(children: [
-                const Text('Exam date (optional):'),
-                const SizedBox(width: 8),
-                OutlinedButton(onPressed: () async { final picked = await showDatePicker(context: ctx, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)), initialDate: examDate ?? DateTime.now()); if (picked != null) set(() => examDate = picked); }, child: Text(examDate == null ? 'Pick date' : '${examDate!.year}-${examDate!.month}-${examDate!.day}')),
-              ])
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Save')),
-          ],
-        );
-      }),
-    );
-    if (ok == true) {
-      final mins = int.tryParse(minutes.text.trim()) ?? 15;
-      if (existing == null) {
-        await db.into(db.dailyGoals).insert(DailyGoalsCompanion.insert(
-          minutesTarget: drift.Value(mins),
-          notify: drift.Value(notify),
-          reminderHour: drift.Value(hour),
-          reminderMinute: drift.Value(minute),
-          examDate: examDate == null ? const drift.Value.absent() : drift.Value(examDate),
-        ));
-      } else {
-        await (db.update(db.dailyGoals)..where((t) => t.id.equals(existing.id))).write(DailyGoalsCompanion(
-          minutesTarget: drift.Value(mins),
-          notify: drift.Value(notify),
-          reminderHour: drift.Value(hour),
-          reminderMinute: drift.Value(minute),
-          examDate: drift.Value(examDate),
-        ));
-      }
-      if (notify) {
-        await NotificationsService.init();
-        await NotificationsService.scheduleDaily(1001, hour, minute, title: 'Daily goal', body: 'Practice for $mins minutes today.');
-      } else {
-        await NotificationsService.cancel(1001);
-      }
-    }
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
-  }
-
-  Widget _card(BuildContext context, String label, IconData icon, {VoidCallback? onTap}) => TapScale(
-        onTap: onTap,
-        child: Card(
-          child: SizedBox(
-            height: 100,
-            child: Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon), const SizedBox(height: 8), Text(label)]),
-            ),
-          ),
-        ),
-      );
-
-  Widget _examTile(BuildContext context, String title, int mins) => Card(
-        child: ListTile(
-          title: Text(title),
-          subtitle: Text('$mins mins'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () {},
-        ),
-      );
-<<<<<<< HEAD
-=======
-
-  
-  // New greeting + search + animated category progress pies
   Widget _greetingAndProgress(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -615,7 +423,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             if (hasMany)
               Padding(
                 padding: const EdgeInsets.only(top: 6.0),
-                child: Text('Swipe to see more ▶', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                child: Text('Swipe to see more â–¶', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
               ),
           ],
         );
@@ -682,7 +490,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       color: lineColor,
                       barWidth: 3,
                       belowBarData: BarAreaData(show: true, color: lineColor.withValues(alpha: 0.18)),
-                      dotData: FlDotData(show: true, getDotPainter: (s, __, ___, ____) => FlDotCirclePainter(radius: 3, color: lineColor, strokeWidth: 1, strokeColor: isDark ? Colors.white24 : Colors.black12)),
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                          radius: 3,
+                          color: lineColor,
+                          strokeWidth: 1,
+                          strokeColor: isDark ? Colors.white24 : Colors.black12,
+                        ),
+                      ),
                       spots: spots,
                     )
                   ],
@@ -693,34 +509,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           },
         );
       }),
-    );
-  }
-
-  Widget _maybeUpgradeCard(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(dbProvider);
-    final user = ref.watch(currentUserProvider);
-    if (user == null) return const SizedBox.shrink();
-    return FutureBuilder(
-      future: (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull(),
-      builder: (context, snap) {
-        final row = snap.data;
-        if (row?.isPro == true) return const SizedBox.shrink();
-        return Container(
-          decoration: BoxDecoration(
-            gradient: _softGradients[1],
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3))],
-          ),
-          child: ListTile(
-            leading: Icon(Icons.workspace_premium, color: Theme.of(context).colorScheme.primary),
-            title: Text('Upgrade to Pro', style: TextStyle(color: Colors.black.withValues(alpha: 0.85), fontWeight: FontWeight.w700)),
-            subtitle: Text('Unlock all locked categories and questions', style: TextStyle(color: Colors.black.withValues(alpha: 0.6))),
-            trailing: Icon(Icons.chevron_right, color: Colors.black.withValues(alpha: 0.7)),
-            onTap: () => context.go('/upgrade'),
-          ),
-        );
-      },
     );
   }
 
@@ -798,13 +586,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                             )
                           : null;
-                      final label = sub == null ? cat.name : '${cat.name} • ${sub.name}';
+                      final label = sub == null ? cat.name : '${cat.name} â€¢ ${sub.name}';
                       final on = Theme.of(context).colorScheme.onSurface;
-                      return Text('${ex.title} • $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withValues(alpha: 0.92), fontWeight: FontWeight.w600));
+                      return Text('${ex.title} â€¢ $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withValues(alpha: 0.92), fontWeight: FontWeight.w600));
                       }(),
                     subtitle: Builder(builder: (context) {
                       final on = Theme.of(context).colorScheme.onSurface;
-                      return Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} • ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withValues(alpha: 0.7)));
+                      return Text('${attempts[i].endedAt == null ? 'In progress' : 'Score ${attempts[i].scorePercent}%'} â€¢ ${attempts[i].startedAt.toLocal()}'.split('.').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: on.withValues(alpha: 0.7)));
                     }),
                       onTap: () {
                         final a = attempts[i];
@@ -825,18 +613,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   // Minimal palette: three very light tints for a calm, professional look
-  List<Gradient> get _softGradients => const [
-        LinearGradient(colors: [Color(0xFFF5F7FF), Color(0xFFE9EEFF)], begin: Alignment.topLeft, end: Alignment.bottomRight), // soft indigo
-        LinearGradient(colors: [Color(0xFFF6FFFA), Color(0xFFE7FFF2)], begin: Alignment.topLeft, end: Alignment.bottomRight), // soft green
-        LinearGradient(colors: [Color(0xFFFFF7F5), Color(0xFFFFEEE8)], begin: Alignment.topLeft, end: Alignment.bottomRight), // soft coral
-      ];
-
-  List<Color> get _softSolids => const [
-        Color(0xFFF5F7FF), // indigo tint
-        Color(0xFFF6FFFA), // green tint
-        Color(0xFFFFF7F5), // coral tint
-      ];
-
   Widget _actionCard(BuildContext context, {required IconData icon, required String label, required int index, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
@@ -983,7 +759,7 @@ class _AnimatedPieState extends State<_AnimatedPie> with SingleTickerProviderSta
     final completed = widget.completed.clamp(0, total);
     return AnimatedBuilder(
       animation: _ac,
-      builder: (_, __) {
+      builder: (context, child) {
         final t = Curves.easeOutCubic.transform(_ac.value);
         final done = (completed * t).toDouble();
         final remain = (total.toDouble() - done).clamp(0.0, total.toDouble()).toDouble();
@@ -1036,5 +812,4 @@ Widget _zenovFooter(BuildContext context) {
       Text('Contact for websites and mobile app development', style: TextStyle(color: sub)),
     ],
   );
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 }

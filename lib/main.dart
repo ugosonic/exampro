@@ -1,12 +1,18 @@
-<<<<<<< HEAD
-import 'package:exampro/app/app.dart';
-=======
-import 'package:citizentest/app/app.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
+import 'app/app.dart';
+import 'package:citizentest/core/notifications/push_notifications.dart';
+import 'package:citizentest/firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const ProviderScope(child: ExamProApp()));
 }

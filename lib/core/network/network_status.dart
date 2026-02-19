@@ -1,11 +1,19 @@
 import 'dart:async';
 
+import 'package:citizentest/core/config/env_loader.dart';
 import 'package:dio/dio.dart';
 import 'package:citizentest/core/network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Emits true when online, false when last probe failed
 final onlineStatusProvider = StreamProvider<bool>((ref) async* {
+  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
+  if (env == null || env.apiBaseUrl.isEmpty) {
+    // No remote API configured; avoid probing and keep app usable offline/local.
+    yield true;
+    return;
+  }
+
   final dio = ref.watch(dioProvider);
   bool online = true;
   bool? lastEmitted;

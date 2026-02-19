@@ -1,0 +1,65 @@
+name: Deploy Web to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "assets/**"
+      - "web/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build web (production)
+        run: flutter build web --release --dart-define=ENVIRONMENT=production --no-wasm-dry-run
+
+      - name: Package web build
+        run: tar -czf web.tar.gz -C build/web .
+
+      - name: Upload web package to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          source: "web.tar.gz"
+          target: "/tmp"
+
+      - name: Deploy package on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_KEY }}
+          script: |
+            set -e
+            WEB_ROOT="${{ secrets.VPS_WEB_ROOT }}"
+            if [ -z "$WEB_ROOT" ]; then WEB_ROOT="/var/www/citizentest-web"; fi
+            sudo mkdir -p "$WEB_ROOT"
+            sudo find "$WEB_ROOT" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            sudo tar -xzf /tmp/web.tar.gz -C "$WEB_ROOT"
+            sudo chown -R www-data:www-data "$WEB_ROOT"
+            sudo chmod -R a+rX "$WEB_ROOT"
+            sudo systemctl reload nginx

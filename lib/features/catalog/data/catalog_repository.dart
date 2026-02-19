@@ -1,98 +1,14 @@
-<<<<<<< HEAD
-import 'package:drift/drift.dart' as drift;
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
-import 'package:exampro/features/catalog/data/catalog_api.dart';
-import 'package:exampro/features/catalog/domain/models.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-class CatalogRepository {
-  final CatalogApi _api;
-  final AppDatabase _db;
-  CatalogRepository(this._api, this._db);
-
-  Future<List<Category>> categories() async {
-    try {
-      final res = await _api.categories();
-      // cache
-      await _db.transaction(() async {
-        for (final c in res) {
-          await _db.into(_db.categories).insertOnConflictUpdate(
-                CategoriesCompanion(
-                  id: drift.Value(c.id),
-                  name: drift.Value(c.name),
-                  order: drift.Value(c.order),
-                ),
-              );
-        }
-      });
-      return res;
-    } catch (_) {
-      final rows = await _db.select(_db.categories).get();
-      return rows.map((r) => Category(id: r.id, name: r.name, order: r.order)).toList();
-    }
-  }
-
-  Future<List<ExamSummary>> exams({int? categoryId}) async {
-    try {
-      final res = await _api.exams(categoryId: categoryId);
-      // cache
-      await _db.transaction(() async {
-        for (final e in res) {
-          await _db.into(_db.exams).insertOnConflictUpdate(
-                ExamsCompanion(
-                  id: drift.Value(e.id),
-                  title: drift.Value(e.title),
-                  categoryId: drift.Value(e.categoryId),
-                  questionCount: drift.Value(e.questionCount),
-                  published: drift.Value(e.published),
-                ),
-              );
-        }
-      });
-      return res;
-    } catch (_) {
-      final query = (categoryId == null)
-          ? _db.select(_db.exams)
-          : (_db.select(_db.exams)..where((tbl) => tbl.categoryId.equals(categoryId)));
-      final rows = await query.get();
-      return rows
-          .map((r) => ExamSummary(
-                id: r.id,
-                title: r.title,
-                categoryId: r.categoryId,
-                questionCount: r.questionCount,
-                published: r.published,
-              ))
-          .toList();
-    }
-  }
-}
-
-final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
-  final api = ref.watch(catalogApiProvider);
-  final db = ref.watch(dbProvider);
-  return CatalogRepository(api, db);
-});
-
-final categoriesProvider = FutureProvider<List<Category>>((ref) async {
-  final repo = ref.watch(catalogRepositoryProvider);
-  return repo.categories();
-=======
 import 'package:citizentest/core/db/app_database.dart' as db;
 import 'package:drift/drift.dart' as drift;
 import 'package:citizentest/core/db/db_provider.dart';
 import 'package:citizentest/features/catalog/domain/models.dart' as models;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:citizentest/core/config/env_loader.dart';
-import 'package:citizentest/features/catalog/data/content_api.dart';
 
 class CatalogRepository {
   final db.AppDatabase _db;
-  final ContentApi? _remote;
-  CatalogRepository(this._db, [this._remote]);
+  CatalogRepository(this._db);
 
-  Future<String> _lang() async {
+  Future<String> _loadLang() async {
     try {
       final row = await (_db.select(_db.appSettings)..where((s) => s.key.equals('lang_code'))).getSingleOrNull();
       return row?.value.isNotEmpty == true ? row!.value : 'en';
@@ -101,31 +17,18 @@ class CatalogRepository {
     }
   }
 
-  Future<String> _translate(String entity, int id, String key, String fallback) async {
-    final lang = await _lang();
-    if (lang == 'en') return fallback;
+  Future<String> translate(String entity, int id, String key, String fallback) async {
+    final languageCode = await _loadLang();
+    if (languageCode == 'en') return fallback;
     try {
       final rows = await _db.customSelect('SELECT v FROM translations WHERE entity = ? AND entity_id = ? AND lang = ? AND k = ? LIMIT 1',
-          variables: [drift.Variable(entity), drift.Variable(id), drift.Variable(lang), drift.Variable(key)]).get();
+          variables: [drift.Variable(entity), drift.Variable(id), drift.Variable(languageCode), drift.Variable(key)]).get();
       if (rows.isNotEmpty) return (rows.first.data['v'] as String?) ?? fallback;
     } catch (_) {}
     return fallback;
   }
 
   Future<List<models.Category>> categories() async {
-    if (_remote != null) {
-      final rows = await _remote.categories();
-      return [
-        for (final m in rows)
-          models.Category(
-            id: (m['id'] as num).toInt(),
-            name: await _translate('categories', (m['id'] as num).toInt(), 'name', (m['name'] as String)),
-            order: (m['order'] as num?)?.toInt() ?? 0,
-            imageUrl: (m['image_url'] as String?) ?? '',
-            locked: (m['locked'] as bool?) ?? false,
-          ),
-      ];
-    }
     final rows = await (_db.select(_db.categories)
           ..orderBy([
             (t) => drift.OrderingTerm.asc(t.order),
@@ -134,7 +37,7 @@ class CatalogRepository {
         .get();
     final out = <models.Category>[];
     for (final r in rows) {
-      final name = await _translate('categories', r.id, 'name', r.name);
+      final name = await translate('categories', r.id, 'name', r.name);
       out.add(models.Category(
         id: r.id,
         name: name,
@@ -147,21 +50,6 @@ class CatalogRepository {
   }
 
   Future<List<models.ExamSummary>> exams({int? categoryId}) async {
-    if (_remote != null) {
-      final rows = await _remote.exams(categoryId: categoryId);
-      return [
-        for (final m in rows)
-          models.ExamSummary(
-            id: (m['id'] as num).toInt(),
-            title: await _translate('exams', (m['id'] as num).toInt(), 'title', (m['title'] as String? ?? '')),
-            categoryId: (m['category_id'] as num).toInt(),
-            subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
-            questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
-            published: (m['published'] as bool?) ?? false,
-            themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
-          ),
-      ];
-    }
     final query = (categoryId == null)
         ? _db.select(_db.exams)
         : (_db.select(_db.exams)..where((tbl) => tbl.categoryId.equals(categoryId)));
@@ -171,7 +59,7 @@ class CatalogRepository {
       for (final r in rows)
         models.ExamSummary(
               id: r.id,
-              title: await _translate('exams', r.id, 'title', r.title),
+              title: await translate('exams', r.id, 'title', r.title),
               categoryId: r.categoryId,
               subcategoryId: r.subcategoryId,
               questionCount: r.questionCount,
@@ -192,7 +80,7 @@ class CatalogRepository {
         .asyncMap((rows) async {
       final out = <models.Category>[];
       for (final r in rows) {
-        final name = await _translate('categories', r.id, 'name', r.name);
+        final name = await translate('categories', r.id, 'name', r.name);
         out.add(models.Category(
           id: r.id,
           name: name,
@@ -203,44 +91,10 @@ class CatalogRepository {
       }
       return out;
     });
-
-    // Kick a background refresh from remote (seed/refresh local) when API is available
-    if (_remote != null) {
-      () async {
-        try {
-          final rows = await _remote.categories();
-          for (final m in rows) {
-            final id = (m['id'] as num).toInt();
-            final name = (m['name'] as String? ?? '');
-            final order = (m['order'] as num?)?.toInt() ?? 0;
-            final imageUrl = (m['image_url'] as String?) ?? '';
-            final locked = (m['locked'] as bool?) ?? false;
-            try {
-              await _db.into(_db.categories).insertOnConflictUpdate(
-                db.CategoriesCompanion.insert(
-                  id: drift.Value(id),
-                  name: name,
-                  order: drift.Value(order),
-                  imageUrl: drift.Value(imageUrl),
-                  locked: drift.Value(locked),
-                ),
-              );
-            } catch (_) {}
-          }
-        } catch (_) {
-          // ignore network errors; local watch will still work
-        }
-      }();
-    }
     return stream;
   }
 
   Future<bool> isCategoryLocked(int id) async {
-    if (_remote != null) {
-      final rows = await _remote.categories();
-      final m = rows.firstWhere((e) => (e['id'] as num).toInt() == id, orElse: () => {} as Map<String, dynamic>);
-      return (m.isEmpty) ? false : ((m['locked'] as bool?) ?? false);
-    }
     final row = await (_db.select(_db.categories)..where((c) => c.id.equals(id))).getSingleOrNull();
     return row?.locked ?? false;
   }
@@ -249,14 +103,10 @@ class CatalogRepository {
 // Providers
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
   final dbi = ref.watch(dbProvider);
-  final env = ref.watch(envLoaderProvider).maybeWhen(data: (e) => e, orElse: () => null);
-  final hasApi = env != null && env.apiBaseUrl.isNotEmpty;
-  final remote = hasApi ? ref.watch(contentApiProvider) : null;
-  return CatalogRepository(dbi, remote);
+  return CatalogRepository(dbi);
 });
 
 final categoriesProvider = StreamProvider<List<models.Category>>((ref) {
   final repo = ref.watch(catalogRepositoryProvider);
   return repo.watchCategories();
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 });

@@ -1,26 +1,3 @@
-<<<<<<< HEAD
-import 'package:exampro/features/auth/presentation/sign_in_state.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
-class SignInScreen extends ConsumerWidget {
-  const SignInScreen({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(signInControllerProvider);
-    final controller = ref.read(signInControllerProvider.notifier);
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Sign in')),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-=======
 import 'package:citizentest/features/auth/presentation/sign_in_state.dart';
 import 'package:citizentest/features/auth/data/auth_repository.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
@@ -75,14 +52,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       const SizedBox(height: 22),
                       Text('Welcome back', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: isDark ? Colors.white.withValues(alpha: 0.95) : const Color(0xFF0B2540), fontWeight: FontWeight.w700)),
                       const SizedBox(height: 16),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
               TextField(
                 key: const Key('email_field'),
                 keyboardType: TextInputType.emailAddress,
                 enabled: !state.loading,
-<<<<<<< HEAD
-                decoration: InputDecoration(labelText: 'Email', errorText: state.emailError),
-=======
                 style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                 decoration: InputDecoration(
                   labelText: 'Email',
@@ -94,17 +67,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: const Color(0xFF4DA3FF))),
                   errorText: state.emailError,
                 ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
                 onChanged: controller.onEmailChanged,
               ),
               const SizedBox(height: 12),
               TextField(
                 key: const Key('password_field'),
-<<<<<<< HEAD
-                obscureText: true,
-                enabled: !state.loading,
-                decoration: InputDecoration(labelText: 'Password', errorText: state.passwordError),
-=======
                 obscureText: _obscure,
                 enabled: !state.loading,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black87),
@@ -122,34 +89,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
                 onChanged: controller.onPasswordChanged,
               ),
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerRight,
-<<<<<<< HEAD
-                child: TextButton(onPressed: state.loading ? null : () {}, child: const Text('Forgot password?')),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: state.loading ? null : () => context.go('/delete-account'),
-                  child: const Text('Delete account'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: state.canSubmit && !state.loading
-                    ? () async {
-                        final ok = await controller.submit();
-                        if (ok) context.go('/dashboard');
-                      }
-                    : null,
-                child: state.loading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Sign in'),
-=======
                 child: TextButton(
                   onPressed: state.loading
                       ? null
@@ -169,11 +113,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                           if (ok == true) {
                             try {
                               await ref.read(authRepositoryProvider).forgotPassword(emailCtrl.text.trim());
-                              if (mounted) {
+                              if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('If the email exists, a reset link was sent.')));
                               }
                             } catch (e) {
-                              if (mounted) {
+                              if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
                               }
                             }
@@ -213,27 +157,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   onPressed: () => context.go('/register'),
                   child: const Text('Create an account'),
                 ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
               ),
               if (state.errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Text(state.errorMessage!, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)),
-<<<<<<< HEAD
-              ],
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: state.loading ? null : () => context.go('/register'),
-                child: const Text('Create an account'),
-              ),
-            ],
-=======
               ]
             ],
                   ),
                 ),
               ),
             ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
           ),
         ),
       ),

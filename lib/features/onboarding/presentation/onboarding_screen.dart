@@ -1,69 +1,3 @@
-<<<<<<< HEAD
-import 'package:exampro/core/analytics/analytics.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-
-class OnboardingScreen extends ConsumerStatefulWidget {
-  const OnboardingScreen({super.key});
-
-  @override
-  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
-}
-
-class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  final _controller = PageController();
-  int _page = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final analytics = ref.read(analyticsProvider);
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView(
-                controller: _controller,
-                onPageChanged: (i) => setState(() => _page = i),
-                children: const [
-                  _Slide(title: 'Learn', subtitle: 'Explore topics and explanations'),
-                  _Slide(title: 'Practice', subtitle: 'Adaptive, Mock, Topic drills'),
-                  _Slide(title: 'Improve', subtitle: 'Track progress and streaks'),
-                ],
-              ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (i) => _dot(i == _page)),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ElevatedButton(
-                    onPressed: () {
-                      analytics.event('choose_role', params: {'role': 'learner'});
-                      context.go('/auth');
-                    },
-                    child: const Text("I'm a Learner"),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () {
-                      analytics.event('choose_role', params: {'role': 'admin'});
-                      context.go('/auth');
-                    },
-                    child: const Text("I'm an Admin"),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ),
-            )
-          ],
-=======
 import 'dart:async';
 import 'package:citizentest/core/analytics/analytics.dart';
 import 'package:flutter/material.dart';
@@ -239,46 +173,16 @@ class OnboardingScreen extends ConsumerWidget {
               ),
             ],
           ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
         ),
       ),
     );
   }
-<<<<<<< HEAD
-
-  Widget _dot(bool active) => AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        width: active ? 20 : 6,
-        height: 6,
-        margin: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(3),
-        ),
-      );
-}
-
-class _Slide extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  const _Slide({required this.title, required this.subtitle});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text(subtitle, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7))),
-=======
 }
 
 /// ----------------------------------------------
 /// Optional hero header (kept intact & improved)
 /// ----------------------------------------------
+// ignore: unused_element
 class _HeroHeader extends StatelessWidget {
   final VoidCallback onCreateAccount;
   final VoidCallback onSignIn;
@@ -408,6 +312,7 @@ class _Pill extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _FeatureGrid extends StatelessWidget {
   const _FeatureGrid();
 
@@ -506,7 +411,7 @@ class _DotsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DotsPainter oldDelegate) => false;
+  bool shouldRepaint(_DotsPainter oldDelegate) => false;
 }
 
 /// Big title with gradient word
@@ -573,27 +478,27 @@ class _FlagCycler extends StatefulWidget {
 
 class _FlagCyclerState extends State<_FlagCycler>
     with TickerProviderStateMixin {
-  late final AnimationController _wave;
-  int _index = 0;
-  Timer? _timer;
+  late final AnimationController wave;
+  int index = 0;
+  Timer? timer;
   static const _flags = ['🇨🇦', '🇬🇧', '🇦🇺', '🇺🇸'];
 
   @override
   void initState() {
     super.initState();
-    _wave = AnimationController(
+    wave = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      setState(() => _index = (_index + 1) % _flags.length);
+    timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      setState(() => index = (index + 1) % _flags.length);
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _wave.dispose();
+    timer?.cancel();
+    wave.dispose();
     super.dispose();
   }
 
@@ -602,13 +507,13 @@ class _FlagCyclerState extends State<_FlagCycler>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final color = isDark ? Colors.white : const Color(0xFF0B2540);
     return AnimatedBuilder(
-      animation: _wave,
+      animation: wave,
       builder: (context, _) {
-        final angle = 0.06 * (2 * (_wave.value - 0.5));
+        final angle = 0.06 * (2 * (wave.value - 0.5));
         return Transform.rotate(
           angle: angle,
           child: Text(
-            _flags[_index],
+            _flags[index],
             style: TextStyle(
               fontSize: 38,
               shadows: [
@@ -661,26 +566,26 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
     ),
   ];
 
-  late final AnimationController _ac =
+  late final AnimationController ac =
       AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
-  int _index = 0;
-  Timer? _timer;
+  int index = 0;
+  Timer? timer;
 
   @override
   void initState() {
     super.initState();
-    _ac.forward();
-    _timer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      await _ac.reverse();
-      setState(() => _index = (_index + 1) % _items.length);
-      _ac.forward();
+    ac.forward();
+    timer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      await ac.reverse();
+      setState(() => index = (index + 1) % _items.length);
+      ac.forward();
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _ac.dispose();
+    timer?.cancel();
+    ac.dispose();
     super.dispose();
   }
 
@@ -689,7 +594,7 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final on = isDark ? Colors.white : const Color(0xFF0B2540);
     final sub = on.withValues(alpha: 0.78);
-    final item = _items[_index];
+    final item = _items[index];
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -706,10 +611,10 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
           borderRadius: BorderRadius.circular(16),
         ),
         child: AnimatedBuilder(
-          animation: _ac,
+          animation: ac,
           builder: (context, _) {
-            final dx = (1 - _ac.value) * -18.0;
-            final op = _ac.value;
+            final dx = (1 - ac.value) * -18.0;
+            final op = ac.value;
             return Opacity(
               opacity: op,
               child: Transform.translate(
@@ -754,6 +659,7 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
 }
 
 /// Section: How it works (kept for completeness)
+// ignore: unused_element
 class _HowItWorks extends StatelessWidget {
   const _HowItWorks();
   @override
@@ -804,15 +710,12 @@ class _HowItWorks extends StatelessWidget {
               ],
             );
           })
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
         ],
       ),
     );
   }
 }
 
-<<<<<<< HEAD
-=======
 class _HowItem extends StatelessWidget {
   final String title;
   final String text;
@@ -939,4 +842,3 @@ class _FeatureCard extends StatelessWidget {
     );
   }
 }
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

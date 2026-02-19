@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-import 'package:exampro/common/widgets/tap_scale.dart';
-import 'package:exampro/features/catalog/data/catalog_repository.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-=======
 ﻿import 'package:citizentest/core/i18n/tr_text.dart';
 import 'package:citizentest/common/widgets/tap_scale.dart';
 import 'package:citizentest/features/catalog/data/catalog_repository.dart';
@@ -15,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:citizentest/core/db/db_provider.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:citizentest/core/config/env_loader.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 
 class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
@@ -23,30 +16,6 @@ class CategoriesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catsAsync = ref.watch(categoriesProvider);
-<<<<<<< HEAD
-    return Scaffold(
-      appBar: AppBar(title: const Text('Categories')),
-      body: SafeArea(
-          child: catsAsync.when(
-        data: (cats) => RefreshIndicator(
-          onRefresh: () async => ref.refresh(categoriesProvider.future),
-          child: GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.1),
-            itemCount: cats.length,
-            itemBuilder: (context, i) {
-              final c = cats[i];
-              final icon = [Icons.biotech, Icons.science, Icons.bubble_chart, Icons.functions][i % 4];
-              return TapScale(
-                onTap: () {},
-                child: Card(
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(icon, size: 28),
-                    const SizedBox(height: 8),
-                    Text(c.name),
-                  ]),
-=======
     final db = ref.watch(dbProvider);
     final user = ref.watch(currentUserProvider);
     return Scaffold(
@@ -128,7 +97,6 @@ class CategoriesScreen extends ConsumerWidget {
                       ),
                     );
                   },
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
                 ),
               );
             },
@@ -136,12 +104,6 @@ class CategoriesScreen extends ConsumerWidget {
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Failed to load: $e')),
-<<<<<<< HEAD
-      )),
-    );
-  }
-}
-=======
       ),
         ),
       ),
@@ -157,7 +119,13 @@ class _CategoryImage extends ConsumerWidget {
     const w = 90.0, h = 60.0;
     final resolved = src.trim();
     if (resolved.isEmpty) return _fallback(w, h);
-    Widget network(String url) => Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallback(w, h));
+    Widget network(String url) => Image.network(
+          url,
+          width: w,
+          height: h,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _fallback(w, h),
+        );
     if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
       return network(resolved);
     }
@@ -199,4 +167,3 @@ class _CategoryImage extends ConsumerWidget {
 
 
 
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

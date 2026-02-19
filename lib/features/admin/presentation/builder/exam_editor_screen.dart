@@ -1,6 +1,4 @@
 import 'package:citizentest/features/admin/data/admin_repository.dart';
-import 'package:citizentest/core/db/app_database.dart';
-import 'package:citizentest/core/db/db_provider.dart';
 import 'package:citizentest/features/exam/data/exam_repository.dart';
 import 'package:citizentest/core/config/env_loader.dart';
 import 'package:citizentest/core/network/dio_client.dart';
@@ -18,7 +16,6 @@ class ExamEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
-  Exam? _exam;
   List<({int id, String body})> _items = [];
   bool _loading = true;
   // controls
@@ -51,7 +48,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final list = results[1] as List<QuestionWithOptions>;
       if (!mounted) return;
       setState(() {
-        _exam = ex;
         _titleCtrl.text = ex?.title ?? '';
         _descCtrl.text = ex?.description ?? '';
         _timeCtrl.text = (ex?.timeLimitMinutes ?? 0).toString();
@@ -110,7 +106,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                           if (newUrl.isEmpty) throw Exception('Invalid response');
                           setState(() => _pdfCtrl.text = newUrl);
                         } catch (err) {
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $err')));
                           }
                         }

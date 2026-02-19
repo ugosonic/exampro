@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "739367111519",
+    "project_id": "citizenship-test-6c9ff",
+    "storage_bucket": "citizenship-test-6c9ff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:739367111519:android:0da43c62852d43e539c4ea",
+        "android_client_info": {
+          "package_name": "com.zenovtech.citizentest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA6G6wLQha7nxFl4qdEeMeJdFvaijRE6Zo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

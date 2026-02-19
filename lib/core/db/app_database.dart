@@ -28,12 +28,15 @@ class Exams extends Table {
   TextColumn get title => text()();
   TextColumn get description => text().withDefault(const Constant(''))();
   IntColumn get categoryId => integer().references(Categories, #id)();
-  IntColumn get subcategoryId => integer().nullable().references(Subcategories, #id)();
+  IntColumn get subcategoryId =>
+      integer().nullable().references(Subcategories, #id)();
   IntColumn get questionCount => integer().withDefault(const Constant(0))();
   BoolColumn get published => boolean().withDefault(const Constant(false))();
   IntColumn get timeLimitMinutes => integer().withDefault(const Constant(0))();
-  BoolColumn get shuffleOptions => boolean().withDefault(const Constant(true))();
-  BoolColumn get negativeMarking => boolean().withDefault(const Constant(false))();
+  BoolColumn get shuffleOptions =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get negativeMarking =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get passPercent => integer().withDefault(const Constant(60))();
   IntColumn get themeKey => integer().withDefault(const Constant(0))();
   // Optional URL to a reference PDF for the exam
@@ -97,7 +100,8 @@ class Attempts extends Table {
   TextColumn get gradeLabel => text().withDefault(const Constant(''))();
   BoolColumn get synced => boolean().withDefault(const Constant(false))();
   // Associate attempts with a user; 'guest@local' for anonymous
-  TextColumn get userEmail => text().withDefault(const Constant('guest@local'))();
+  TextColumn get userEmail =>
+      text().withDefault(const Constant('guest@local'))();
 }
 
 class AttemptAnswers extends Table {
@@ -159,7 +163,8 @@ class Payments extends Table {
   TextColumn get userEmail => text()();
   IntColumn get amountMinor => integer()();
   TextColumn get currency => text()();
-  TextColumn get stripePaymentIntentId => text().withDefault(const Constant(''))();
+  TextColumn get stripePaymentIntentId =>
+      text().withDefault(const Constant(''))();
   TextColumn get status => text().withDefault(const Constant('paid'))();
   BoolColumn get refunded => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -186,148 +191,207 @@ class Payments extends Table {
     Payments,
   ],
 )
-  class AppDatabase extends _$AppDatabase {
-    AppDatabase() : super(openConnection());
-    @override
-    int get schemaVersion => 16;
+class AppDatabase extends _$AppDatabase {
+  AppDatabase() : super(openConnection());
+  @override
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async => await m.createAll(),
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            // Drop legacy tables from v1
-            await m.deleteTable('attempt_answers');
-            await m.deleteTable('attempts');
-            await m.deleteTable('exams');
-            await m.deleteTable('categories');
-            await m.createAll();
-          }
-          if (from < 3) {
-            // Add passPercent to categories (idempotent)
-            if (!await _columnExists('categories', 'pass_percent')) {
-              await m.addColumn(categories, categories.passPercent);
-            }
-          }
-          if (from < 4) {
-            // Add question_categories (idempotent)
-            if (!await _tableExists('question_categories')) {
-              await m.createTable(questionCategories);
-            }
-          }
-          if (from < 5) {
-            if (!await _columnExists('exams', 'theme_key')) {
-              await m.addColumn(exams, exams.themeKey);
-            }
-          }
-          if (from < 6) {
-            if (!await _tableExists('saved_questions')) {
-              await m.createTable(savedQuestions);
-            }
-            if (!await _tableExists('reports')) {
-              await m.createTable(reports);
-            }
-          }
-          if (from < 8) {
-            if (!await _tableExists('daily_goals')) {
-              await m.createTable(dailyGoals);
-            }
-          }
-          if (from < 9) {
-            if (!await _columnExists('categories', 'image_url')) {
-              await m.addColumn(categories, categories.imageUrl);
-            }
-            if (!await _columnExists('subcategories', 'image_url')) {
-              await m.addColumn(subcategories, subcategories.imageUrl);
-            }
-            if (!await _tableExists('question_subcategories')) {
-              await m.createTable(questionSubcategories);
-            }
-          }
-          if (from < 10) {
-            if (!await _columnExists('categories', 'locked')) {
-              await m.addColumn(categories, categories.locked);
-            }
-            if (!await _columnExists('subcategories', 'locked')) {
-              await m.addColumn(subcategories, subcategories.locked);
-            }
-            if (!await _columnExists('questions', 'locked')) {
-              await m.addColumn(questions, questions.locked);
-            }
-            if (!await _columnExists('users', 'is_pro')) {
-              await m.addColumn(users, users.isPro);
-            }
-            if (!await _tableExists('app_settings')) {
-              await m.createTable(appSettings);
-            }
-            if (!await _tableExists('payments')) {
-              await m.createTable(payments);
-            }
-          }
-          if (from < 11) {
-            if (!await _columnExists('attempts', 'user_email')) {
-              await customStatement("ALTER TABLE attempts ADD COLUMN user_email TEXT NOT NULL DEFAULT 'guest@local'");
-            }
-          }
-          if (from < 12) {
-            if (!await _tableExists('translations')) {
-              await customStatement('CREATE TABLE IF NOT EXISTS translations (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL, entity_id INTEGER NOT NULL, lang TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL)');
-            }
-          }
-          if (from < 13) {
-            // Add pdf_url column to exams if missing (idempotent)
-            if (!await _columnExists('exams', 'pdf_url')) {
-              await m.addColumn(exams, exams.pdfUrl);
-            }
-          }
-          if (from < 14) {
-            // Create pdf_progress table for per-user PDF reading progress
-            if (!await _tableExists('pdf_progress')) {
-              await customStatement(
-                'CREATE TABLE IF NOT EXISTS pdf_progress ('
-                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-                'exam_id INTEGER NOT NULL, '
-                'user_email TEXT NOT NULL, '
-                'page INTEGER NOT NULL DEFAULT 0, '
-                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
-                'UNIQUE(user_email, exam_id)'
-                ')',
-              );
-            }
-          }
-          if (from < 15) {
-            // Practice progress per user/category (for "Practice all")
-            if (!await _tableExists('practice_progress')) {
-              await customStatement(
-                'CREATE TABLE IF NOT EXISTS practice_progress ('
-                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-                'category_id INTEGER NOT NULL, '
-                'user_email TEXT NOT NULL, '
-                'index INTEGER NOT NULL DEFAULT 0, '
-                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
-                'UNIQUE(user_email, category_id)'
-                ')',
-              );
-            }
-          }
-          if (from < 16) {
-            // Practice answers per user/category/question (counts towards dashboard progress)
-            if (!await _tableExists('practice_answers')) {
-              await customStatement(
-                'CREATE TABLE IF NOT EXISTS practice_answers ('
-                'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-                'user_email TEXT NOT NULL, '
-                'category_id INTEGER NOT NULL, '
-                'question_id INTEGER NOT NULL, '
-                'is_correct INTEGER NOT NULL DEFAULT 0, '
-                'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
-                'UNIQUE(user_email, question_id)'
-                ')',
-              );
-            }
-          }
-        },
-      );
+    onCreate: (m) async {
+      await m.createAll();
+      await _ensureSupplementalTables();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        // Drop legacy tables from v1
+        await m.deleteTable('attempt_answers');
+        await m.deleteTable('attempts');
+        await m.deleteTable('exams');
+        await m.deleteTable('categories');
+        await m.createAll();
+      }
+      if (from < 3) {
+        // Add passPercent to categories (idempotent)
+        if (!await _columnExists('categories', 'pass_percent')) {
+          await m.addColumn(categories, categories.passPercent);
+        }
+      }
+      if (from < 4) {
+        // Add question_categories (idempotent)
+        if (!await _tableExists('question_categories')) {
+          await m.createTable(questionCategories);
+        }
+      }
+      if (from < 5) {
+        if (!await _columnExists('exams', 'theme_key')) {
+          await m.addColumn(exams, exams.themeKey);
+        }
+      }
+      if (from < 6) {
+        if (!await _tableExists('saved_questions')) {
+          await m.createTable(savedQuestions);
+        }
+        if (!await _tableExists('reports')) {
+          await m.createTable(reports);
+        }
+      }
+      if (from < 8) {
+        if (!await _tableExists('daily_goals')) {
+          await m.createTable(dailyGoals);
+        }
+      }
+      if (from < 9) {
+        if (!await _columnExists('categories', 'image_url')) {
+          await m.addColumn(categories, categories.imageUrl);
+        }
+        if (!await _columnExists('subcategories', 'image_url')) {
+          await m.addColumn(subcategories, subcategories.imageUrl);
+        }
+        if (!await _tableExists('question_subcategories')) {
+          await m.createTable(questionSubcategories);
+        }
+      }
+      if (from < 10) {
+        if (!await _columnExists('categories', 'locked')) {
+          await m.addColumn(categories, categories.locked);
+        }
+        if (!await _columnExists('subcategories', 'locked')) {
+          await m.addColumn(subcategories, subcategories.locked);
+        }
+        if (!await _columnExists('questions', 'locked')) {
+          await m.addColumn(questions, questions.locked);
+        }
+        if (!await _columnExists('users', 'is_pro')) {
+          await m.addColumn(users, users.isPro);
+        }
+        if (!await _tableExists('app_settings')) {
+          await m.createTable(appSettings);
+        }
+        if (!await _tableExists('payments')) {
+          await m.createTable(payments);
+        }
+      }
+      if (from < 11) {
+        if (!await _columnExists('attempts', 'user_email')) {
+          await customStatement(
+            "ALTER TABLE attempts ADD COLUMN user_email TEXT NOT NULL DEFAULT 'guest@local'",
+          );
+        }
+      }
+      if (from < 12) {
+        if (!await _tableExists('translations')) {
+          await customStatement(
+            'CREATE TABLE IF NOT EXISTS translations (id INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL, entity_id INTEGER NOT NULL, lang TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL)',
+          );
+        }
+      }
+      if (from < 13) {
+        // Add pdf_url column to exams if missing (idempotent)
+        if (!await _columnExists('exams', 'pdf_url')) {
+          await m.addColumn(exams, exams.pdfUrl);
+        }
+      }
+      if (from < 14) {
+        // Create pdf_progress table for per-user PDF reading progress
+        if (!await _tableExists('pdf_progress')) {
+          await customStatement(
+            'CREATE TABLE IF NOT EXISTS pdf_progress ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'exam_id INTEGER NOT NULL, '
+            'user_email TEXT NOT NULL, '
+            'page INTEGER NOT NULL DEFAULT 0, '
+            'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+            'UNIQUE(user_email, exam_id)'
+            ')',
+          );
+        }
+      }
+      if (from < 15) {
+        // Practice progress per user/category (for "Practice all")
+        if (!await _tableExists('practice_progress')) {
+          await customStatement(
+            'CREATE TABLE IF NOT EXISTS practice_progress ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'category_id INTEGER NOT NULL, '
+            'user_email TEXT NOT NULL, '
+            'index INTEGER NOT NULL DEFAULT 0, '
+            'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+            'UNIQUE(user_email, category_id)'
+            ')',
+          );
+        }
+      }
+      if (from < 16) {
+        // Practice answers per user/category/question (counts towards dashboard progress)
+        if (!await _tableExists('practice_answers')) {
+          await customStatement(
+            'CREATE TABLE IF NOT EXISTS practice_answers ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'user_email TEXT NOT NULL, '
+            'category_id INTEGER NOT NULL, '
+            'question_id INTEGER NOT NULL, '
+            'is_correct INTEGER NOT NULL DEFAULT 0, '
+            'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+            'UNIQUE(user_email, question_id)'
+            ')',
+          );
+        }
+      }
+    },
+    beforeOpen: (details) async {
+      // Safety net for databases that ended up with partial schema state.
+      await _ensureSupplementalTables();
+    },
+  );
+
+  Future<void> ensureClientSchema() async {
+    await _ensureSupplementalTables();
+  }
+
+  Future<void> _ensureSupplementalTables() async {
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS translations ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'entity TEXT NOT NULL, '
+      'entity_id INTEGER NOT NULL, '
+      'lang TEXT NOT NULL, '
+      'k TEXT NOT NULL, '
+      'v TEXT NOT NULL'
+      ')',
+    );
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS pdf_progress ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'exam_id INTEGER NOT NULL, '
+      'user_email TEXT NOT NULL, '
+      'page INTEGER NOT NULL DEFAULT 0, '
+      'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+      'UNIQUE(user_email, exam_id)'
+      ')',
+    );
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS practice_progress ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'category_id INTEGER NOT NULL, '
+      'user_email TEXT NOT NULL, '
+      'index INTEGER NOT NULL DEFAULT 0, '
+      'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+      'UNIQUE(user_email, category_id)'
+      ')',
+    );
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS practice_answers ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'user_email TEXT NOT NULL, '
+      'category_id INTEGER NOT NULL, '
+      'question_id INTEGER NOT NULL, '
+      'is_correct INTEGER NOT NULL DEFAULT 0, '
+      'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+      'UNIQUE(user_email, question_id)'
+      ')',
+    );
+  }
 
   Future<bool> _columnExists(String table, String column) async {
     final rows = await customSelect('PRAGMA table_info("$table")').get();
@@ -347,4 +411,10 @@ class Payments extends Table {
   }
 }
 
-QueryExecutor openConnection() => driftDatabase(name: 'exampro.sqlite');
+QueryExecutor openConnection() => driftDatabase(
+  name: 'exampro.sqlite',
+  web: DriftWebOptions(
+    sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+    driftWorker: Uri.parse('drift_worker.js'),
+  ),
+);

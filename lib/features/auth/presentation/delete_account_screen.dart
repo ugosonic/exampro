@@ -1,6 +1,6 @@
-import 'package:exampro/core/utils/validators.dart';
-import 'package:exampro/features/auth/application/auth_session.dart';
-import 'package:exampro/features/auth/data/auth_repository.dart';
+import 'package:citizentest/core/utils/validators.dart';
+import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/features/auth/data/auth_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

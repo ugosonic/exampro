@@ -248,7 +248,7 @@ class AdminRepository {
       return () async* {
         while (true) {
           try {
-            final rows = await _adminApi!.users();
+            final rows = await _adminApi.users();
             yield [
               for (final m in rows)
                 DbUser(

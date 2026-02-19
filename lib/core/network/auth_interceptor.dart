@@ -1,13 +1,8 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-<<<<<<< HEAD
-import 'package:exampro/core/auth/token_store.dart';
-import 'package:exampro/features/auth/data/auth_api.dart';
-=======
 import 'package:citizentest/core/auth/token_store.dart';
 import 'package:citizentest/features/auth/data/auth_api.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 
 class AuthInterceptor extends Interceptor {
   final TokenStore tokenStore;
@@ -52,17 +47,19 @@ class AuthInterceptor extends Interceptor {
       try {
         final tokens = await authApi.refresh(refreshToken: refresh);
         await tokenStore.save(TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh));
-<<<<<<< HEAD
-      } catch (_) {}
-=======
       } catch (_) {
         // Do not clear tokens automatically; allow the app to keep the session
         // and let the user choose when to re-auth or sign out.
       }
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
     }();
-    await _refreshing;
-    _refreshing = null;
+    final refresh = _refreshing!;
+    try {
+      await refresh;
+    } finally {
+      if (identical(_refreshing, refresh)) {
+        _refreshing = null;
+      }
+    }
   }
 }
 

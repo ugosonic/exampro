@@ -1,4 +1,8 @@
 import 'package:citizentest/core/auth/token_store.dart';
+import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/core/notifications/notification_settings.dart';
+import 'package:citizentest/core/notifications/notifications.dart';
+import 'package:citizentest/core/notifications/pending_test_reminder.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -13,10 +17,6 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final double _progress = 0;
-  final String _label = '';
-  final bool _updating = false;
-
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
@@ -54,6 +54,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            const _NotificationSettingsCard(),
+            const SizedBox(height: 16),
             if ((user?.role ?? '') == 'admin')
               FilledButton.icon(
                 onPressed: () async {
@@ -72,14 +74,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     try {
                       await ref.read(resetServiceProvider).resetAll();
                       ref.read(currentUserProvider.notifier).state = null;
-                      if (mounted) {
-                        context.go('/onboarding');
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All local data erased')));
-                      }
+                      if (!context.mounted) return;
+                      context.go('/onboarding');
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All local data erased')));
                     } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to erase: $e')));
-                      }
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to erase: $e')));
                     }
                   }
                 },
@@ -92,9 +92,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: () async {
                 await ref.read(tokenStoreProvider).clear();
                 ref.read(currentUserProvider.notifier).state = null;
-                if (mounted) {
-                  context.go('/onboarding');
-                }
+                if (!context.mounted) return;
+                context.go('/onboarding');
               },
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
@@ -103,6 +102,100 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ],
         ),
       ]),
+    );
+  }
+}
+
+class _NotificationSettingsCard extends ConsumerStatefulWidget {
+  const _NotificationSettingsCard();
+
+  @override
+  ConsumerState<_NotificationSettingsCard> createState() => _NotificationSettingsCardState();
+}
+
+class _NotificationSettingsCardState extends ConsumerState<_NotificationSettingsCard> {
+  bool _loaded = false;
+  bool _enabled = true;
+  int _hour = 19;
+  int _minute = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final db = ref.read(dbProvider);
+    final enabled = await NotificationSettings.getEnabled(db);
+    final hour = await NotificationSettings.getReminderHour(db);
+    final minute = await NotificationSettings.getReminderMinute(db);
+    if (!mounted) return;
+    setState(() {
+      _loaded = true;
+      _enabled = enabled;
+      _hour = hour;
+      _minute = minute;
+    });
+  }
+
+  Future<void> _save() async {
+    final db = ref.read(dbProvider);
+    await NotificationSettings.setEnabled(db, _enabled);
+    await NotificationSettings.setReminderTime(db, hour: _hour, minute: _minute);
+    if (!_enabled) {
+      await NotificationsService.cancelAll();
+    }
+    await PendingTestReminderService.sync(db);
+  }
+
+  Future<void> _pickTime(BuildContext context) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _hour, minute: _minute),
+    );
+    if (picked == null) return;
+    setState(() {
+      _hour = picked.hour;
+      _minute = picked.minute;
+    });
+    await _save();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final timeLabel = '${_hour.toString().padLeft(2, '0')}:${_minute.toString().padLeft(2, '0')}';
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Notifications', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _enabled,
+            onChanged: !_loaded
+                ? null
+                : (v) async {
+                    setState(() => _enabled = v);
+                    await _save();
+                  },
+            title: const Text('Pending test reminders'),
+            subtitle: const Text('Get a reminder when you have an unfinished test'),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Reminder time'),
+            subtitle: Text(timeLabel),
+            trailing: TextButton(
+              onPressed: (!_enabled || !_loaded) ? null : () => _pickTime(context),
+              child: const Text('Change'),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }

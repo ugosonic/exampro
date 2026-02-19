@@ -46,7 +46,7 @@ class ExamResultScreen extends ConsumerWidget {
                     const SizedBox(height: 8),
                     Text(pass ? 'Passed' : 'Failed', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    Text('Pass mark: ${passPercent}%'),
+                    Text('Pass mark: $passPercent%'),
                   ]),
                 ),
                 const Spacer(),

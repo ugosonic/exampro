@@ -1,33 +1,21 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
-<<<<<<< HEAD
-import 'package:exampro/core/db/app_database.dart';
-import 'package:exampro/core/db/db_provider.dart';
-=======
 import 'package:citizentest/core/db/app_database.dart';
 import 'package:citizentest/core/db/db_provider.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AttemptRepository {
   final AppDatabase _db;
   AttemptRepository(this._db);
 
-<<<<<<< HEAD
-  Future<int> startAttempt({required int examId, required String mode}) async {
-=======
   Future<int> startAttempt({required int examId, required String mode, required String userEmail}) async {
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
     final id = await _db.into(_db.attempts).insert(AttemptsCompanion(
           examId: drift.Value(examId),
           mode: drift.Value(mode),
           startedAt: drift.Value(DateTime.now()),
         ));
-<<<<<<< HEAD
-=======
     await _db.customStatement('UPDATE attempts SET user_email = ? WHERE id = ?', [userEmail, id]);
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
     return id;
   }
 
@@ -52,7 +40,3 @@ class AttemptRepository {
 }
 
 final attemptRepositoryProvider = Provider<AttemptRepository>((ref) => AttemptRepository(ref.watch(dbProvider)));
-<<<<<<< HEAD
-
-=======
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

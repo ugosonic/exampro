@@ -123,8 +123,25 @@ class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('Lifetime access unlocks all locked content.'),
               const SizedBox(height: 12),
-              RadioListTile<String>(value: 'GBP', groupValue: currency, title: Text('£${(gbp / 100).toStringAsFixed(2)} GBP'), onChanged: (v) => setState(() => currency = v ?? 'GBP')),
-              RadioListTile<String>(value: 'USD', groupValue: currency, title: Text('4${(usd / 100).toStringAsFixed(2)} USD'), onChanged: (v) => setState(() => currency = v ?? 'USD')),
+              RadioGroup<String>(
+                groupValue: currency,
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => currency = value);
+                },
+                child: Column(
+                  children: [
+                    RadioListTile<String>(
+                      value: 'GBP',
+                      title: Text('\u00A3${(gbp / 100).toStringAsFixed(2)} GBP'),
+                    ),
+                    RadioListTile<String>(
+                      value: 'USD',
+                      title: Text('\$${(usd / 100).toStringAsFixed(2)} USD'),
+                    ),
+                  ],
+                ),
+              ),
               const Spacer(),
               SizedBox(
                 width: double.infinity,

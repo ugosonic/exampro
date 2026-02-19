@@ -14,12 +14,6 @@ class ExamRepository {
   ExamRepository(this._db, [this._remote]);
 
   // ---------- robust JSON helpers (no .cast<...> anywhere) ----------
-  Map<String, dynamic> _asMap(dynamic v) {
-    if (v == null) return <String, dynamic>{};
-    if (v is Map<String, dynamic>) return v;
-    if (v is Map) return Map<String, dynamic>.from(v);
-    throw StateError('Expected Map, got ${v.runtimeType}');
-  }
 
   List<Map<String, dynamic>> _asListOfMap(dynamic v) {
     if (v == null) return const <Map<String, dynamic>>[];
@@ -372,7 +366,7 @@ class ExamRepository {
     int passPercent = 60;
     if (exam == null && _remote != null) {
       try {
-        final rows = await _remote!.exams();
+        final rows = await _remote.exams();
         final m = rows.firstWhere((e) => _asInt(e['id']) == attempt.examId, orElse: () => const <String, dynamic>{});
         if (m.isNotEmpty) {
           passPercent = _asInt(m['pass_percent']) ?? 60;
@@ -397,7 +391,7 @@ class ExamRepository {
     }
     if (totalPoints == 0 && _remote != null) {
       try {
-        final data = await _remote!.examQuestions(attempt.examId);
+        final data = await _remote.examQuestions(attempt.examId);
         final order = _asListOfMap(data['order']);
         // Sum provided points if present, otherwise 1 per question
         totalPoints = order.fold<int>(0, (s, j) => s + (_asInt(j['points']) ?? 1));

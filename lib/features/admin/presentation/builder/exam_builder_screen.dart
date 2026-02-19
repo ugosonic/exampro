@@ -1,25 +1,4 @@
 import 'dart:convert';
-<<<<<<< HEAD
-
-import 'package:exampro/features/admin/utils/import_parser.dart';
-import 'package:flutter/material.dart';
-
-class ExamBuilderScreen extends StatefulWidget {
-  const ExamBuilderScreen({super.key});
-
-  @override
-  State<ExamBuilderScreen> createState() => _ExamBuilderScreenState();
-}
-
-class _ExamBuilderScreenState extends State<ExamBuilderScreen> {
-  int _step = 0;
-  final _title = TextEditingController();
-  final _desc = TextEditingController();
-  bool shuffle = true;
-  bool negativeMarking = false;
-  int timeLimit = 60;
-  final List<Map<String, dynamic>> questions = [];
-=======
 import 'package:file_picker/file_picker.dart';
 import 'dart:io' show File;
 
@@ -41,10 +20,10 @@ class ExamBuilderScreen extends ConsumerStatefulWidget {
 }
 
 class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
-  int _step = 0;
-  final _title = TextEditingController();
-  final _desc = TextEditingController();
-  final _pdf = TextEditingController();
+  int step = 0;
+  final title = TextEditingController();
+  final desc = TextEditingController();
+  final pdf = TextEditingController();
   bool isPdfExam = false;
   bool shuffle = true;
   bool negativeMarking = false;
@@ -54,24 +33,21 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
   final List<Map<String, dynamic>> questions = [];
   int? categoryId;
   int? subcategoryId;
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Exam Builder')),
       body: Stepper(
-        currentStep: _step,
-        onStepContinue: () => setState(() => _step = (_step + 1).clamp(0, 3)),
-        onStepCancel: () => setState(() => _step = (_step - 1).clamp(0, 3)),
+        currentStep: step,
+        onStepContinue: () => setState(() => step = (step + 1).clamp(0, 3)),
+        onStepCancel: () => setState(() => step = (step - 1).clamp(0, 3)),
         steps: [
           Step(
             title: const Text('Basics'),
             content: Column(children: [
-              TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
-              TextField(controller: _desc, decoration: const InputDecoration(labelText: 'Description')),
-<<<<<<< HEAD
-=======
+              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
+              TextField(controller: desc, decoration: const InputDecoration(labelText: 'Description')),
               const SizedBox(height: 12),
               SwitchListTile(
                 title: const Text('Use PDF instead of MCQ questions'),
@@ -83,7 +59,7 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
               ),
               const SizedBox(height: 4),
               TextField(
-                controller: _pdf,
+                controller: pdf,
                 decoration: const InputDecoration(
                   labelText: 'PDF URL (optional)',
                   hintText: 'https://.../your-exam.pdf',
@@ -97,19 +73,19 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                   onPressed: () async {
                     final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
                     final path = res?.files.single.path;
-                    if (path != null) setState(() => _pdf.text = path);
+                    if (path != null) setState(() => pdf.text = path);
                   },
                   label: const Text('Pick PDF file'),
                 ),
               ),
-              if (_pdf.text.trim().isNotEmpty && !_pdf.text.trim().startsWith('http'))
+              if (pdf.text.trim().isNotEmpty && !pdf.text.trim().startsWith('http'))
                 Align(
                   alignment: Alignment.centerLeft,
                   child: FilledButton.icon(
                     icon: const Icon(Icons.cloud_upload),
                     onPressed: () async {
                       try {
-                        final path = _pdf.text.trim();
+                        final path = pdf.text.trim();
                         final dio = ref.read(dioProvider);
                         final form = FormData.fromMap({'file': await MultipartFile.fromFile(path)});
                         final res = await dio.post('/admin/upload/pdf', data: form);
@@ -117,12 +93,12 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                         if (url.isEmpty) throw Exception('Invalid response');
                         final env = ref.read(envLoaderProvider).requireValue;
                         final absolute = url.startsWith('/') ? '${env.apiBaseUrl}$url' : url;
-                        setState(() => _pdf.text = absolute);
-                        if (mounted) {
+                        setState(() => pdf.text = absolute);
+                        if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF uploaded')));
                         }
                       } catch (e) {
-                        if (mounted) {
+                        if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
                         }
                       }
@@ -159,7 +135,6 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                     onTap: () => setState(() => themeKey = t),
                   ),
               ])
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
             ]),
           ),
           Step(
@@ -175,8 +150,6 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                   items: const [30, 45, 60, 90, 120].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                   onChanged: (v) => setState(() => timeLimit = v ?? 60),
                 )
-<<<<<<< HEAD
-=======
               ]),
               const SizedBox(height: 8),
               Row(children: [
@@ -191,18 +164,12 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                     onChanged: (v) => passPercent = int.tryParse(v) ?? 60,
                   ),
                 ),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
               ])
             ]),
           ),
           Step(
             title: const Text('Questions'),
             content: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-<<<<<<< HEAD
-              FilledButton(onPressed: _importQuestions, child: const Text('Import CSV/JSON')),
-              const SizedBox(height: 8),
-              Text('Items: ${questions.length}'),
-=======
               if (!isPdfExam) ...[
                 Row(children: [
                   Expanded(
@@ -238,18 +205,14 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
               ] else ...[
                 const Text('PDF exam selected: MCQ steps hidden.'),
               ],
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
             ]),
           ),
           Step(
             title: const Text('Preview & Publish'),
             content: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('Title: ${_title.text}'),
+              Text('Title: ${title.text}'),
               Text('Questions: ${questions.length}'),
               const SizedBox(height: 8),
-<<<<<<< HEAD
-              FilledButton(onPressed: () {}, child: const Text('Publish')),
-=======
               Row(children: [
                 Expanded(
                   child: OutlinedButton(
@@ -265,7 +228,6 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                   ),
                 ),
               ]),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
             ]),
           ),
         ],
@@ -273,16 +235,6 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
     );
   }
 
-<<<<<<< HEAD
-  Future<void> _importQuestions() async {
-    // For now, parse a sample JSON payload.
-    const sample = '[{"text":"Q1?","options":["A","B"],"answers":[1],"explanation":"Because"}]';
-    final list = parseJsonQuestions(jsonDecode(sample));
-    setState(() => questions.addAll(list));
-  }
-}
-
-=======
 Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEdit, VoidCallback onDelete) {
   final opts = (q['options'] as List).cast<Map>();
   final correctCount = opts.where((o) => (o['correct'] as bool?) ?? false).length;
@@ -471,23 +423,23 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
 
   Future<void> _saveExam({required bool published}) async {
     final repo = ref.read(adminRepositoryProvider);
-    if ((_title.text).isEmpty || categoryId == null) {
+    if (title.text.isEmpty || categoryId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Please enter title and pick category')));
       }
       return;
     }
-    if (isPdfExam && _pdf.text.trim().isEmpty) {
+    if (isPdfExam && pdf.text.trim().isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please pick or enter a PDF for this exam')));
       }
       return;
     }
     final examId = await repo.createExam(
-      title: _title.text,
-      description: _desc.text,
-      pdfUrl: isPdfExam ? _pdf.text.trim() : '',
+      title: title.text,
+      description: desc.text,
+      pdfUrl: isPdfExam ? pdf.text.trim() : '',
       categoryId: categoryId!,
       subcategoryId: subcategoryId,
       timeLimitMinutes: timeLimit,
@@ -658,4 +610,3 @@ Gradient? _themeGradient(BuildContext context, int key) {
 
 
 
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

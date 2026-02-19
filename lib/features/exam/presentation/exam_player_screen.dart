@@ -1,20 +1,10 @@
-<<<<<<< HEAD
-import 'package:exampro/common/widgets/tap_scale.dart';
-import 'package:exampro/core/analytics/analytics.dart';
-import 'package:exampro/features/exam/data/attempt_repository.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-class ExamPlayerScreen extends ConsumerStatefulWidget {
-  final String examId;
-  const ExamPlayerScreen({super.key, required this.examId});
-=======
 
 import 'dart:async';
 import 'package:citizentest/common/widgets/tap_scale.dart';
 import 'package:citizentest/core/analytics/analytics.dart';
 import 'package:citizentest/core/db/app_database.dart';
 import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/core/notifications/pending_test_reminder.dart';
 import 'package:citizentest/features/exam/data/exam_repository.dart';
 import 'package:citizentest/features/sync/data/sync_repository.dart';
 import 'package:citizentest/features/dashboard/data/progress_repository.dart';
@@ -29,7 +19,6 @@ class ExamPlayerScreen extends ConsumerStatefulWidget {
   final String? mode; // 'practice' (default) or 'assignment'
   final int? categoryId; // when practicing entire category
   const ExamPlayerScreen({super.key, required this.examId, this.attemptId, this.mode, this.categoryId});
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 
   @override
   ConsumerState<ExamPlayerScreen> createState() => _ExamPlayerScreenState();
@@ -37,59 +26,33 @@ class ExamPlayerScreen extends ConsumerStatefulWidget {
 
 class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
   int index = 0;
-<<<<<<< HEAD
-  int? selected;
-  int? attemptId;
-  final questions = const [
-    (
-      'Which gas is most abundant in the Earth\'s atmosphere?',
-      ['Oxygen', 'Nitrogen', 'Carbon Dioxide', 'Argon'],
-      1,
-      'Nitrogen makes up ~78% of Earth\'s atmosphere.'
-    ),
-    (
-      'Which organ pumps blood throughout the body?',
-      ['Lungs', 'Liver', 'Heart', 'Kidneys'],
-      2,
-      'The heart pumps blood via rhythmic contractions.'
-    ),
-  ];
-=======
   int? attemptId;
   late final int examId;
-  List<Question> _questions = const [];
-  Map<int, List<Choice>> _options = const {};
-  final Map<int, Set<int>> _selections = {}; // questionId -> selected option IDs
-  final Set<int> _revealed = {}; // questionIds whose explanation is revealed
-  Exam? _exam;
-  Attempt? _attempt;
-  Timer? _ticker;
-  Timer? _syncDebounce;
-  int _remainingSec = 0;
-  bool _autoSubmitted = false;
-  bool _isPro = false;
-  String _mode = 'practice';
-  final Set<int> _skipped = {}; // skipped question IDs
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
+  List<Question> questions0 = const [];
+  Map<int, List<Choice>> options0 = const {};
+  final Map<int, Set<int>> selections = {}; // questionId -> selected option IDs
+  final Set<int> revealed = {}; // questionIds whose explanation is revealed
+  Exam? exam0;
+  Attempt? attempt;
+  Timer? ticker;
+  Timer? syncDebounce;
+  int remainingSec = 0;
+  bool autoSubmitted = false;
+  bool isPro = false;
+  String mode = 'practice';
+  final Set<int> skipped = {}; // skipped question IDs
 
   @override
   void initState() {
     super.initState();
-<<<<<<< HEAD
-    ref.read(analyticsProvider).event('exam_start', params: {'examId': widget.examId});
-    _startAttempt();
-  }
-
-  Future<void> _startAttempt() async {
-    final repo = ref.read(attemptRepositoryProvider);
-    attemptId = await repo.startAttempt(examId: int.tryParse(widget.examId) ?? 0, mode: 'practice');
-=======
     examId = int.tryParse(widget.examId) ?? 0;
     ref.read(analyticsProvider).event('exam_start', params: {'examId': widget.examId});
-    _load();
-  }  Future<void> _load() async {
+    load();
+  }
+
+  Future<void> load() async {
     try {
-      _mode = (widget.mode ?? 'practice');
+      mode = (widget.mode ?? 'practice');
       final repo = ref.read(examRepositoryProvider);
       // start or resume attempt
       if (widget.attemptId != null) {
@@ -97,12 +60,12 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         // jump to next unanswered index
         final answered = await repo.countAnswers(attemptId!);
         setState(() => index = answered);
-      } else if (widget.categoryId == null && _mode != 'practice') {
+      } else if (widget.categoryId == null && mode != 'practice') {
         // Only create attempt for assignment (or exam-bound practice), never for category practice
         final user = ref.read(currentUserProvider);
         final email = user?.email ?? 'guest@local';
-        attemptId = await repo.startAttempt(examId: examId, mode: _mode, userEmail: email);
-        _queueSync(email);
+        attemptId = await repo.startAttempt(examId: examId, mode: mode, userEmail: email);
+        queueSync(email);
       }
       // load questions and options
       final list = (widget.categoryId != null)
@@ -132,38 +95,41 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
       if (attemptId != null) {
         att = await (db.select(db.attempts)..where((t) => t.id.equals(attemptId!))).getSingleOrNull();
       }
+      if (attemptId != null) {
+        await PendingTestReminderService.sync(db);
+      }
       // determine pro
       final user = ref.read(currentUserProvider);
       if (user != null) {
         final row = await (db.select(db.users)..where((u) => u.email.equals(user.email))).getSingleOrNull();
-        _isPro = row?.isPro ?? false;
+        isPro = row?.isPro ?? false;
       } else {
-        _isPro = false;
+        isPro = false;
       }
       // load previous selections if resuming
       if (attemptId != null && widget.attemptId != null) {
         final saved = await repo.loadSelections(attemptId!);
-        _selections.addAll({for (final e in saved.entries) e.key: e.value.toSet()});
+        selections.addAll({for (final e in saved.entries) e.key: e.value.toSet()});
       }
       setState(() {
-        _questions = [for (final q in list) q.question];
-        _options = {for (final q in list) q.question.id: q.options};
-        _exam = exam;
-        _attempt = att;
+        questions0 = [for (final q in list) q.question];
+        options0 = {for (final q in list) q.question.id: q.options};
+        exam0 = exam;
+        attempt = att;
       });
       // Practice-all resume prompt
       if (widget.categoryId != null) {
         final user = ref.read(currentUserProvider);
         final email = user?.email ?? 'guest@local';
         final saved = await repo.practiceProgress(categoryId: widget.categoryId!, userEmail: email);
-        if (saved > 0 && saved < _questions.length) {
+        if (saved > 0 && saved < questions0.length) {
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (!mounted) return;
             final cont = await showDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
                 title: const Text('Continue practice?'),
-                content: Text('You stopped at question ${saved + 1} of ${_questions.length}. Continue or start over?'),
+                content: Text('You stopped at question ${saved + 1} of ${questions0.length}. Continue or start over?'),
                 actions: [
                   TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Start over')),
                   FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Continue')),
@@ -180,8 +146,8 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         }
       }
       // If current index points to a locked question and user isn't pro, redirect
-      _ensureUnlockedIndex();
-      _startTimer();
+      ensureUnlockedIndex();
+      startTimer();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load exam: $e')));
@@ -200,31 +166,31 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
 
   @override
   void dispose() {
-    _ticker?.cancel();
-    _syncDebounce?.cancel();
+    ticker?.cancel();
+    syncDebounce?.cancel();
     super.dispose();
   }
 
-  void _queueSync(String email) {
-    _syncDebounce?.cancel();
-    _syncDebounce = Timer(const Duration(seconds: 1), () async {
+  void queueSync(String email) {
+    syncDebounce?.cancel();
+    syncDebounce = Timer(const Duration(seconds: 1), () async {
       try {
         await ref.read(syncRepositoryProvider).pushUserProgress(email);
       } catch (_) {}
     });
   }
 
-  void _ensureUnlockedIndex() {
-    if (_questions.isEmpty) return;
-    if (!_isPro && _questions[index].locked) {
+  void ensureUnlockedIndex() {
+    if (questions0.isEmpty) return;
+    if (!isPro && questions0[index].locked) {
       // find next unlocked forward, or back to previous unlocked; if none, route to upgrade
       int? next;
-      for (var i = index; i < _questions.length; i++) {
-        if (!_questions[i].locked) { next = i; break; }
+      for (var i = index; i < questions0.length; i++) {
+        if (!questions0[i].locked) { next = i; break; }
       }
       next ??= () {
         for (var i = index - 1; i >= 0; i--) {
-          if (!_questions[i].locked) return i;
+          if (!questions0[i].locked) return i;
         }
         return null;
       }();
@@ -236,45 +202,46 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     }
   }
 
-  void _startTimer() {
-    if (_mode == 'practice') return; // practice is always untimed
-    final ex = _exam;
-    final att = _attempt;
+  void startTimer() {
+    if (mode == 'practice') return; // practice is always untimed
+    final ex = exam0;
+    final att = attempt;
     if (ex == null || att == null) return;
     final limitSec = (ex.timeLimitMinutes) * 60;
     if (limitSec <= 0) return; // no timer
     final elapsed = DateTime.now().difference(att.startedAt).inSeconds;
     final remaining = limitSec - elapsed;
     if (remaining <= 0) {
-      _autoSubmit();
+      autoSubmit();
       return;
     }
-    setState(() => _remainingSec = remaining);
-    _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (t) async {
+    setState(() => remainingSec = remaining);
+    ticker?.cancel();
+    ticker = Timer.periodic(const Duration(seconds: 1), (t) async {
       if (!mounted) return;
-      if (_remainingSec <= 1) {
+      if (remainingSec <= 1) {
         t.cancel();
-        await _autoSubmit();
+        await autoSubmit();
       } else {
-        setState(() => _remainingSec--);
+        setState(() => remainingSec--);
       }
     });
   }
 
-  int? _firstSkippedPendingIndex() {
-    if (_skipped.isEmpty) return null;
-    for (var i = 0; i < _questions.length; i++) {
-      if (_skipped.contains(_questions[i].id)) return i;
+  int? firstSkippedPendingIndex() {
+    if (skipped.isEmpty) return null;
+    for (var i = 0; i < questions0.length; i++) {
+      if (skipped.contains(questions0[i].id)) return i;
     }
     return null;
   }
 
-  Future<void> _autoSubmit() async {
-    if (_autoSubmitted) return;
-    _autoSubmitted = true;
+  Future<void> autoSubmit() async {
+    if (autoSubmitted) return;
+    autoSubmitted = true;
     if (attemptId != null) {
       await ref.read(examRepositoryProvider).submitAttempt(attemptId!);
+      await PendingTestReminderService.sync(ref.read(dbProvider));
       if (mounted) context.go('/result/$attemptId');
     } else if (mounted) {
       if (widget.categoryId != null) {
@@ -283,81 +250,23 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         Navigator.of(context).pop();
       }
     }
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
   }
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
-    final (text, options, correct, explanation) = questions[index];
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Q ${index + 1}/${questions.length}'),
-        actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.flag_outlined), tooltip: 'Flag for review')],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(text, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              ...List.generate(options.length, (i) => _option(context, options[i], i, correct)),
-              const Spacer(),
-              if (selected != null)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: (selected == correct) ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(explanation),
-                ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(onPressed: index > 0 ? () => setState(() => index--) : null, child: const Text('Back')),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () async {
-                        if (index < questions.length - 1) {
-                          setState(() {
-                            index++;
-                            selected = null;
-                          });
-                        } else {
-                          ref.read(analyticsProvider).event('exam_submit', params: {'examId': widget.examId});
-                          if (attemptId != null) {
-                            await ref.read(attemptRepositoryProvider).submitAttempt(attemptId!);
-                          }
-                          Navigator.of(context).pop();
-                        }
-                      },
-                      child: Text(index < questions.length - 1 ? 'Next' : 'Submit'),
-                    ),
-                  ),
-                ],
-              )
-=======
-    if (_questions.isEmpty) {
+    if (questions0.isEmpty) {
       return const Scaffold(
         body: SafeArea(child: Center(child: CircularProgressIndicator())),
       );
     }
-    final q = _questions[index];
-    final options = _options[q.id]!;
+    final q = questions0[index];
+    final options = options0[q.id]!;
     final correctIds = options.where((o) => o.isCorrect).map((o) => o.id).toSet();
-    final selected = _selections[q.id] ?? <int>{};
+    final selected = selections[q.id] ?? <int>{};
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Q ${index + 1}/${_questions.length}'),
+        title: Text('Q ${index + 1}/${questions0.length}'),
         actions: [
           IconButton(
             tooltip: 'Save',
@@ -365,10 +274,10 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
             onPressed: () async {
               final user = ref.read(currentUserProvider);
               final email = user?.email ?? 'guest@local';
-              final q = _questions[index];
+              final q = questions0[index];
               await ref.read(examRepositoryProvider).toggleSaved(questionId: q.id, userEmail: email);
-              _queueSync(email);
-              if (mounted) {
+              queueSync(email);
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated saved questions')));
               }
             },
@@ -383,22 +292,22 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                 final user = ref.read(currentUserProvider);
                 final email = user?.email ?? 'guest@local';
                 await ref.read(examRepositoryProvider).submitReport(examId: examId, userEmail: email, comment: comment.trim());
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report sent')));
                 }
               },
             ),
-          if ((_exam?.timeLimitMinutes ?? 0) > 0)
+          if ((exam0?.timeLimitMinutes ?? 0) > 0)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14),
-              child: Text(_formatTime(_remainingSec)),
+              child: Text(_formatTime(remainingSec)),
             ),
         ],
       ),
       body: SafeArea(
         child: Container(
           decoration: BoxDecoration(
-            gradient: _themeGradient(_exam?.themeKey ?? 0),
+            gradient: _themeGradient(exam0?.themeKey ?? 0),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -415,14 +324,13 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                 fontSize: () {
                                   final w = MediaQuery.of(context).size.width;
-                                  final v = (w * 0.06).clamp(18.0, 22.0);
-                                  return (v is double) ? v : (v as num).toDouble();
+                                  return (w * 0.06).clamp(18.0, 22.0).toDouble();
                                 }(),
                               ),
                         ),
                         const SizedBox(height: 12),
-                        ...options.map((o) => _option(context, o, correctIds.contains(o.id))),
-                        if (_mode == 'practice' && _revealed.contains(q.id))
+                        ...options.map((o) => option(context, o, correctIds.contains(o.id))),
+                        if (mode == 'practice' && revealed.contains(q.id))
                           Padding(
                             padding: const EdgeInsets.only(top: 8.0),
                             child: AnimatedContainer(
@@ -446,16 +354,16 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                   children: [
                     OutlinedButton(
                       onPressed: () {
-                        _skipped.add(q.id);
-                        if (index < _questions.length - 1) {
+                        skipped.add(q.id);
+                        if (index < questions0.length - 1) {
                           final i = index + 1;
-                          if (!_isPro && _questions[i].locked) {
+                          if (!isPro && questions0[i].locked) {
                             context.go('/upgrade');
                           } else {
                             setState(() => index = i);
                           }
                         } else {
-                          final pending = _firstSkippedPendingIndex();
+                          final pending = firstSkippedPendingIndex();
                           if (pending != null) {
                             setState(() => index = pending);
                           }
@@ -473,7 +381,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                         onPressed: index > 0
                             ? () {
                                 final i = index - 1;
-                                if (!_isPro && _questions[i].locked) {
+                                if (!isPro && questions0[i].locked) {
                                   context.go('/upgrade');
                                 } else {
                                   setState(() => index = i);
@@ -493,9 +401,9 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                         onPressed: () async {
                           // Save answer (if any)
                           if (attemptId != null) {
-                            final opts = _options[q.id]!;
+                            final opts = options0[q.id]!;
                             final correct = opts.where((x) => x.isCorrect).map((x) => x.id).toSet();
-                            final sel = _selections[q.id] ?? <int>{};
+                            final sel = selections[q.id] ?? <int>{};
                             final ok = _isSelectionCorrect(q, sel, correct);
                             if (sel.isNotEmpty) {
                               await ref.read(examRepositoryProvider).saveAnswer(
@@ -506,16 +414,16 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                                     isCorrect: ok,
                                   );
                               final u = ref.read(currentUserProvider);
-                              _queueSync(u?.email ?? 'guest@local');
-                              _skipped.remove(q.id);
+                              queueSync(u?.email ?? 'guest@local');
+                              skipped.remove(q.id);
                               // Ping dashboard pies
                               ref.read(progressTickProvider.notifier).state++;
                             }
                           } else if (widget.categoryId != null) {
                             // Practice-all: save progress to next index if selected
-                            final sel = _selections[q.id] ?? <int>{};
+                            final sel = selections[q.id] ?? <int>{};
                             if (sel.isNotEmpty) {
-                              final opts = _options[q.id]!;
+                              final opts = options0[q.id]!;
                               final correct = opts.where((x) => x.isCorrect).map((x) => x.id).toSet();
                               final ok = _isSelectionCorrect(q, sel, correct);
                               final u = ref.read(currentUserProvider);
@@ -531,18 +439,18 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                             }
                           }
 
-                          if (_mode == 'practice') {
-                            if (!_revealed.contains(q.id)) {
-                              setState(() => _revealed.add(q.id));
+                          if (mode == 'practice') {
+                            if (!revealed.contains(q.id)) {
+                              setState(() => revealed.add(q.id));
                               return;
                             }
                           }
 
                           // Next / Submit or revisit skipped
-                          if (index < _questions.length - 1) {
+                          if (index < questions0.length - 1) {
                             final i = index + 1;
-                            if (!_isPro && _questions[i].locked) {
-                              if (mounted) context.go('/upgrade');
+                            if (!isPro && questions0[i].locked) {
+                              if (context.mounted) context.go('/upgrade');
                             } else {
                               setState(() => index = i);
                               if (widget.categoryId != null) {
@@ -552,28 +460,28 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               }
                             }
                           } else {
-                            final pending = _firstSkippedPendingIndex();
+                            final pending = firstSkippedPendingIndex();
                             if (pending != null) {
                               setState(() => index = pending);
                             } else {
                               ref.read(analyticsProvider).event('exam_submit', params: {'examId': widget.examId});
                               final u = ref.read(currentUserProvider);
-                              _queueSync(u?.email ?? 'guest@local');
+                              queueSync(u?.email ?? 'guest@local');
                               if (widget.categoryId != null) {
                                 final email = (u?.email ?? 'guest@local');
-                                await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: _questions.length);
+                                await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: questions0.length);
                               }
-                              await _autoSubmit();
+                              await autoSubmit();
                             }
                           }
                         },
                         child: Text(() {
-                          if (_mode == 'practice') {
-                            return !_revealed.contains(q.id)
+                          if (mode == 'practice') {
+                            return !revealed.contains(q.id)
                                 ? 'Check'
-                                : (index < _questions.length - 1 ? 'Next' : (_skipped.isNotEmpty ? 'Review Skipped' : 'Submit'));
+                                : (index < questions0.length - 1 ? 'Next' : (skipped.isNotEmpty ? 'Review Skipped' : 'Submit'));
                           }
-                          return index < _questions.length - 1 ? 'Next' : (_skipped.isNotEmpty ? 'Review Skipped' : 'Submit');
+                          return index < questions0.length - 1 ? 'Next' : (skipped.isNotEmpty ? 'Review Skipped' : 'Submit');
                         }()),
                       ),
                     ),
@@ -587,11 +495,11 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     );
   }
 
-  Widget _option(BuildContext context, Choice o, bool isCorrect) {
-    final q = _questions[index];
-    final selected = _selections[q.id] ?? <int>{};
+  Widget option(BuildContext context, Choice o, bool isCorrect) {
+    final q = questions0[index];
+    final selected = selections[q.id] ?? <int>{};
     final isSelected = selected.contains(o.id);
-    final showCorrect = (_mode == 'practice') && _revealed.contains(q.id);
+    final showCorrect = (mode == 'practice') && revealed.contains(q.id);
     Color? bg;
     Color? border;
     Color iconColor = Theme.of(context).colorScheme.primary;
@@ -618,9 +526,9 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
       padding: const EdgeInsets.only(bottom: 10),
       child: TapScale(
         onTap: () async {
-          if (_mode == 'practice' && _revealed.contains(q.id)) return; // lock changes after reveal
+          if (mode == 'practice' && revealed.contains(q.id)) return; // lock changes after reveal
           setState(() {
-            final sel = _selections.putIfAbsent(q.id, () => <int>{});
+            final sel = selections.putIfAbsent(q.id, () => <int>{});
             if (q.multiple) {
               if (sel.contains(o.id)) {
                 sel.remove(o.id);
@@ -634,9 +542,9 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
             }
           });
           if (attemptId != null) {
-            final options = _options[q.id]!;
+            final options = options0[q.id]!;
             final correct = options.where((x) => x.isCorrect).map((x) => x.id).toSet();
-            final sel = _selections[q.id] ?? <int>{};
+            final sel = selections[q.id] ?? <int>{};
             final ok = _isSelectionCorrect(q, sel, correct);
             await ref.read(examRepositoryProvider).saveAnswer(
                   attemptId: attemptId!,
@@ -646,13 +554,13 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                   isCorrect: ok,
                 );
             final u = ref.read(currentUserProvider);
-            _queueSync(u?.email ?? 'guest@local');
-            _skipped.remove(q.id);
+            queueSync(u?.email ?? 'guest@local');
+            skipped.remove(q.id);
             ref.read(progressTickProvider.notifier).state++;
           } else if (widget.categoryId != null) {
-            final options = _options[q.id]!;
+            final options = options0[q.id]!;
             final correct = options.where((x) => x.isCorrect).map((x) => x.id).toSet();
-            final sel = _selections[q.id] ?? <int>{};
+            final sel = selections[q.id] ?? <int>{};
             final ok = _isSelectionCorrect(q, sel, correct);
             final u = ref.read(currentUserProvider);
             final email = u?.email ?? 'guest@local';
@@ -683,7 +591,6 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
               ),
               const SizedBox(width: 12),
               Expanded(child: Text(o.label)),
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
             ],
           ),
         ),
@@ -691,41 +598,6 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     );
   }
 
-<<<<<<< HEAD
-  Widget _option(BuildContext context, String label, int i, int correct) {
-    final isSelected = selected == i;
-    final isCorrect = i == correct;
-    final color = isSelected
-        ? (isCorrect ? Colors.green.withOpacity(0.15) : Colors.red.withOpacity(0.12))
-        : Theme.of(context).cardTheme.color;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TapScale(
-        onTap: () async {
-          setState(() => selected = i);
-          if (attemptId != null) {
-            await ref.read(attemptRepositoryProvider).saveAnswer(
-                  attemptId: attemptId!,
-                  questionId: index + 1,
-                  selected: [i],
-                );
-          }
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: color, border: Border.all(color: Colors.black12)),
-          child: Row(
-            children: [
-              Icon(isSelected ? (isCorrect ? Icons.check_circle : Icons.cancel) : Icons.circle_outlined,
-                  color: isSelected ? (isCorrect ? Colors.green : Colors.red) : Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(child: Text(label)),
-            ],
-          ),
-        ),
-=======
   bool _isSelectionCorrect(Question q, Set<int> selected, Set<int> correct) {
     if (q.multiple) {
       return selected.isNotEmpty && selected.length == correct.length && selected.containsAll(correct);
@@ -768,7 +640,6 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.of(ctx).pop(c.text), child: const Text('Send')),
         ],
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
       ),
     );
   }
@@ -779,7 +650,4 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
 
 
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

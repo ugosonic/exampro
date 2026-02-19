@@ -1,20 +1,3 @@
-<<<<<<< HEAD
-List<Map<String, dynamic>> parseCsvQuestions(String csv) {
-  // Expect header: text,option1,option2,option3,option4,answers,explanation
-  final lines = csv.split(RegExp(r"\r?\n")).where((l) => l.trim().isNotEmpty).toList();
-  if (lines.isEmpty) return [];
-  final out = <Map<String, dynamic>>[];
-  for (var i = 1; i < lines.length; i++) {
-    final parts = lines[i].split(',');
-    if (parts.length < 6) continue;
-    final options = parts.sublist(1, parts.length - 2);
-    final answers = parts[parts.length - 2].split('|').where((e) => e.isNotEmpty).map(int.parse).toList();
-    out.add({
-      'text': parts[0],
-      'options': options,
-      'answers': answers,
-      'explanation': parts.last,
-=======
 import 'package:csv/csv.dart';
 
 List<Map<String, dynamic>> parseCsvQuestions(String csv) {
@@ -64,7 +47,6 @@ List<Map<String, dynamic>> parseCsvQuestions(String csv) {
       'answers': answers,
       'explanation': explanation,
       'multiple': isMultiple,
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
     });
   }
   return out;
@@ -72,13 +54,6 @@ List<Map<String, dynamic>> parseCsvQuestions(String csv) {
 
 List<Map<String, dynamic>> parseJsonQuestions(dynamic json) {
   if (json is List) {
-<<<<<<< HEAD
-    return json.cast<Map<String, dynamic>>();
-  }
-  return [];
-}
-
-=======
     // Normalize legacy keys: allow 'text' in place of 'body'
     return json
         .map((e) => Map<String, dynamic>.from(e as Map))
@@ -91,4 +66,3 @@ List<Map<String, dynamic>> parseJsonQuestions(dynamic json) {
   }
   return [];
 }
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45

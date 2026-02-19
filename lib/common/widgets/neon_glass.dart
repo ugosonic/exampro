@@ -82,7 +82,7 @@ class _NeonBorderPainter extends CustomPainter {
 
     // Animated sweep highlight traveling around the border
     final start = progress.isFinite ? progress.clamp(0.0, 1.0) : 0.0;
-    var mid = ((start as double) + 0.02) % 1.0;
+    var mid = ((start) + 0.02) % 1.0;
     var end = (start + 0.04) % 1.0;
     // Ensure strictly increasing stops to avoid degenerate gradients
     if (mid <= start) mid = (start + 0.001).clamp(0.0, 1.0);

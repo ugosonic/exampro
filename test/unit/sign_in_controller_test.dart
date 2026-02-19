@@ -1,12 +1,6 @@
-<<<<<<< HEAD
-import 'package:exampro/features/auth/data/auth_repository.dart';
-import 'package:exampro/features/auth/domain/models.dart';
-import 'package:exampro/features/auth/presentation/sign_in_state.dart';
-=======
 import 'package:citizentest/features/auth/data/auth_repository.dart';
 import 'package:citizentest/features/auth/domain/models.dart';
 import 'package:citizentest/features/auth/presentation/sign_in_state.dart';
->>>>>>> 5a2d59ed86ee8512b858a9e9b9cc72883f1a7e45
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
