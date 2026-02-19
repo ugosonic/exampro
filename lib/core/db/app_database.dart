@@ -315,7 +315,7 @@ class AppDatabase extends _$AppDatabase {
             'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             'category_id INTEGER NOT NULL, '
             'user_email TEXT NOT NULL, '
-            'index INTEGER NOT NULL DEFAULT 0, '
+            '"index" INTEGER NOT NULL DEFAULT 0, '
             'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
             'UNIQUE(user_email, category_id)'
             ')',
@@ -375,7 +375,7 @@ class AppDatabase extends _$AppDatabase {
       'id INTEGER PRIMARY KEY AUTOINCREMENT, '
       'category_id INTEGER NOT NULL, '
       'user_email TEXT NOT NULL, '
-      'index INTEGER NOT NULL DEFAULT 0, '
+      '"index" INTEGER NOT NULL DEFAULT 0, '
       'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
       'UNIQUE(user_email, category_id)'
       ')',
