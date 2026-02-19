@@ -38,12 +38,40 @@ jobs:
       - name: Package web build
         run: tar -czf web.tar.gz -C build/web .
 
+      - name: Check SSH reachability
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT || 22 }}
+        run: |
+          python - <<'PY'
+          import os, socket, sys
+          host = os.environ.get("VPS_HOST", "").strip()
+          port = int(os.environ.get("VPS_PORT", "22"))
+          if not host:
+              print("VPS_HOST secret is empty")
+              sys.exit(1)
+          s = socket.socket()
+          s.settimeout(10)
+          try:
+              s.connect((host, port))
+              print(f"SSH reachable on {host}:{port}")
+          except Exception as e:
+              print(f"SSH not reachable on {host}:{port} -> {e}")
+              sys.exit(1)
+          finally:
+              s.close()
+          PY
+
       - name: Upload web package to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT || 22 }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_KEY }}
+          timeout: 120s
+          command_timeout: 20m
+          debug: true
           source: "web.tar.gz"
           target: "/tmp"
 
@@ -51,8 +79,11 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_PORT || 22 }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_KEY }}
+          timeout: 120s
+          command_timeout: 30m
           script: |
             set -e
             WEB_ROOT="${{ secrets.VPS_WEB_ROOT }}"

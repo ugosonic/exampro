@@ -43,3 +43,29 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+assets/env/vc.env
+assets/env/*.local
+server/express/.env
+server/fastapi/.env
+
+# Firebase / mobile service credentials
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# Signing keys / certificates
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+android/key.properties
+
+# SSH keys
+id_rsa
+id_ed25519
+*.ppk
