@@ -45,213 +45,295 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
         steps: [
           Step(
             title: const Text('Basics'),
-            content: Column(children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-              TextField(controller: desc, decoration: const InputDecoration(labelText: 'Description')),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                title: const Text('Use PDF instead of MCQ questions'),
-                value: isPdfExam,
-                onChanged: (v) => setState(() {
-                  isPdfExam = v;
-                  if (v) questions.clear();
-                }),
-              ),
-              const SizedBox(height: 4),
-              TextField(
-                controller: pdf,
-                decoration: const InputDecoration(
-                  labelText: 'PDF URL (optional)',
-                  hintText: 'https://.../your-exam.pdf',
+            content: Column(
+              children: [
+                TextField(
+                  controller: title,
+                  decoration: const InputDecoration(labelText: 'Title'),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.upload_file),
-                  onPressed: () async {
-                    final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
-                    final path = res?.files.single.path;
-                    if (path != null) setState(() => pdf.text = path);
-                  },
-                  label: const Text('Pick PDF file'),
+                TextField(
+                  controller: desc,
+                  decoration: const InputDecoration(labelText: 'Description'),
                 ),
-              ),
-              if (pdf.text.trim().isNotEmpty && !pdf.text.trim().startsWith('http'))
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  title: const Text('Use PDF instead of MCQ questions'),
+                  value: isPdfExam,
+                  onChanged: (v) => setState(() {
+                    isPdfExam = v;
+                    if (v) questions.clear();
+                  }),
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: pdf,
+                  decoration: const InputDecoration(
+                    labelText: 'PDF URL (optional)',
+                    hintText: 'https://.../your-exam.pdf',
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: FilledButton.icon(
-                    icon: const Icon(Icons.cloud_upload),
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.upload_file),
                     onPressed: () async {
-                      try {
-                        final path = pdf.text.trim();
-                        final dio = ref.read(dioProvider);
-                        final form = FormData.fromMap({'file': await MultipartFile.fromFile(path)});
-                        final res = await dio.post('/admin/upload/pdf', data: form);
-                        final url = (res.data['url'] as String?) ?? '';
-                        if (url.isEmpty) throw Exception('Invalid response');
-                        final env = ref.read(envLoaderProvider).requireValue;
-                        final absolute = url.startsWith('/') ? '${env.apiBaseUrl}$url' : url;
-                        setState(() => pdf.text = absolute);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF uploaded')));
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
-                        }
-                      }
+                      final res = await FilePicker.platform.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['pdf'],
+                      );
+                      final path = res?.files.single.path;
+                      if (path != null) setState(() => pdf.text = path);
                     },
-                    label: const Text('Upload picked PDF'),
+                    label: const Text('Pick PDF file'),
                   ),
                 ),
-              const SizedBox(height: 12),
-              _CategoryPickers(
-                onSelected: (cat, sub) async {
-                  setState(() {
-                    categoryId = cat;
-                    subcategoryId = sub;
-                  });
-                  if (cat != null && mounted) {
-                    final repo = ref.read(adminRepositoryProvider);
-                    final c = await repo.getCategory(cat);
-                    if (c != null && mounted) setState(() => passPercent = c.passPercent);
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Theme', style: Theme.of(context).textTheme.labelLarge),
-              ),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final t in [0, 1, 2, 3, 4, 5])
-                  _ThemeChip(
-                    label: _themeName(t),
-                    gradient: _themeGradient(context, t),
-                    selected: themeKey == t,
-                    onTap: () => setState(() => themeKey = t),
+                if (pdf.text.trim().isNotEmpty &&
+                    !pdf.text.trim().startsWith('http'))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.cloud_upload),
+                      onPressed: () async {
+                        try {
+                          final path = pdf.text.trim();
+                          final dio = ref.read(dioProvider);
+                          final form = FormData.fromMap({
+                            'file': await MultipartFile.fromFile(path),
+                          });
+                          final res = await dio.post(
+                            '/admin/upload/pdf',
+                            data: form,
+                          );
+                          final url = (res.data['url'] as String?) ?? '';
+                          if (url.isEmpty) throw Exception('Invalid response');
+                          final env = ref.read(envLoaderProvider).requireValue;
+                          final absolute = url.startsWith('/')
+                              ? '${env.apiBaseUrl}$url'
+                              : url;
+                          setState(() => pdf.text = absolute);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('PDF uploaded')),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Upload failed: $e')),
+                            );
+                          }
+                        }
+                      },
+                      label: const Text('Upload picked PDF'),
+                    ),
                   ),
-              ])
-            ]),
+                const SizedBox(height: 12),
+                _CategoryPickers(
+                  onSelected: (cat, sub) async {
+                    setState(() {
+                      categoryId = cat;
+                      subcategoryId = sub;
+                    });
+                    if (cat != null && mounted) {
+                      final repo = ref.read(adminRepositoryProvider);
+                      final c = await repo.getCategory(cat);
+                      if (c != null && mounted) {
+                        setState(() => passPercent = c.passPercent);
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Theme',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final t in [0, 1, 2, 3, 4, 5])
+                      _ThemeChip(
+                        label: _themeName(t),
+                        gradient: _themeGradient(context, t),
+                        selected: themeKey == t,
+                        onTap: () => setState(() => themeKey = t),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
           Step(
             title: const Text('Rules'),
-            content: Column(children: [
-              SwitchListTile(value: shuffle, onChanged: (v) => setState(() => shuffle = v), title: const Text('Shuffle options')),
-              SwitchListTile(value: negativeMarking, onChanged: (v) => setState(() => negativeMarking = v), title: const Text('Negative marking')),
-              Row(children: [
-                const Text('Time limit (mins):'),
-                const SizedBox(width: 12),
-                DropdownButton<int>(
-                  value: timeLimit,
-                  items: const [30, 45, 60, 90, 120].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
-                  onChanged: (v) => setState(() => timeLimit = v ?? 60),
-                )
-              ]),
-              const SizedBox(height: 8),
-              Row(children: [
-                const Text('Pass mark (%):'),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 96,
-                  child: TextField(
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: '60'),
-                    controller: TextEditingController(text: passPercent.toString()),
-                    onChanged: (v) => passPercent = int.tryParse(v) ?? 60,
-                  ),
+            content: Column(
+              children: [
+                SwitchListTile(
+                  value: shuffle,
+                  onChanged: (v) => setState(() => shuffle = v),
+                  title: const Text('Shuffle options'),
                 ),
-              ])
-            ]),
+                SwitchListTile(
+                  value: negativeMarking,
+                  onChanged: (v) => setState(() => negativeMarking = v),
+                  title: const Text('Negative marking'),
+                ),
+                Row(
+                  children: [
+                    const Text('Time limit (mins):'),
+                    const SizedBox(width: 12),
+                    DropdownButton<int>(
+                      value: timeLimit,
+                      items: const [30, 45, 60, 90, 120]
+                          .map(
+                            (e) =>
+                                DropdownMenuItem(value: e, child: Text('$e')),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => timeLimit = v ?? 60),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text('Pass mark (%):'),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 96,
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(hintText: '60'),
+                        controller: TextEditingController(
+                          text: passPercent.toString(),
+                        ),
+                        onChanged: (v) => passPercent = int.tryParse(v) ?? 60,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           Step(
             title: const Text('Questions'),
-            content: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (!isPdfExam) ...[
-                Row(children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      icon: const Icon(Icons.add),
-                      onPressed: _addQuestionDialog,
-                      label: const Text('Add Question'),
-                    ),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!isPdfExam) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.add),
+                          onPressed: _addQuestionDialog,
+                          label: const Text('Add Question'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.file_upload),
+                          onPressed: _importQuestions,
+                          label: const Text('Import CSV/JSON'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.upload_file),
+                          onPressed: _pickCsvFile,
+                          label: const Text('Upload CSV File'),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.file_upload),
-                      onPressed: _importQuestions,
-                      label: const Text('Import CSV/JSON'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.upload_file),
-                      onPressed: _pickCsvFile,
-                      label: const Text('Upload CSV File'),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 8),
-                _CsvFormatInfo(),
-                const SizedBox(height: 8),
-                Text('Items: ${questions.length}'),
-                const SizedBox(height: 8),
-                ...List.generate(questions.length, (i) => _questionTile(i)),
-              ] else ...[
-                const Text('PDF exam selected: MCQ steps hidden.'),
+                  const SizedBox(height: 8),
+                  _CsvFormatInfo(),
+                  const SizedBox(height: 8),
+                  Text('Items: ${questions.length}'),
+                  const SizedBox(height: 8),
+                  ...List.generate(questions.length, (i) => _questionTile(i)),
+                ] else ...[
+                  const Text('PDF exam selected: MCQ steps hidden.'),
+                ],
               ],
-            ]),
+            ),
           ),
           Step(
             title: const Text('Preview & Publish'),
-            content: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('Title: ${title.text}'),
-              Text('Questions: ${questions.length}'),
-              const SizedBox(height: 8),
-              Row(children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _saveExam(published: false),
-                    child: const Text('Save Draft'),
-                  ),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Title: ${title.text}'),
+                Text('Questions: ${questions.length}'),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _saveExam(published: false),
+                        child: const Text('Save Draft'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => _saveExam(published: true),
+                        child: const Text('Publish'),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => _saveExam(published: true),
-                    child: const Text('Publish'),
-                  ),
-                ),
-              ]),
-            ]),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEdit, VoidCallback onDelete) {
-  final opts = (q['options'] as List).cast<Map>();
-  final correctCount = opts.where((o) => (o['correct'] as bool?) ?? false).length;
-  return Card(
-    child: ListTile(
-      title: Text(((q['body'] as String?) ?? '').isNotEmpty ? q['body'] : 'Untitled question'),
-      subtitle: Text('${opts.length} options • $correctCount correct'),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(icon: const Icon(Icons.edit), onPressed: onEdit),
-        IconButton(icon: const Icon(Icons.delete), onPressed: onDelete),
-      ]),
-    ),
-  );
-}
+  Widget _questionTileBuilder(
+    int index,
+    Map<String, dynamic> q,
+    VoidCallback onEdit,
+    VoidCallback onDelete,
+  ) {
+    final opts = (q['options'] as List).cast<Map>();
+    final correctCount = opts
+        .where((o) => (o['correct'] as bool?) ?? false)
+        .length;
+    return Card(
+      child: ListTile(
+        title: Text(
+          ((q['body'] as String?) ?? '').isNotEmpty
+              ? q['body']
+              : 'Untitled question',
+        ),
+        subtitle: Text('${opts.length} options • $correctCount correct'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(icon: const Icon(Icons.edit), onPressed: onEdit),
+            IconButton(icon: const Icon(Icons.delete), onPressed: onDelete),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _questionTile(int i) {
-    return _questionTileBuilder(i, questions[i], () => _editQuestionDialog(i), () => setState(() => questions.removeAt(i)));
+    return _questionTileBuilder(
+      i,
+      questions[i],
+      () => _editQuestionDialog(i),
+      () => setState(() => questions.removeAt(i)),
+    );
   }
 
   Future<void> _addQuestionDialog() async {
@@ -259,76 +341,138 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
   }
 
   Future<void> _editQuestionDialog(int index) async {
-    await _openQuestionDialog(existing: questions[index], onSave: (map) => setState(() => questions[index] = map));
-  }
-
-  Future<void> _openQuestionDialog({Map<String, dynamic>? existing, void Function(Map<String, dynamic>)? onSave}) async {
-    final body = TextEditingController(text: existing?['body'] as String? ?? '');
-    final explanation = TextEditingController(text: existing?['explanation'] as String? ?? '');
-    bool multiple = existing?['multiple'] as bool? ?? false;
-    final opts = <Map<String, dynamic>>[...((existing?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [
-      {'label': '', 'correct': false},
-      {'label': '', 'correct': false},
-      {'label': '', 'correct': false},
-      {'label': '', 'correct': false},
-    ])];
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
-        return AlertDialog(
-          title: Text(existing == null ? 'Add Question' : 'Edit Question'),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                TextField(controller: body, maxLines: 3, decoration: const InputDecoration(labelText: 'Question', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                SwitchListTile(value: multiple, onChanged: (v) => set(() => multiple = v), title: const Text('Multiple correct answers')),
-                const SizedBox(height: 4),
-                const Text('Options'),
-                const SizedBox(height: 8),
-                for (var i = 0; i < opts.length; i++) ...[
-                  Row(children: [
-                    Expanded(child: TextField(
-                      controller: TextEditingController(text: (opts[i]['label'] as String?) ?? ''),
-                      onChanged: (v) => opts[i]['label'] = v,
-                      decoration: InputDecoration(labelText: 'Option ${i + 1}'),
-                    )),
-                    const SizedBox(width: 8),
-                    Checkbox(value: (opts[i]['correct'] as bool?) ?? false, onChanged: (v) => set(() => opts[i]['correct'] = v ?? false)),
-                    IconButton(onPressed: () => set(() => opts.removeAt(i)), icon: const Icon(Icons.close)),
-                  ]),
-                ],
-                TextButton.icon(onPressed: () => set(() => opts.add({'label': '', 'correct': false})), icon: const Icon(Icons.add), label: const Text('Add option')),
-                const SizedBox(height: 12),
-                TextField(controller: explanation, maxLines: 3, decoration: const InputDecoration(labelText: 'Explanation', border: OutlineInputBorder())),
-              ]),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-            FilledButton(onPressed: () {
-              final map = {
-                'body': body.text.trim(),
-                'explanation': explanation.text.trim(),
-                'multiple': multiple,
-                'options': opts,
-              };
-              if (onSave != null) {
-                onSave(map);
-              } else {
-                setState(() => questions.add(map));
-              }
-              Navigator.of(ctx).pop();
-            }, child: const Text('Save')),
-          ],
-        );
-      }),
+    await _openQuestionDialog(
+      existing: questions[index],
+      onSave: (map) => setState(() => questions[index] = map),
     );
   }
 
-// _CsvFormatInfo moved to top-level at the bottom of this file
+  Future<void> _openQuestionDialog({
+    Map<String, dynamic>? existing,
+    void Function(Map<String, dynamic>)? onSave,
+  }) async {
+    final body = TextEditingController(
+      text: existing?['body'] as String? ?? '',
+    );
+    final explanation = TextEditingController(
+      text: existing?['explanation'] as String? ?? '',
+    );
+    bool multiple = existing?['multiple'] as bool? ?? false;
+    final opts = <Map<String, dynamic>>[
+      ...((existing?['options'] as List?)?.cast<Map<String, dynamic>>() ??
+          [
+            {'label': '', 'correct': false},
+            {'label': '', 'correct': false},
+            {'label': '', 'correct': false},
+            {'label': '', 'correct': false},
+          ]),
+    ];
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) {
+          return AlertDialog(
+            title: Text(existing == null ? 'Add Question' : 'Edit Question'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: body,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Question',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      value: multiple,
+                      onChanged: (v) => set(() => multiple = v),
+                      title: const Text('Multiple correct answers'),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('Options'),
+                    const SizedBox(height: 8),
+                    for (var i = 0; i < opts.length; i++) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: TextEditingController(
+                                text: (opts[i]['label'] as String?) ?? '',
+                              ),
+                              onChanged: (v) => opts[i]['label'] = v,
+                              decoration: InputDecoration(
+                                labelText: 'Option ${i + 1}',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Checkbox(
+                            value: (opts[i]['correct'] as bool?) ?? false,
+                            onChanged: (v) =>
+                                set(() => opts[i]['correct'] = v ?? false),
+                          ),
+                          IconButton(
+                            onPressed: () => set(() => opts.removeAt(i)),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ],
+                    TextButton.icon(
+                      onPressed: () =>
+                          set(() => opts.add({'label': '', 'correct': false})),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add option'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: explanation,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Explanation',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final map = {
+                    'body': body.text.trim(),
+                    'explanation': explanation.text.trim(),
+                    'multiple': multiple,
+                    'options': opts,
+                  };
+                  if (onSave != null) {
+                    onSave(map);
+                  } else {
+                    setState(() => questions.add(map));
+                  }
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // _CsvFormatInfo moved to top-level at the bottom of this file
   Future<void> _importQuestions() async {
     // Let user paste CSV or JSON in a dialog
     final controller = TextEditingController();
@@ -341,16 +485,33 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Align(alignment: Alignment.centerLeft, child: Text('Paste CSV or JSON array:')),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Paste CSV or JSON array:'),
+              ),
               const SizedBox(height: 8),
-              TextField(controller: controller, minLines: 6, maxLines: 14, decoration: const InputDecoration(border: OutlineInputBorder())),
+              TextField(
+                controller: controller,
+                minLines: 6,
+                maxLines: 14,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+              ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop('csv'), child: const Text('Import CSV')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop('json'), child: const Text('Import JSON')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('csv'),
+            child: const Text('Import CSV'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('json'),
+            child: const Text('Import JSON'),
+          ),
         ],
       ),
     );
@@ -373,20 +534,26 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
           'explanation': (m['explanation'] as String?) ?? '',
           'multiple': multiple,
           'options': [
-            for (var i = 0; i < options.length; i++) {'label': options[i], 'correct': answers.contains(i + 1)}
+            for (var i = 0; i < options.length; i++)
+              {'label': options[i], 'correct': answers.contains(i + 1)},
           ],
         };
       }).toList();
       setState(() => questions.addAll(normalized));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to import: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to import: $e')));
     }
   }
 
   Future<void> _pickCsvFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['csv']);
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
       String contents;
@@ -407,17 +574,22 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
           'explanation': (m['explanation'] as String?) ?? '',
           'multiple': multiple,
           'options': [
-            for (var i = 0; i < options.length; i++) {'label': options[i], 'correct': answers.contains(i + 1)}
+            for (var i = 0; i < options.length; i++)
+              {'label': options[i], 'correct': answers.contains(i + 1)},
           ],
         };
       }).toList();
       if (mounted) setState(() => questions.addAll(normalized));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CSV imported successfully')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('CSV imported successfully')),
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to import CSV: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to import CSV: $e')));
     }
   }
 
@@ -425,14 +597,19 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
     final repo = ref.read(adminRepositoryProvider);
     if (title.text.isEmpty || categoryId == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Please enter title and pick category')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter title and pick category')),
+        );
       }
       return;
     }
     if (isPdfExam && pdf.text.trim().isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please pick or enter a PDF for this exam')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please pick or enter a PDF for this exam'),
+          ),
+        );
       }
       return;
     }
@@ -455,19 +632,29 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
         final opts = (q['options'] as List).cast<Map>();
         await repo.addQuestionWithOptions(
           examId: examId,
-          text: (q['body'] as String?)?.trim().isNotEmpty == true ? q['body'] : 'Question ${i + 1}',
+          text: (q['body'] as String?)?.trim().isNotEmpty == true
+              ? q['body']
+              : 'Question ${i + 1}',
           explanation: (q['explanation'] as String?) ?? '',
           options: [
-            for (final o in opts) (text: (o['label'] as String?) ?? '', correct: (o['correct'] as bool?) ?? false)
+            for (final o in opts)
+              (
+                text: (o['label'] as String?) ?? '',
+                correct: (o['correct'] as bool?) ?? false,
+              ),
           ],
+          multiple:
+              (q['multiple'] as bool?) ??
+              opts.where((o) => (o['correct'] as bool?) ?? false).length > 1,
           points: 1,
           order: i,
         );
       }
     }
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(published ? 'Exam published' : 'Draft saved')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(published ? 'Exam published' : 'Draft saved')),
+      );
       Navigator.of(context).pop();
     }
     // auto-translate new content for current language
@@ -478,7 +665,6 @@ Widget _questionTileBuilder(int index, Map<String, dynamic> q, VoidCallback onEd
       }
     } catch (_) {}
   }
-
 }
 
 class _CategoryPickers extends ConsumerStatefulWidget {
@@ -505,7 +691,10 @@ class _CategoryPickersState extends ConsumerState<_CategoryPickers> {
             return DropdownButton<int>(
               hint: const Text('Category'),
               value: categoryId,
-              items: [for (final c in cats) DropdownMenuItem(value: c.id, child: Text(c.name))],
+              items: [
+                for (final c in cats)
+                  DropdownMenuItem(value: c.id, child: Text(c.name)),
+              ],
               onChanged: (v) {
                 setState(() {
                   categoryId = v;
@@ -524,24 +713,27 @@ class _CategoryPickersState extends ConsumerState<_CategoryPickers> {
               return DropdownButton<int>(
                 hint: const Text('Subcategory (optional)'),
                 value: subcategoryId,
-                items: [for (final s in subs) DropdownMenuItem(value: s.id, child: Text(s.name))],
+                items: [
+                  for (final s in subs)
+                    DropdownMenuItem(value: s.id, child: Text(s.name)),
+                ],
                 onChanged: (v) {
                   setState(() => subcategoryId = v);
                   widget.onSelected(categoryId, subcategoryId);
                 },
               );
             },
-          )
+          ),
       ],
     );
   }
 }
 
-
 class _CsvFormatInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final sample = 'body,option1,option2,option3,option4,answers,explanation,multiple\n'
+    final sample =
+        'body,option1,option2,option3,option4,answers,explanation,multiple\n'
         'What is 2+2?,2,3,4,5,3,The sum of 2 and 2 is 4,false\n'
         'Select even numbers,1,2,3,4,2|4,Even numbers are divisible by 2,true\n';
     return ExpansionTile(
@@ -550,7 +742,9 @@ class _CsvFormatInfo extends StatelessWidget {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 8.0),
-          child: Text('Columns: body, option1..N, answers, explanation, multiple (optional)'),
+          child: Text(
+            'Columns: body, option1..N, answers, explanation, multiple (optional)',
+          ),
         ),
         const SizedBox(height: 8),
         Container(
@@ -569,7 +763,12 @@ class _ThemeChip extends StatelessWidget {
   final Gradient? gradient;
   final bool selected;
   final VoidCallback onTap;
-  const _ThemeChip({required this.label, required this.gradient, required this.selected, required this.onTap});
+  const _ThemeChip({
+    required this.label,
+    required this.gradient,
+    required this.selected,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
     final child = Container(
@@ -578,35 +777,69 @@ class _ThemeChip extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         gradient: gradient,
-        color: gradient == null ? Theme.of(context).colorScheme.surfaceContainerHighest : null,
-        border: Border.all(color: selected ? Theme.of(context).colorScheme.primary : Colors.black12),
+        color: gradient == null
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : null,
+        border: Border.all(
+          color: selected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.black12,
+        ),
       ),
       alignment: Alignment.center,
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
     );
-    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(12), child: child);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: child,
+    );
   }
 }
 
-String _themeName(int key) => switch (key) { 0 => 'None', 1 => 'Sunrise', 2 => 'Ocean', 3 => 'Forest', 4 => 'Lavender', 5 => 'Sunset', _ => 'None' };
+String _themeName(int key) => switch (key) {
+  0 => 'None',
+  1 => 'Sunrise',
+  2 => 'Ocean',
+  3 => 'Forest',
+  4 => 'Lavender',
+  5 => 'Sunset',
+  _ => 'None',
+};
 
 Gradient? _themeGradient(BuildContext context, int key) {
   switch (key) {
     case 1:
-      return const LinearGradient(colors: [Color(0xFFFFD194), Color(0xFFD1913C)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      return const LinearGradient(
+        colors: [Color(0xFFFFD194), Color(0xFFD1913C)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
     case 2:
-      return const LinearGradient(colors: [Color(0xFF00B4DB), Color(0xFF0083B0)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      return const LinearGradient(
+        colors: [Color(0xFF00B4DB), Color(0xFF0083B0)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
     case 3:
-      return const LinearGradient(colors: [Color(0xFF56ab2f), Color(0xFFa8e063)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      return const LinearGradient(
+        colors: [Color(0xFF56ab2f), Color(0xFFa8e063)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
     case 4:
-      return const LinearGradient(colors: [Color(0xFFDAE2F8), Color(0xFFD6A4A4)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      return const LinearGradient(
+        colors: [Color(0xFFDAE2F8), Color(0xFFD6A4A4)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
     case 5:
-      return const LinearGradient(colors: [Color(0xFFFF5F6D), Color(0xFFFFC371)], begin: Alignment.topLeft, end: Alignment.bottomRight);
+      return const LinearGradient(
+        colors: [Color(0xFFFF5F6D), Color(0xFFFFC371)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
     default:
       return null;
   }
 }
-
-
-
-

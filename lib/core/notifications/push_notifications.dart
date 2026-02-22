@@ -7,7 +7,8 @@ import 'package:citizentest/core/notifications/notifications.dart';
 import 'package:citizentest/core/notifications/pending_test_reminder.dart';
 import 'package:citizentest/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart' hide NotificationSettings;
+import 'package:firebase_messaging/firebase_messaging.dart'
+    hide NotificationSettings;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,8 +43,8 @@ const _isFlutterTest = bool.fromEnvironment('FLUTTER_TEST');
 
 class PushNotificationsService {
   PushNotificationsService({required AppDatabase db, required GoRouter router})
-      : _db = db,
-        _router = router;
+    : _db = db,
+      _router = router;
 
   final AppDatabase _db;
   final GoRouter _router;
@@ -56,7 +57,8 @@ class PushNotificationsService {
     await NotificationsService.init(onNotificationTap: _handleLocalTap);
 
     await FirebaseMessaging.instance.setAutoInitEnabled(true);
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android) {
       await FirebaseMessaging.instance.requestPermission();
     }
 
@@ -92,7 +94,11 @@ class PushNotificationsService {
       _handleMessageTap(initial.data);
     }
 
-    await PendingTestReminderService.sync(_db);
+    try {
+      await PendingTestReminderService.sync(_db);
+    } catch (_) {
+      // Reminder scheduling must not block app startup or sign-in flow.
+    }
   }
 
   void _handleLocalTap(String? payload) {
@@ -111,7 +117,19 @@ class PushNotificationsService {
     if (payload.type != PendingTestReminderService.payloadType) return;
     final examId = payload.examId;
     final attemptId = payload.attemptId;
-    if (examId == null || attemptId == null) return;
-    _router.go('/player/$examId?aid=$attemptId');
+    final categoryId = payload.categoryId;
+    final mode = payload.mode ?? 'practice';
+
+    if (examId != null && attemptId != null) {
+      _router.go('/player/$examId?aid=$attemptId');
+      return;
+    }
+    if (mode == 'practice' && categoryId != null) {
+      _router.go('/player/0?mode=practice&cat=$categoryId');
+      return;
+    }
+    if (examId != null) {
+      _router.go('/player/$examId?mode=$mode');
+    }
   }
 }

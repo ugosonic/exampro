@@ -96,7 +96,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         att = await (db.select(db.attempts)..where((t) => t.id.equals(attemptId!))).getSingleOrNull();
       }
       if (attemptId != null) {
-        await PendingTestReminderService.sync(db);
+        await _syncPendingReminder();
       }
       // determine pro
       final user = ref.read(currentUserProvider);
@@ -140,6 +140,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
               setState(() => index = saved);
             } else {
               await repo.resetPracticeProgress(categoryId: widget.categoryId!, userEmail: email);
+              await _syncPendingReminder();
               setState(() => index = 0);
             }
           });
@@ -178,6 +179,14 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         await ref.read(syncRepositoryProvider).pushUserProgress(email);
       } catch (_) {}
     });
+  }
+
+  Future<void> _syncPendingReminder() async {
+    try {
+      await PendingTestReminderService.sync(ref.read(dbProvider));
+    } catch (_) {
+      // Notification scheduling must not break exam flow.
+    }
   }
 
   void ensureUnlockedIndex() {
@@ -241,7 +250,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     autoSubmitted = true;
     if (attemptId != null) {
       await ref.read(examRepositoryProvider).submitAttempt(attemptId!);
-      await PendingTestReminderService.sync(ref.read(dbProvider));
+      await _syncPendingReminder();
       if (mounted) context.go('/result/$attemptId');
     } else if (mounted) {
       if (widget.categoryId != null) {
@@ -457,6 +466,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                                 final u = ref.read(currentUserProvider);
                                 final email = u?.email ?? 'guest@local';
                                 await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: i);
+                                await _syncPendingReminder();
                               }
                             }
                           } else {
@@ -470,6 +480,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               if (widget.categoryId != null) {
                                 final email = (u?.email ?? 'guest@local');
                                 await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: questions0.length);
+                                await _syncPendingReminder();
                               }
                               await autoSubmit();
                             }
@@ -571,6 +582,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                   isCorrect: ok,
                 );
             await ref.read(examRepositoryProvider).savePracticeProgress(categoryId: widget.categoryId!, userEmail: email, index: index);
+            await _syncPendingReminder();
             ref.read(progressTickProvider.notifier).state++;
           }
         },

@@ -5,6 +5,7 @@ import 'package:citizentest/core/config/env_loader.dart';
 import 'package:citizentest/core/config/feature_flags.dart';
 import 'package:citizentest/core/i18n/locale_controller.dart';
 import 'package:citizentest/core/notifications/push_notifications.dart';
+import 'package:citizentest/core/sync/content_sync_bootstrap.dart';
 import 'package:citizentest/features/auth/application/session_initializer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -29,6 +30,7 @@ class ExamProApp extends ConsumerWidget {
         // env-dependent providers before they are ready.
         ref.watch(sessionInitializerProvider);
         ref.watch(localeInitializerProvider);
+        ref.watch(contentSyncBootstrapProvider);
         ref.read(pushNotificationsProvider).init();
         final env = ref.read(envLoaderProvider).requireValue;
         if (env.stripePublishableKey.isNotEmpty) {
@@ -58,21 +60,19 @@ class ExamProApp extends ConsumerWidget {
             Locale('ar'),
           ],
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(boldText: MediaQuery.of(context).boldText),
+            data: MediaQuery.of(
+              context,
+            ).copyWith(boldText: MediaQuery.of(context).boldText),
             child: child ?? const SizedBox.shrink(),
           ),
         );
       },
       error: (e, st) => MaterialApp(
-        home: Scaffold(
-          body: Center(child: Text('Failed to load config: $e')),
-        ),
+        home: Scaffold(body: Center(child: Text('Failed to load config: $e'))),
         debugShowCheckedModeBanner: false,
       ),
       loading: () => const MaterialApp(
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
         debugShowCheckedModeBanner: false,
       ),
     );

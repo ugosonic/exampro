@@ -8,6 +8,7 @@ import 'package:drift/drift.dart' as drift show Variable;
 import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'dart:io';
+import 'package:citizentest/core/text/text_sanitizer.dart';
 
 typedef Progress = void Function(double pct, String label);
 
@@ -16,10 +17,28 @@ class SyncRepository {
   final SyncApi _api;
   SyncRepository(this._db, this._api);
 
+  Future<bool> syncIfNeeded({bool force = false, Progress? onProgress}) async {
+    await _db.ensureClientSchema();
+    if (!force) {
+      final local = await localVersion();
+      if (local != null && local.isNotEmpty) {
+        try {
+          final remote = await _api.version();
+          if (remote.isNotEmpty && remote == local) return false;
+        } catch (_) {
+          // Keep existing local content when version check fails.
+          return false;
+        }
+      }
+    }
+    await pullAndImport(onProgress: onProgress);
+    return true;
+  }
+
   Future<void> pullAndImport({Progress? onProgress}) async {
-    onProgress?.call(0.02, 'Downloading…');
+    onProgress?.call(0.02, 'Downloading...');
     final snap = await _api.snapshot();
-    onProgress?.call(0.08, 'Preparing database…');
+    onProgress?.call(0.08, 'Preparing database...');
     await _db.transaction(() async {
       // Clear dependent tables first
       // Keep user progress and saved questions
@@ -36,7 +55,7 @@ class SyncRepository {
 
       // Do not persist media files locally; use remote image URLs only.
 
-      onProgress?.call(0.15, 'Importing categories…');
+      onProgress?.call(0.15, 'Importing categories...');
       final cats = (snap['categories'] as List?) ?? const [];
       for (final m in cats) {
         final img = (m['image_url'] as String?);
@@ -46,7 +65,7 @@ class SyncRepository {
             .insert(
               CategoriesCompanion.insert(
                 id: Value((m['id'] as int)),
-                name: m['name'] as String,
+                name: sanitizeDisplayText(m['name'] as String),
                 order: Value((m['order'] as num?)?.toInt() ?? 0),
                 passPercent: Value((m['pass_percent'] as num?)?.toInt() ?? 60),
                 imageUrl: Value(path ?? ''),
@@ -56,7 +75,7 @@ class SyncRepository {
             );
       }
 
-      onProgress?.call(0.30, 'Importing subcategories…');
+      onProgress?.call(0.30, 'Importing subcategories...');
       final subs = (snap['subcategories'] as List?) ?? const [];
       for (final m in subs) {
         final img = (m['image_url'] as String?);
@@ -67,7 +86,7 @@ class SyncRepository {
               SubcategoriesCompanion.insert(
                 id: Value((m['id'] as int)),
                 categoryId: m['category_id'] as int,
-                name: m['name'] as String,
+                name: sanitizeDisplayText(m['name'] as String),
                 order: Value((m['order'] as num?)?.toInt() ?? 0),
                 imageUrl: Value(path ?? ''),
                 locked: Value((m['locked'] as bool?) ?? false),
@@ -76,7 +95,7 @@ class SyncRepository {
             );
       }
 
-      onProgress?.call(0.45, 'Importing exams…');
+      onProgress?.call(0.45, 'Importing exams...');
       final exams = (snap['exams'] as List?) ?? const [];
       for (final m in exams) {
         await _db
@@ -84,8 +103,10 @@ class SyncRepository {
             .insert(
               ExamsCompanion.insert(
                 id: Value(m['id'] as int),
-                title: m['title'] as String,
-                description: Value(m['description'] as String? ?? ''),
+                title: sanitizeDisplayText(m['title'] as String),
+                description: Value(
+                  sanitizeDisplayText(m['description'] as String? ?? ''),
+                ),
                 categoryId: m['category_id'] as int,
                 subcategoryId: Value((m['subcategory_id'] as num?)?.toInt()),
                 questionCount: Value(
@@ -106,7 +127,7 @@ class SyncRepository {
             );
       }
 
-      onProgress?.call(0.60, 'Importing questions…');
+      onProgress?.call(0.60, 'Importing questions...');
       final questions = (snap['questions'] as List?) ?? const [];
       for (final m in questions) {
         await _db
@@ -114,8 +135,10 @@ class SyncRepository {
             .insert(
               QuestionsCompanion.insert(
                 id: Value(m['id'] as int),
-                body: m['body'] as String,
-                explanation: Value(m['explanation'] as String? ?? ''),
+                body: sanitizeDisplayText(m['body'] as String),
+                explanation: Value(
+                  sanitizeDisplayText(m['explanation'] as String? ?? ''),
+                ),
                 multiple: Value((m['multiple'] as bool?) ?? false),
                 locked: Value((m['locked'] as bool?) ?? false),
               ),
@@ -123,7 +146,7 @@ class SyncRepository {
             );
       }
 
-      onProgress?.call(0.72, 'Importing choices…');
+      onProgress?.call(0.72, 'Importing choices...');
       final choices = (snap['choices'] as List?) ?? const [];
       for (final m in choices) {
         await _db
@@ -132,7 +155,7 @@ class SyncRepository {
               ChoicesCompanion.insert(
                 id: Value(m['id'] as int),
                 questionId: m['question_id'] as int,
-                label: m['label'] as String,
+                label: sanitizeDisplayText(m['label'] as String),
                 isCorrect: Value((m['is_correct'] as bool?) ?? false),
                 order: Value((m['order'] as num?)?.toInt() ?? 0),
               ),
@@ -140,7 +163,7 @@ class SyncRepository {
             );
       }
 
-      onProgress?.call(0.82, 'Linking exams…');
+      onProgress?.call(0.82, 'Linking exams...');
       final eq = (snap['exam_questions'] as List?) ?? const [];
       for (final m in eq) {
         await _db
@@ -157,7 +180,7 @@ class SyncRepository {
             );
       }
 
-      onProgress?.call(0.9, 'Importing grade bands…');
+      onProgress?.call(0.9, 'Importing grade bands...');
       final bands = (snap['exam_grade_bands'] as List?) ?? const [];
       for (final m in bands) {
         await _db
@@ -167,7 +190,7 @@ class SyncRepository {
                 id: Value(m['id'] as int),
                 examId: m['exam_id'] as int,
                 minPercent: m['min_percent'] as int,
-                label: m['label'] as String,
+                label: sanitizeDisplayText(m['label'] as String),
                 color: Value(m['color'] as String? ?? '#4CAF50'),
               ),
               mode: InsertMode.insertOrReplace,
@@ -182,7 +205,7 @@ class SyncRepository {
         final entityId = (m['entity_id'] as num?)?.toInt() ?? 0;
         final lang = (m['lang'] as String?) ?? '';
         final k = (m['k'] as String?) ?? '';
-        final v = (m['v'] as String?) ?? '';
+        final v = sanitizeDisplayText((m['v'] as String?) ?? '');
         if (entity.isEmpty ||
             entityId == 0 ||
             lang.isEmpty ||

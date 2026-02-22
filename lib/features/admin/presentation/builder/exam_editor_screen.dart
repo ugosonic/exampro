@@ -1,16 +1,17 @@
-import 'package:citizentest/features/admin/data/admin_repository.dart';
-import 'package:citizentest/features/exam/data/exam_repository.dart';
 import 'package:citizentest/core/config/env_loader.dart';
 import 'package:citizentest/core/network/dio_client.dart';
+import 'package:citizentest/features/admin/data/admin_repository.dart';
+import 'package:citizentest/features/exam/data/exam_repository.dart';
 import 'package:citizentest/features/exam/presentation/pdf_viewer_screen.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ExamEditorScreen extends ConsumerStatefulWidget {
   final int examId;
   const ExamEditorScreen({super.key, required this.examId});
+
   @override
   ConsumerState<ExamEditorScreen> createState() => _ExamEditorScreenState();
 }
@@ -18,7 +19,6 @@ class ExamEditorScreen extends ConsumerStatefulWidget {
 class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   List<({int id, String body})> _items = [];
   bool _loading = true;
-  // controls
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _timeCtrl = TextEditingController();
@@ -37,9 +37,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     try {
       final adminRepo = ref.read(adminRepositoryProvider);
       final examRepo = ref.read(examRepositoryProvider);
-      // Load exam via repository (supports remote)
       final ex = await examRepo.getExam(widget.examId);
-      // Load readonly flag (local toggle) and questions list (supports remote)
       final results = await Future.wait([
         adminRepo.getExamReadOnly(widget.examId),
         examRepo.questionsForExam(widget.examId),
@@ -55,13 +53,17 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _pdfCtrl.text = ex?.pdfUrl ?? '';
         _published = ex?.published ?? false;
         _readonly = ro;
-        _items = [for (final r in list) (id: r.question.id, body: r.question.body)];
+        _items = [
+          for (final r in list) (id: r.question.id, body: r.question.body),
+        ];
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load exam: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load exam: $e')));
     }
   }
 
@@ -75,75 +77,153 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
               padding: const EdgeInsets.only(bottom: 96, top: 8),
               header: Padding(
                 padding: const EdgeInsets.all(12.0),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Exam settings', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
-                  const SizedBox(height: 8),
-                  TextField(controller: _descCtrl, decoration: const InputDecoration(labelText: 'Description')),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    Expanded(child: TextField(controller: _timeCtrl, decoration: const InputDecoration(labelText: 'Time limit (minutes)'), keyboardType: TextInputType.number)),
-                    const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: _passCtrl, decoration: const InputDecoration(labelText: 'Pass %'), keyboardType: TextInputType.number)),
-                  ]),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    Expanded(child: TextField(controller: _pdfCtrl, decoration: const InputDecoration(labelText: 'PDF URL (https:// or /path)'))),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Upload PDF',
-                      icon: const Icon(Icons.cloud_upload),
-                      onPressed: () async {
-                        try {
-                          final pick = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
-                          if (pick == null || pick.files.isEmpty) return;
-                          final f = pick.files.single;
-                          final dio = ref.read(dioProvider);
-                          final form = FormData.fromMap({'file': await MultipartFile.fromFile(f.path!, filename: f.name)});
-                          final res = await dio.post('/admin/upload/pdf', data: form);
-                          final newUrl = (res.data['url'] as String?) ?? '';
-                          if (newUrl.isEmpty) throw Exception('Invalid response');
-                          setState(() => _pdfCtrl.text = newUrl);
-                        } catch (err) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $err')));
-                          }
-                        }
-                      },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Exam settings',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    IconButton(
-                      tooltip: 'View PDF',
-                      icon: const Icon(Icons.picture_as_pdf),
-                      onPressed: () {
-                        final env = ref.read(envLoaderProvider).requireValue;
-                        final url = _pdfCtrl.text.trim();
-                        if (url.isEmpty) return;
-                        final src = url.startsWith('http') ? url : (url.startsWith('/') ? '${env.apiBaseUrl}$url' : url);
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => PdfViewerScreen(source: src)));
-                      },
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _titleCtrl,
+                      decoration: const InputDecoration(labelText: 'Title'),
                     ),
-                  ]),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    Switch(value: _published, onChanged: (v) => setState(() => _published = v)),
-                    const SizedBox(width: 6), const Text('Published'),
-                    const SizedBox(width: 18),
-                    Switch(value: _readonly, onChanged: (v) => setState(() => _readonly = v)),
-                    const SizedBox(width: 6), const Text('Read-only (PDF mode)'),
-                  ]),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.icon(
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save'),
-                      onPressed: _saveSettings,
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _descCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                      ),
                     ),
-                  ),
-                  const Divider(height: 24),
-                  const Align(alignment: Alignment.centerLeft, child: Text('Reorder or remove questions')),
-                ]),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _timeCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Time limit (minutes)',
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _passCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Pass %',
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _pdfCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'PDF URL (https:// or /path)',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Upload PDF',
+                          icon: const Icon(Icons.cloud_upload),
+                          onPressed: () async {
+                            try {
+                              final pick = await FilePicker.platform.pickFiles(
+                                type: FileType.custom,
+                                allowedExtensions: ['pdf'],
+                              );
+                              if (pick == null || pick.files.isEmpty) return;
+                              final f = pick.files.single;
+                              final dio = ref.read(dioProvider);
+                              final form = FormData.fromMap({
+                                'file': await MultipartFile.fromFile(
+                                  f.path!,
+                                  filename: f.name,
+                                ),
+                              });
+                              final res = await dio.post(
+                                '/admin/upload/pdf',
+                                data: form,
+                              );
+                              final newUrl = (res.data['url'] as String?) ?? '';
+                              if (newUrl.isEmpty) {
+                                throw Exception('Invalid response');
+                              }
+                              setState(() => _pdfCtrl.text = newUrl);
+                            } catch (err) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Upload failed: $err')),
+                              );
+                            }
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'View PDF',
+                          icon: const Icon(Icons.picture_as_pdf),
+                          onPressed: () {
+                            final env = ref
+                                .read(envLoaderProvider)
+                                .requireValue;
+                            final url = _pdfCtrl.text.trim();
+                            if (url.isEmpty) return;
+                            final src = url.startsWith('http')
+                                ? url
+                                : (url.startsWith('/')
+                                      ? '${env.apiBaseUrl}$url'
+                                      : url);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PdfViewerScreen(source: src),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Switch(
+                          value: _published,
+                          onChanged: (v) => setState(() => _published = v),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text('Published'),
+                        const SizedBox(width: 18),
+                        Switch(
+                          value: _readonly,
+                          onChanged: (v) => setState(() => _readonly = v),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text('Read-only (PDF mode)'),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.save),
+                        label: const Text('Save'),
+                        onPressed: _saveSettings,
+                      ),
+                    ),
+                    const Divider(height: 24),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Reorder, edit, or remove questions'),
+                    ),
+                  ],
+                ),
               ),
               itemBuilder: (_, i) {
                 final item = _items[i];
@@ -151,14 +231,20 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                   key: ValueKey(item.id),
                   background: Container(color: Colors.redAccent),
                   onDismissed: (_) async {
-                    await ref.read(adminRepositoryProvider).removeQuestionFromExam(widget.examId, item.id);
+                    await ref
+                        .read(adminRepositoryProvider)
+                        .removeQuestionFromExam(widget.examId, item.id);
                     setState(() => _items.removeAt(i));
                   },
                   child: ListTile(
                     key: ValueKey('tile-${item.id}'),
-                    title: Text(item.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    title: Text(
+                      item.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: const Icon(Icons.drag_handle),
-                    onTap: () async {},
+                    onTap: () => _editQuestion(item.id),
                   ),
                 );
               },
@@ -169,7 +255,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                   final it = _items.removeAt(oldIndex);
                   _items.insert(idx, it);
                 });
-                await ref.read(adminRepositoryProvider).reorderExamQuestions(widget.examId, _items.map((e) => e.id).toList());
+                await ref
+                    .read(adminRepositoryProvider)
+                    .reorderExamQuestions(
+                      widget.examId,
+                      _items.map((e) => e.id).toList(),
+                    );
               },
             ),
       floatingActionButton: FloatingActionButton(
@@ -180,60 +271,207 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   }
 
   Future<void> _addQuestion() async {
-    final body = TextEditingController();
-    final opts = List.generate(4, (i) => {'label': '', 'correct': false});
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
-        return AlertDialog(
-          title: const Text('Add Question'),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                TextField(controller: body, decoration: const InputDecoration(labelText: 'Question text')),
-                const SizedBox(height: 8),
-                for (var i = 0; i < opts.length; i++)
-                  Row(children: [
-                    Expanded(child: TextField(onChanged: (v) => opts[i]['label'] = v, decoration: InputDecoration(labelText: 'Option ${i + 1}'))),
-                    const SizedBox(width: 8),
-                    Checkbox(value: (opts[i]['correct'] as bool?) ?? false, onChanged: (v) => set(() => opts[i]['correct'] = v ?? false)),
-                  ]),
-                TextButton.icon(onPressed: () => set(() => opts.add({'label': '', 'correct': false})), icon: const Icon(Icons.add), label: const Text('Add option')),
-              ]),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Save')),
-          ],
-        );
-      }),
+    final data = await _showQuestionDialog(title: 'Add Question');
+    if (data == null) return;
+    final repo = ref.read(adminRepositoryProvider);
+    final qId = await repo.addQuestionWithOptions(
+      examId: widget.examId,
+      text: data.body.trim().isEmpty ? 'Question' : data.body.trim(),
+      explanation: data.explanation.trim(),
+      options: data.options,
+      multiple: data.options.where((o) => o.correct).length > 1,
+      order: _items.length,
     );
-    if (ok == true) {
-      final repo = ref.read(adminRepositoryProvider);
-      final options = [for (final o in opts) (text: (o['label'] as String?) ?? '', correct: (o['correct'] as bool?) ?? false)];
-      final qId = await repo.addQuestionWithOptions(examId: widget.examId, text: body.text.trim().isEmpty ? 'Question' : body.text.trim(), options: options, order: _items.length);
-      setState(() => _items.add((id: qId, body: body.text.trim())));
-    }
+    setState(() => _items.add((id: qId, body: data.body.trim())));
+  }
+
+  Future<void> _editQuestion(int questionId) async {
+    final repo = ref.read(adminRepositoryProvider);
+    final current = await repo.questionWithOptions(questionId);
+    if (current == null) return;
+    final data = await _showQuestionDialog(
+      title: 'Edit Question',
+      initialBody: current.question.body,
+      initialExplanation: current.question.explanation,
+      initialOptions: [
+        for (final o in current.options) (text: o.label, correct: o.isCorrect),
+      ],
+    );
+    if (data == null) return;
+    await repo.updateQuestionAndOptions(
+      questionId: questionId,
+      body: data.body.trim().isEmpty ? current.question.body : data.body.trim(),
+      explanation: data.explanation.trim(),
+      options: data.options,
+    );
+    if (!mounted) return;
+    setState(() {
+      final idx = _items.indexWhere((e) => e.id == questionId);
+      if (idx >= 0) _items[idx] = (id: questionId, body: data.body.trim());
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Question updated')));
+  }
+
+  Future<
+    ({
+      String body,
+      String explanation,
+      List<({String text, bool correct})> options,
+    })?
+  >
+  _showQuestionDialog({
+    required String title,
+    String initialBody = '',
+    String initialExplanation = '',
+    List<({String text, bool correct})>? initialOptions,
+  }) async {
+    final body = TextEditingController(text: initialBody);
+    final explanation = TextEditingController(text: initialExplanation);
+    final opts = (initialOptions == null || initialOptions.isEmpty)
+        ? List.generate(4, (i) => {'label': '', 'correct': false})
+        : [
+            for (final o in initialOptions)
+              {'label': o.text, 'correct': o.correct},
+          ];
+
+    return showDialog<
+      ({
+        String body,
+        String explanation,
+        List<({String text, bool correct})> options,
+      })
+    >(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) {
+          return AlertDialog(
+            title: Text(title),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: body,
+                      decoration: const InputDecoration(
+                        labelText: 'Question text',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: explanation,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Explanation',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    for (var i = 0; i < opts.length; i++)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: (opts[i]['label'] as String?) ?? '',
+                              onChanged: (v) => opts[i]['label'] = v,
+                              decoration: InputDecoration(
+                                labelText: 'Option ${i + 1}',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Checkbox(
+                            value: (opts[i]['correct'] as bool?) ?? false,
+                            onChanged: (v) =>
+                                set(() => opts[i]['correct'] = v ?? false),
+                          ),
+                          if (opts.length > 2)
+                            IconButton(
+                              tooltip: 'Remove option',
+                              onPressed: () => set(() => opts.removeAt(i)),
+                              icon: const Icon(Icons.remove_circle_outline),
+                            ),
+                        ],
+                      ),
+                    TextButton.icon(
+                      onPressed: () =>
+                          set(() => opts.add({'label': '', 'correct': false})),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add option'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final normalized = [
+                    for (final o in opts)
+                      (
+                        text: ((o['label'] as String?) ?? '').trim(),
+                        correct: (o['correct'] as bool?) ?? false,
+                      ),
+                  ].where((o) => o.text.isNotEmpty).toList();
+
+                  if (normalized.length < 2) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('Add at least 2 answer options.'),
+                      ),
+                    );
+                    return;
+                  }
+                  if (!normalized.any((o) => o.correct)) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('Mark at least 1 correct answer.'),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.of(ctx).pop((
+                    body: body.text,
+                    explanation: explanation.text,
+                    options: normalized,
+                  ));
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _saveSettings() async {
     final repo = ref.read(adminRepositoryProvider);
-    final title = _titleCtrl.text.trim().isEmpty ? 'Exam' : _titleCtrl.text.trim();
+    final title = _titleCtrl.text.trim().isEmpty
+        ? 'Exam'
+        : _titleCtrl.text.trim();
     final desc = _descCtrl.text.trim();
     final time = int.tryParse(_timeCtrl.text.trim()) ?? 0;
     final pass = (int.tryParse(_passCtrl.text.trim()) ?? 60).clamp(0, 100);
-    await repo.updateExam(widget.examId,
-        title: title,
-        description: desc,
-        timeLimitMinutes: time,
-        passPercent: pass,
-        published: _published,
-        pdfUrl: _pdfCtrl.text.trim());
+    await repo.updateExam(
+      widget.examId,
+      title: title,
+      description: desc,
+      timeLimitMinutes: time,
+      passPercent: pass,
+      published: _published,
+      pdfUrl: _pdfCtrl.text.trim(),
+    );
     await repo.setExamReadOnly(widget.examId, _readonly);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exam saved')));
-    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Exam saved')));
   }
 }

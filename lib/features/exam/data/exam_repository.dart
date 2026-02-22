@@ -7,6 +7,7 @@ import 'package:citizentest/core/db/db_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:citizentest/core/config/env_loader.dart';
 import 'package:citizentest/features/catalog/data/content_api.dart';
+import 'package:citizentest/core/text/text_sanitizer.dart';
 
 class ExamRepository {
   final AppDatabase _db;
@@ -52,8 +53,8 @@ class ExamRepository {
       if (m.isEmpty) return null;
       return Exam(
         id: _asInt(m['id']) ?? id,
-        title: (m['title'] as String?) ?? '',
-        description: (m['description'] as String?) ?? '',
+        title: sanitizeDisplayText((m['title'] as String?) ?? ''),
+        description: sanitizeDisplayText((m['description'] as String?) ?? ''),
         categoryId: _asInt(m['category_id']) ?? 0,
         subcategoryId: _asInt(m['subcategory_id']),
         questionCount: _asInt(m['question_count']) ?? 0,
@@ -130,8 +131,8 @@ class ExamRepository {
         }
         return Question(
           id: _asInt(m['id']) ?? qid,
-          body: (m['body'] as String?) ?? '',
-          explanation: (m['explanation'] as String?) ?? '',
+          body: sanitizeDisplayText((m['body'] as String?) ?? ''),
+          explanation: sanitizeDisplayText((m['explanation'] as String?) ?? ''),
           multiple: (m['multiple'] as bool?) ?? false,
           locked: (m['locked'] as bool?) ?? false,
         );
@@ -162,7 +163,7 @@ class ExamRepository {
                   Choice(
                     id: _asInt(o['id']) ?? 0,
                     questionId: _asInt(o['question_id']) ?? 0,
-                    label: (o['label'] as String?) ?? '',
+                    label: sanitizeDisplayText((o['label'] as String?) ?? ''),
                     isCorrect: (o['is_correct'] as bool?) ?? false,
                     order: _asInt(o['order']) ?? 0,
                   ),
@@ -736,7 +737,15 @@ extension on ExamRepository {
   }
 
   Future<Question> _translateQuestion(Question q, String lang) async {
-    if (lang == 'en') return q;
+    if (lang == 'en') {
+      return Question(
+        id: q.id,
+        body: sanitizeDisplayText(q.body),
+        explanation: sanitizeDisplayText(q.explanation),
+        multiple: q.multiple,
+        locked: q.locked,
+      );
+    }
     try {
       final row = await _db
           .customSelect(
@@ -770,8 +779,8 @@ extension on ExamRepository {
 
       return Question(
         id: q.id,
-        body: body,
-        explanation: explanation,
+        body: sanitizeDisplayText(body),
+        explanation: sanitizeDisplayText(explanation),
         multiple: q.multiple,
         locked: q.locked,
       );
@@ -781,7 +790,15 @@ extension on ExamRepository {
   }
 
   Future<Choice> _translateChoice(Choice c, String lang) async {
-    if (lang == 'en') return c;
+    if (lang == 'en') {
+      return Choice(
+        id: c.id,
+        questionId: c.questionId,
+        label: sanitizeDisplayText(c.label),
+        isCorrect: c.isCorrect,
+        order: c.order,
+      );
+    }
     try {
       final row = await _db
           .customSelect(
@@ -800,7 +817,7 @@ extension on ExamRepository {
       return Choice(
         id: c.id,
         questionId: c.questionId,
-        label: label,
+        label: sanitizeDisplayText(label),
         isCorrect: c.isCorrect,
         order: c.order,
       );

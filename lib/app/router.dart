@@ -35,13 +35,28 @@ class _RouteSaver extends NavigatorObserver {
   Future<void> _save(NavigatorState? nav) async {
     if (nav == null) return;
     try {
-      final loc = GoRouter.of(nav.context).routeInformationProvider.value.uri.toString();
-      if (loc.isEmpty || loc == '/' || loc == '/onboarding' || loc == '/auth' || loc == '/register' ) return;
-      if (loc.startsWith('/admin')) return;
+      final loc = GoRouter.of(
+        nav.context,
+      ).routeInformationProvider.value.uri.toString();
+      if (loc.isEmpty ||
+          loc == '/' ||
+          loc == '/onboarding' ||
+          loc == '/auth' ||
+          loc == '/register') {
+        return;
+      }
+      if (loc.startsWith('/admin')) {
+        return;
+      }
       final db = ref.read(dbProvider);
       await db
           .into(db.appSettings)
-          .insertOnConflictUpdate(AppSettingsCompanion(key: const drift.Value('last_route'), value: drift.Value(loc)));
+          .insertOnConflictUpdate(
+            AppSettingsCompanion(
+              key: const drift.Value('last_route'),
+              value: drift.Value(loc),
+            ),
+          );
     } catch (_) {}
   }
 
@@ -63,6 +78,7 @@ class _RouteSaver extends NavigatorObserver {
     super.didPop(route, previousRoute);
   }
 }
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
   final tokenStore = ref.watch(tokenStoreProvider);
@@ -72,32 +88,35 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     observers: [_RouteSaver(ref)],
     redirect: (context, state) => _redirect(ref, tokenStore, state),
     routes: [
-      GoRoute(
-        path: '/',
-        redirect: (context, state) => '/onboarding',
-      ),
+      GoRoute(path: '/', redirect: (context, state) => '/onboarding'),
       ShellRoute(
-        builder: (context, state, child) => AppShell(state: state, child: child),
+        builder: (context, state, child) =>
+            AppShell(state: state, child: child),
         routes: [
           GoRoute(
             path: '/onboarding',
-            pageBuilder: (context, state) => _fade(state, const OnboardingScreen()),
+            pageBuilder: (context, state) =>
+                _fade(state, const OnboardingScreen()),
           ),
           GoRoute(
             path: '/auth',
-            pageBuilder: (context, state) => _softSlide(state, const SignInScreen()),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const SignInScreen()),
           ),
           GoRoute(
             path: '/register',
-            pageBuilder: (context, state) => _softSlide(state, const SignUpScreen()),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const SignUpScreen()),
           ),
           GoRoute(
             path: '/dashboard',
-            pageBuilder: (context, state) => _fade(state, const DashboardScreen()),
+            pageBuilder: (context, state) =>
+                _fade(state, const DashboardScreen()),
           ),
           GoRoute(
             path: '/categories',
-            pageBuilder: (context, state) => _softSlide(state, const CategoriesScreen()),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const CategoriesScreen()),
           ),
           GoRoute(
             path: '/categories/:id',
@@ -108,7 +127,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/profile',
-            pageBuilder: (context, state) => _softSlide(state, const ProfileScreen()),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const ProfileScreen()),
           ),
           GoRoute(
             path: '/exam/:id',
@@ -124,7 +144,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               final aid = int.tryParse(state.uri.queryParameters['aid'] ?? '');
               final mode = state.uri.queryParameters['mode'];
               final cat = int.tryParse(state.uri.queryParameters['cat'] ?? '');
-              return _softSlide(state, ExamPlayerScreen(examId: id, attemptId: aid, mode: mode, categoryId: cat));
+              return _softSlide(
+                state,
+                ExamPlayerScreen(
+                  examId: id,
+                  attemptId: aid,
+                  mode: mode,
+                  categoryId: cat,
+                ),
+              );
             },
           ),
           GoRoute(
@@ -136,11 +164,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/saved',
-            pageBuilder: (context, state) => _softSlide(state, const SavedQuestionsScreen()),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const SavedQuestionsScreen()),
           ),
           GoRoute(
             path: '/attempts',
-            pageBuilder: (context, state) => _softSlide(state, const AttemptsListScreen()),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const AttemptsListScreen()),
           ),
           GoRoute(
             path: '/review/:attemptId',
@@ -151,19 +181,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/upgrade',
-            pageBuilder: (context, state) => _softSlide(state, const UpgradeScreen()),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const UpgradeScreen()),
           ),
           GoRoute(
             path: '/pay/success',
-            pageBuilder: (context, state) => _softSlide(state, const PaymentStatusScreen(success: true)),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const PaymentStatusScreen(success: true)),
           ),
           GoRoute(
             path: '/pay/cancel',
-            pageBuilder: (context, state) => _softSlide(state, const PaymentStatusScreen(success: false)),
+            pageBuilder: (context, state) =>
+                _softSlide(state, const PaymentStatusScreen(success: false)),
           ),
           GoRoute(
             path: '/admin',
-            pageBuilder: (context, state) => _fade(state, const AdminConsoleScreen()),
+            pageBuilder: (context, state) =>
+                _fade(state, const AdminConsoleScreen()),
           ),
         ],
       ),
@@ -171,10 +205,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) async {
+FutureOr<String?> _redirect(
+  Ref ref,
+  TokenStore tokens,
+  GoRouterState state,
+) async {
   final user = ref.read(currentUserProvider);
   final hasTokens = await tokens.hasTokens();
-  final signedIn = hasTokens && user != null;
+  final signedIn = hasTokens;
   final loc = state.matchedLocation;
   final loggingIn = loc == '/auth';
   final registering = loc == '/register';
@@ -186,9 +224,17 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
   if (signedIn && !_didRestoreLastRoute && (onboarding || loc == '/')) {
     try {
       final db = ref.read(dbProvider);
-      final row = await (db.select(db.appSettings)..where((s) => s.key.equals('last_route'))).getSingleOrNull();
+      final row = await (db.select(
+        db.appSettings,
+      )..where((s) => s.key.equals('last_route'))).getSingleOrNull();
       final saved = row?.value ?? '';
-      if (saved.isNotEmpty && saved != loc && saved != '/' && saved != '/onboarding' && saved != '/auth' && saved != '/register' && !(saved.startsWith('/admin') && (user.role != 'admin'))) {
+      if (saved.isNotEmpty &&
+          saved != loc &&
+          saved != '/' &&
+          saved != '/onboarding' &&
+          saved != '/auth' &&
+          saved != '/register' &&
+          !(saved.startsWith('/admin') && (user?.role != 'admin'))) {
         _didRestoreLastRoute = true;
         return saved;
       }
@@ -196,15 +242,17 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
   }
   // Not signed in: allow auth/onboarding/explore; otherwise push to /auth
   if (!signedIn) {
-    if (loggingIn || registering || onboarding || exploring || payingStatus) return null;
+    if (loggingIn || registering || onboarding || exploring || payingStatus) {
+      return null;
+    }
     return '/auth';
   }
   // Has tokens
   if (loggingIn || registering || onboarding) {
-    if (user.role == 'admin') return '/admin';
+    if (user?.role == 'admin') return '/admin';
     return '/dashboard';
   }
-  if (goingAdmin && (user.role != 'admin')) return '/dashboard';
+  if (goingAdmin && (user?.role != 'admin')) return '/dashboard';
   if (payingStatus) {
     final active = ref.read(paymentFlowActiveProvider);
     if (!active) return '/dashboard';
@@ -212,24 +260,37 @@ FutureOr<String?> _redirect(Ref ref, TokenStore tokens, GoRouterState state) asy
   return null;
 }
 
-CustomTransitionPage _fade(GoRouterState state, Widget child) => CustomTransitionPage(
+CustomTransitionPage _fade(GoRouterState state, Widget child) =>
+    CustomTransitionPage(
       key: state.pageKey,
       child: child,
       transitionDuration: const Duration(milliseconds: 220),
       transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-          FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut), child: child),
+          FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOut,
+            ),
+            child: child,
+          ),
     );
 
-CustomTransitionPage _softSlide(GoRouterState state, Widget child) => CustomTransitionPage(
+CustomTransitionPage _softSlide(GoRouterState state, Widget child) =>
+    CustomTransitionPage(
       key: state.pageKey,
       child: child,
       transitionDuration: const Duration(milliseconds: 260),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeInOut);
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeInOut,
+        );
         return SlideTransition(
-          position: Tween(begin: const Offset(0.04, 0.0), end: Offset.zero).animate(curved),
+          position: Tween(
+            begin: const Offset(0.04, 0.0),
+            end: Offset.zero,
+          ).animate(curved),
           child: FadeTransition(opacity: curved, child: child),
         );
       },
     );
-

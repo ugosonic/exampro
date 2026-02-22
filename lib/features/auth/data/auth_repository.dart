@@ -19,10 +19,15 @@ class AuthRepository {
   Future<auth_models.User> signIn(String email, String password) async {
     if (_remote != null) {
       final tokens = await _remote.signIn(email: email, password: password);
-      await _tokenStore.save(
-        TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh),
-      );
       final user = await _remoteUser(tokens.access, fallbackEmail: email);
+      await _tokenStore.save(
+        TokenBundle(
+          accessToken: tokens.access,
+          refreshToken: tokens.refresh,
+          userId: user.id,
+          email: user.email,
+        ),
+      );
       await _upsertLocalUser(user, password: password);
       return user;
     }
@@ -38,6 +43,7 @@ class AuthRepository {
         accessToken: randToken('access', uid),
         refreshToken: randToken('refresh', uid),
         userId: uid,
+        email: existing.email,
       ),
     );
     return auth_models.User(
@@ -50,10 +56,15 @@ class AuthRepository {
   Future<auth_models.User> register(String email, String password) async {
     if (_remote != null) {
       final tokens = await _remote.register(email: email, password: password);
-      await _tokenStore.save(
-        TokenBundle(accessToken: tokens.access, refreshToken: tokens.refresh),
-      );
       final user = await _remoteUser(tokens.access, fallbackEmail: email);
+      await _tokenStore.save(
+        TokenBundle(
+          accessToken: tokens.access,
+          refreshToken: tokens.refresh,
+          userId: user.id,
+          email: user.email,
+        ),
+      );
       await _upsertLocalUser(user, password: password);
       return user;
     }
@@ -77,6 +88,7 @@ class AuthRepository {
         accessToken: randToken('access', uid),
         refreshToken: randToken('refresh', uid),
         userId: uid,
+        email: email,
       ),
     );
     return auth_models.User(id: uid, email: email, role: role);
@@ -85,6 +97,18 @@ class AuthRepository {
   Future<auth_models.User> me() async {
     if (_remote != null) {
       final user = await _remote.me();
+      final access = await _tokenStore.getAccessToken();
+      final refresh = await _tokenStore.getRefreshToken();
+      if (access != null && refresh != null) {
+        await _tokenStore.save(
+          TokenBundle(
+            accessToken: access,
+            refreshToken: refresh,
+            userId: user.id,
+            email: user.email,
+          ),
+        );
+      }
       await _upsertLocalUser(user);
       return user;
     }

@@ -667,11 +667,19 @@ app.delete('/admin/exams/:id', adminGuard, async (req, res) => {
 app.post('/admin/exams/:id/questions', adminGuard, async (req, res) => {
   const examId = Number(req.params.id);
   const { text, explanation = '', options = [], points = 1, order = 0 } = req.body || {};
+  const providedMultiple = Object.prototype.hasOwnProperty.call(req.body || {}, 'multiple')
+    ? !!req.body.multiple
+    : null;
+  const inferredMultiple = options.filter((o) => !!o.correct).length > 1;
+  const multiple = providedMultiple ?? inferredMultiple;
   if (!text || !Array.isArray(options) || options.length === 0) return res.status(400).json({ error: 'invalid_input' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const q = await client.query('INSERT INTO questions(body, explanation) VALUES ($1,$2) RETURNING id', [text, explanation]);
+    const q = await client.query(
+      'INSERT INTO questions(body, explanation, multiple) VALUES ($1,$2,$3) RETURNING id',
+      [text, explanation, multiple],
+    );
     const qid = q.rows[0].id;
     for (let i = 0; i < options.length; i++) {
       const o = options[i];
@@ -691,10 +699,20 @@ app.post('/admin/exams/:id/questions', adminGuard, async (req, res) => {
 app.put('/admin/questions/:id', adminGuard, async (req, res) => {
   const id = Number(req.params.id);
   const { body, explanation = '', options = [] } = req.body || {};
+  const providedMultiple = Object.prototype.hasOwnProperty.call(req.body || {}, 'multiple')
+    ? !!req.body.multiple
+    : null;
+  const inferredMultiple = options.filter((o) => !!o.correct).length > 1;
+  const multiple = providedMultiple ?? inferredMultiple;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    if (body != null) await client.query('UPDATE questions SET body=$1, explanation=$2 WHERE id=$3', [body, explanation, id]);
+    if (body != null) {
+      await client.query(
+        'UPDATE questions SET body=$1, explanation=$2, multiple=$3 WHERE id=$4',
+        [body, explanation, multiple, id],
+      );
+    }
     await client.query('DELETE FROM choices WHERE question_id = $1', [id]);
     for (let i = 0; i < options.length; i++) {
       const o = options[i];
