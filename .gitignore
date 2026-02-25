@@ -32,6 +32,7 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+**/node_modules/
 
 # Symbolication related
 app.*.symbols
@@ -56,6 +57,9 @@ server/fastapi/.env
 # Firebase / mobile service credentials
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+server/express/secrets/*.json
+*firebase-adminsdk*.json
+*service-account*.json
 
 # Signing keys / certificates
 *.jks
@@ -69,3 +73,6 @@ android/key.properties
 id_rsa
 id_ed25519
 *.ppk
+
+# Local deployment artifacts
+*.tar.gz

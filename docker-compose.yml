@@ -10,5 +10,8 @@ services:
       - SYNC_ADMIN_TOKEN=${SYNC_ADMIN_TOKEN}
       - JWT_SECRET=${JWT_SECRET}
       - UPLOAD_DIR=/data/uploads
+      - FCM_SERVICE_ACCOUNT_FILE=${FCM_SERVICE_ACCOUNT_FILE}
+      - FCM_SERVICE_ACCOUNT_JSON=${FCM_SERVICE_ACCOUNT_JSON}
     volumes:
       - ./server/uploads:/data/uploads
+      - ./server/express/secrets:/run/secrets:ro
