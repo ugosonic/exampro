@@ -237,6 +237,7 @@ const toStringMap = (obj) => {
 
 const sendPushToUser = async ({ userId, title, body, data }) => {
   if (!fcmMessaging) {
+    console.warn(`[fcm] send skipped user=${userId} reason=fcm_not_configured`);
     return { ok: false, error: 'fcm_not_configured', tokens: 0, successCount: 0, failureCount: 0 };
   }
   const client = await pool.connect();
@@ -245,6 +246,7 @@ const sendPushToUser = async ({ userId, title, body, data }) => {
     const rows = await client.query('SELECT token FROM user_push_tokens WHERE user_id = $1', [userId]);
     const tokens = rows.rows.map((r) => r.token).filter(Boolean);
     if (!tokens.length) {
+      console.warn(`[fcm] send skipped user=${userId} reason=no_tokens`);
       return { ok: false, error: 'no_tokens', tokens: 0, successCount: 0, failureCount: 0 };
     }
     const resp = await fcmMessaging.sendEachForMulticast({
@@ -253,10 +255,14 @@ const sendPushToUser = async ({ userId, title, body, data }) => {
       data: toStringMap(data),
     });
     const stale = [];
+    const failureCodes = {};
     for (let i = 0; i < resp.responses.length; i++) {
       const rr = resp.responses[i];
       if (rr.success) continue;
       const code = rr.error?.code || '';
+      if (code) {
+        failureCodes[code] = (failureCodes[code] || 0) + 1;
+      }
       if (code === 'messaging/invalid-registration-token' || code === 'messaging/registration-token-not-registered') {
         stale.push(tokens[i]);
       }
@@ -264,12 +270,16 @@ const sendPushToUser = async ({ userId, title, body, data }) => {
     if (stale.length) {
       await client.query('DELETE FROM user_push_tokens WHERE token = ANY($1::text[])', [stale]);
     }
+    console.log(
+      `[fcm] send user=${userId} tokens=${tokens.length} success=${resp.successCount} failure=${resp.failureCount} stale=${stale.length} codes=${JSON.stringify(failureCodes)}`,
+    );
     return {
       ok: resp.successCount > 0,
       tokens: tokens.length,
       successCount: resp.successCount,
       failureCount: resp.failureCount,
       staleCount: stale.length,
+      failureCodes,
     };
   } finally { client.release(); }
 };
@@ -288,6 +298,10 @@ app.post('/notifications/register-token', auth, async (req, res) => {
       "INSERT INTO user_push_tokens(token, user_id, platform, app_version, updated_at) VALUES ($1,$2,$3,$4,NOW()) " +
       "ON CONFLICT(token) DO UPDATE SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform, app_version = EXCLUDED.app_version, updated_at = NOW()",
       [token, userId, platform, appVersion],
+    );
+    const tokenPrefix = token.slice(0, Math.min(16, token.length));
+    console.log(
+      `[fcm] register-token user=${userId} platform=${platform || 'unknown'} version=${appVersion || 'unknown'} token_prefix=${tokenPrefix}...`,
     );
     return res.json({ ok: true });
   } finally { client.release(); }
