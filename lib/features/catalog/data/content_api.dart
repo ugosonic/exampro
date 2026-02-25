@@ -32,6 +32,33 @@ class ContentApi {
     if (v is String) return int.tryParse(v);
     return null;
   }
+
+  bool _shouldFallbackToSnapshot(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 404) return true;
+    if (status != null && status >= 500) return true;
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.connectionError:
+      case DioExceptionType.badCertificate:
+      case DioExceptionType.unknown:
+        return true;
+      case DioExceptionType.badResponse:
+      case DioExceptionType.cancel:
+        return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> _snapshotOrThrow() async {
+    try {
+      final snap = await _dio.get('/sync/snapshot');
+      return _asMap(snap.data);
+    } catch (_) {
+      rethrow;
+    }
+  }
   // ----------------------------------------------------
 
   Future<List<Map<String, dynamic>>> categories() async {
@@ -39,9 +66,9 @@ class ContentApi {
       final res = await _dio.get('/catalog/categories');
       return _asListOfMap(res.data);
     } on DioException catch (e) {
-      if ((e.response?.statusCode ?? 0) == 404) {
-        final snap = await _dio.get('/sync/snapshot');
-        return _asListOfMap(_asMap(snap.data)['categories']);
+      if (_shouldFallbackToSnapshot(e)) {
+        final snap = await _snapshotOrThrow();
+        return _asListOfMap(snap['categories']);
       }
       rethrow;
     }
@@ -57,9 +84,9 @@ class ContentApi {
       if (categoryId == null) return list;
       return [ for (final m in list) if (_asInt(m['category_id']) == categoryId) m ];
     } on DioException catch (e) {
-      if ((e.response?.statusCode ?? 0) == 404) {
-        final snap = await _dio.get('/sync/snapshot');
-        final list = _asListOfMap(_asMap(snap.data)['subcategories']);
+      if (_shouldFallbackToSnapshot(e)) {
+        final snap = await _snapshotOrThrow();
+        final list = _asListOfMap(snap['subcategories']);
         if (categoryId == null) return list;
         return [ for (final m in list) if (_asInt(m['category_id']) == categoryId) m ];
       }
@@ -85,9 +112,9 @@ class ContentApi {
             m
       ];
     } on DioException catch (e) {
-      if ((e.response?.statusCode ?? 0) == 404) {
-        final snap = await _dio.get('/sync/snapshot');
-        final list = _asListOfMap(_asMap(snap.data)['exams']);
+      if (_shouldFallbackToSnapshot(e)) {
+        final snap = await _snapshotOrThrow();
+        final list = _asListOfMap(snap['exams']);
         return [
           for (final m in list)
             if ((categoryId == null || _asInt(m['category_id']) == categoryId) &&
@@ -106,9 +133,9 @@ class ContentApi {
       final res = await _dio.get('/catalog/exam/$examId/questions');
       return _asMap(res.data);
     } on DioException catch (e) {
-      if ((e.response?.statusCode ?? 0) == 404) {
-        final snap = await _dio.get('/sync/snapshot');
-        return _snapshotExamBundle(_asMap(snap.data), examId: examId);
+      if (_shouldFallbackToSnapshot(e)) {
+        final snap = await _snapshotOrThrow();
+        return _snapshotExamBundle(snap, examId: examId);
       }
       rethrow;
     }
@@ -125,9 +152,9 @@ class ContentApi {
       return _asMap(res.data);
     } on DioException catch (e) {
       // fall back to snapshot and *aggregate* by category
-      if ((e.response?.statusCode ?? 0) == 404) {
-        final snap = await _dio.get('/sync/snapshot');
-        return _snapshotCategoryBundle(_asMap(snap.data), categoryId: categoryId);
+      if (_shouldFallbackToSnapshot(e)) {
+        final snap = await _snapshotOrThrow();
+        return _snapshotCategoryBundle(snap, categoryId: categoryId);
       }
       rethrow;
     }

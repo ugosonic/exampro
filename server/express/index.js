@@ -58,6 +58,20 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
 const app = express();
 app.use(express.json({ limit: '25mb' }));
 
+const isDbConnectivityError = (e) =>
+  ['ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH'].includes(
+    String(e?.code || ''),
+  );
+
+const sendApiError = (res, e, context = 'request') => {
+  console.error(`${context} failed:`, e?.message || e);
+  if (res.headersSent) return;
+  if (isDbConnectivityError(e)) {
+    return res.status(503).json({ error: 'db_unavailable' });
+  }
+  return res.status(500).json({ error: 'failed' });
+};
+
 let fcmMessaging = null;
 try {
   let credential = null;
@@ -300,23 +314,29 @@ app.post('/notifications/reminder-preview', auth, async (req, res) => {
 
 // Content version
 app.get('/sync/version', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const r = await client.query('SELECT version FROM content_meta WHERE id = 1');
     if (r.rowCount === 0) {
       await client.query('INSERT INTO content_meta(id) VALUES (1) ON CONFLICT (id) DO NOTHING');
     }
     const r2 = await client.query('SELECT version FROM content_meta WHERE id = 1');
     return res.json({ version: r2.rows[0].version });
-  } finally { client.release(); }
+  } catch (e) {
+    return sendApiError(res, e, 'sync/version');
+  } finally {
+    try { client?.release(); } catch {}
+  }
 });
 
 const TABLES = ['categories','subcategories','exams','questions','choices','exam_questions','exam_grade_bands'];
 
 // Full snapshot
 app.get('/sync/snapshot', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const ver = await client.query('SELECT version FROM content_meta WHERE id = 1');
     const data = { version: ver.rows[0]?.version };
     for (const t of TABLES) {
@@ -324,7 +344,11 @@ app.get('/sync/snapshot', async (req, res) => {
       data[t] = rows.rows;
     }
     return res.json(data);
-  } finally { client.release(); }
+  } catch (e) {
+    return sendApiError(res, e, 'sync/snapshot');
+  } finally {
+    try { client?.release(); } catch {}
+  }
 });
 
 // Progress endpoints
@@ -368,28 +392,39 @@ app.get('/sync/user-progress', async (req, res) => {
 
 // Public catalog endpoints (read-only)
 app.get('/catalog/categories', async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const r = await client.query('SELECT id, name, "order", pass_percent, image_url, locked FROM categories ORDER BY "order", name');
     return res.json(r.rows);
-  } finally { client.release(); }
+  } catch (e) {
+    return sendApiError(res, e, 'catalog/categories');
+  } finally {
+    try { client?.release(); } catch {}
+  }
 });
 
 app.get('/catalog/subcategories', async (req, res) => {
   const { category_id } = req.query;
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const sql = 'SELECT id, category_id, name, "order", image_url, locked FROM subcategories' + (category_id ? ' WHERE category_id = $1' : '') + ' ORDER BY "order", name';
     const params = category_id ? [category_id] : [];
     const r = await client.query(sql, params);
     return res.json(r.rows);
-  } finally { client.release(); }
+  } catch (e) {
+    return sendApiError(res, e, 'catalog/subcategories');
+  } finally {
+    try { client?.release(); } catch {}
+  }
 });
 
 app.get('/catalog/exams', async (req, res) => {
   const { category_id, subcategory_id } = req.query;
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const where = [];
     const params = [];
     if (category_id) { params.push(category_id); where.push(`category_id = $${params.length}`); }
@@ -397,21 +432,30 @@ app.get('/catalog/exams', async (req, res) => {
     const sql = `SELECT id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key FROM exams ${where.length ? ('WHERE ' + where.join(' AND ')) : ''} ORDER BY id`;
     const r = await client.query(sql, params);
     return res.json(r.rows);
-  } finally { client.release(); }
+  } catch (e) {
+    return sendApiError(res, e, 'catalog/exams');
+  } finally {
+    try { client?.release(); } catch {}
+  }
 });
 
 app.get('/catalog/exam/:id/questions', async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'invalid_id' });
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const joins = await client.query('SELECT question_id, "order", points FROM exam_questions WHERE exam_id = $1 ORDER BY "order"', [id]);
     if (joins.rowCount === 0) return res.json({ order: [], questions: [], choices: [] });
     const qids = [...new Set(joins.rows.map(r => r.question_id))];
     const qs = await client.query('SELECT id, body, explanation, multiple, locked FROM questions WHERE id = ANY($1::int[])', [qids]);
     const cs = await client.query('SELECT id, question_id, label, is_correct, "order" FROM choices WHERE question_id = ANY($1::int[]) ORDER BY question_id, "order"', [qids]);
     return res.json({ order: joins.rows, questions: qs.rows, choices: cs.rows });
-  } finally { client.release(); }
+  } catch (e) {
+    return sendApiError(res, e, 'catalog/exam/questions');
+  } finally {
+    try { client?.release(); } catch {}
+  }
 });
 
 // Admin: bump content version
@@ -881,12 +925,17 @@ app.delete('/admin/exams/:examId/questions/:questionId', adminGuard, async (req,
 
 // Admin: list registered users (from online DB)
 app.get('/admin/users', adminGuard, async (req, res) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
     const rows = await client.query('SELECT id, email, role FROM users ORDER BY id DESC');
     return res.json(rows.rows);
-  } finally { client.release(); }
+  } catch (e) {
+    return sendApiError(res, e, 'admin/users');
+  } finally {
+    try { client?.release(); } catch {}
+  }
 });
 
 // Admin: change user role (admin <-> user)

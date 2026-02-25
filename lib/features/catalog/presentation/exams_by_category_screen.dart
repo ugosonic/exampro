@@ -67,24 +67,29 @@ class ExamsByCategoryScreen extends ConsumerWidget {
                 .cast<int>()
                 .toSet()
                 .toList();
+            Future<List<Map<String, dynamic>>> loadLocalSubs() async => [
+                  for (final s in await (db.select(
+                    db.subcategories,
+                  )..where((s) => s.id.isIn(subIds))).get())
+                    {'id': s.id, 'name': s.name, 'locked': s.locked},
+                ];
             final List<Map<String, dynamic>> subs = subIds.isEmpty
                 ? const <Map<String, dynamic>>[]
                 : hasApi
-                ? await ref
-                      .read(contentApiProvider)
-                      .subcategories(categoryId: id)
-                      .then(
-                        (rows) => [
-                          for (final m in rows)
-                            if (subIds.contains((m['id'] as num).toInt())) m,
-                        ],
-                      )
-                : [
-                    for (final s in await (db.select(
-                      db.subcategories,
-                    )..where((s) => s.id.isIn(subIds))).get())
-                      {'id': s.id, 'name': s.name, 'locked': s.locked},
-                  ];
+                ? await (() async {
+                    try {
+                      final rows = await ref
+                          .read(contentApiProvider)
+                          .subcategories(categoryId: id);
+                      return [
+                        for (final m in rows)
+                          if (subIds.contains((m['id'] as num).toInt())) m,
+                      ];
+                    } catch (_) {
+                      return loadLocalSubs();
+                    }
+                  })()
+                : await loadLocalSubs();
             final subLocked = {
               for (final m in subs)
                 (m['id'] as int): ((m['locked'] as bool?) ?? false),
