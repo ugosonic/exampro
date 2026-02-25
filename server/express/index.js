@@ -215,11 +215,32 @@ const ensurePushTokenTable = async (client) => {
   await client.query(
     "CREATE TABLE IF NOT EXISTS user_push_tokens (" +
       "token TEXT PRIMARY KEY, " +
-      "user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, " +
+      "user_id TEXT NOT NULL, " +
       "platform TEXT NOT NULL DEFAULT '', " +
       "app_version TEXT NOT NULL DEFAULT '', " +
       "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" +
     ")"
+  );
+  // Support both numeric and UUID user IDs by normalizing to TEXT.
+  await client.query(
+    "DO $$ " +
+      "DECLARE c RECORD; " +
+      "BEGIN " +
+        "FOR c IN " +
+          "SELECT conname FROM pg_constraint " +
+          "WHERE conrelid = 'user_push_tokens'::regclass AND contype = 'f' " +
+        "LOOP " +
+          "EXECUTE format('ALTER TABLE user_push_tokens DROP CONSTRAINT %I', c.conname); " +
+        "END LOOP; " +
+        "IF EXISTS (" +
+          "SELECT 1 FROM information_schema.columns " +
+          "WHERE table_schema='public' AND table_name='user_push_tokens' AND column_name='user_id' AND data_type <> 'text'" +
+        ") THEN " +
+          "ALTER TABLE user_push_tokens ALTER COLUMN user_id TYPE TEXT USING user_id::text; " +
+        "END IF; " +
+      "EXCEPTION WHEN others THEN " +
+        "NULL; " +
+      "END $$;"
   );
   await client.query(
     'CREATE INDEX IF NOT EXISTS idx_user_push_tokens_user_id ON user_push_tokens(user_id)'
@@ -289,7 +310,7 @@ app.post('/notifications/register-token', auth, async (req, res) => {
   const platform = String(req.body?.platform || '').trim();
   const appVersion = String(req.body?.app_version || req.body?.appVersion || '').trim();
   if (!token || token.length < 16) return res.status(400).json({ error: 'invalid_token' });
-  const userId = Number(req.user?.sub);
+  const userId = String(req.user?.sub || '').trim();
   if (!userId) return res.status(401).json({ error: 'unauthorized' });
   const client = await pool.connect();
   try {
@@ -308,7 +329,7 @@ app.post('/notifications/register-token', auth, async (req, res) => {
 });
 
 app.post('/notifications/reminder-preview', auth, async (req, res) => {
-  const userId = Number(req.user?.sub);
+  const userId = String(req.user?.sub || '').trim();
   if (!userId) return res.status(401).json({ error: 'unauthorized' });
   const title = String(req.body?.title || '').trim() || 'Pending test reminder';
   const body = String(req.body?.body || '').trim() || 'Continue your test';
