@@ -7,6 +7,7 @@ import Stripe from 'stripe';
 import nodemailer from 'nodemailer';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
+import admin from 'firebase-admin';
 import fs from 'fs';
 import path from 'path';
 
@@ -21,7 +22,23 @@ try {
 }
 const { Pool } = pkg;
 
-const { DATABASE_URL, SYNC_ADMIN_TOKEN, PORT = 8000, JWT_SECRET = 'change-me', ADMIN_EMAILS = '', STRIPE_SECRET_KEY = '', STRIPE_SUCCESS_URL = 'https://example.com/success', STRIPE_CANCEL_URL = 'https://example.com/cancel', SMTP_HOST = '', SMTP_PORT = '', SMTP_USER = '', SMTP_PASS = '', FROM_EMAIL = '' } = process.env;
+const {
+  DATABASE_URL,
+  SYNC_ADMIN_TOKEN,
+  PORT = 8000,
+  JWT_SECRET = 'change-me',
+  ADMIN_EMAILS = '',
+  STRIPE_SECRET_KEY = '',
+  STRIPE_SUCCESS_URL = 'https://example.com/success',
+  STRIPE_CANCEL_URL = 'https://example.com/cancel',
+  SMTP_HOST = '',
+  SMTP_PORT = '',
+  SMTP_USER = '',
+  SMTP_PASS = '',
+  FROM_EMAIL = '',
+  FCM_SERVICE_ACCOUNT_JSON = '',
+  FCM_SERVICE_ACCOUNT_FILE = '',
+} = process.env;
 const ADMIN_SET = new Set(String(ADMIN_EMAILS).split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
 if (!DATABASE_URL) { throw new Error('DATABASE_URL not set'); }
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: DATABASE_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined });
@@ -40,6 +57,29 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
+
+let fcmMessaging = null;
+try {
+  let credential = null;
+  if (FCM_SERVICE_ACCOUNT_JSON) {
+    credential = admin.credential.cert(JSON.parse(FCM_SERVICE_ACCOUNT_JSON));
+  } else if (FCM_SERVICE_ACCOUNT_FILE) {
+    const serviceAccountRaw = fs.readFileSync(FCM_SERVICE_ACCOUNT_FILE, 'utf8');
+    credential = admin.credential.cert(JSON.parse(serviceAccountRaw));
+  }
+  if (credential) {
+    const firebaseApp =
+      admin.apps.length > 0
+        ? admin.app()
+        : admin.initializeApp({ credential });
+    fcmMessaging = firebaseApp.messaging();
+    console.log('[fcm] initialized');
+  } else {
+    console.log('[fcm] disabled (no service account configured)');
+  }
+} catch (e) {
+  console.error('[fcm] init failed:', e?.message || e);
+}
 
 // File uploads (PDFs)
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
@@ -155,6 +195,107 @@ app.get('/auth/me', auth, async (req, res) => {
     if (r.rowCount === 0) return res.status(404).json({ error: 'not_found' });
     return res.json(r.rows[0]);
   } finally { client.release(); }
+});
+
+const ensurePushTokenTable = async (client) => {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS user_push_tokens (" +
+      "token TEXT PRIMARY KEY, " +
+      "user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, " +
+      "platform TEXT NOT NULL DEFAULT '', " +
+      "app_version TEXT NOT NULL DEFAULT '', " +
+      "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" +
+    ")"
+  );
+  await client.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_push_tokens_user_id ON user_push_tokens(user_id)'
+  );
+};
+
+const toStringMap = (obj) => {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v === null || v === undefined) continue;
+    out[String(k)] = String(v);
+  }
+  return out;
+};
+
+const sendPushToUser = async ({ userId, title, body, data }) => {
+  if (!fcmMessaging) {
+    return { ok: false, error: 'fcm_not_configured', tokens: 0, successCount: 0, failureCount: 0 };
+  }
+  const client = await pool.connect();
+  try {
+    await ensurePushTokenTable(client);
+    const rows = await client.query('SELECT token FROM user_push_tokens WHERE user_id = $1', [userId]);
+    const tokens = rows.rows.map((r) => r.token).filter(Boolean);
+    if (!tokens.length) {
+      return { ok: false, error: 'no_tokens', tokens: 0, successCount: 0, failureCount: 0 };
+    }
+    const resp = await fcmMessaging.sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: toStringMap(data),
+    });
+    const stale = [];
+    for (let i = 0; i < resp.responses.length; i++) {
+      const rr = resp.responses[i];
+      if (rr.success) continue;
+      const code = rr.error?.code || '';
+      if (code === 'messaging/invalid-registration-token' || code === 'messaging/registration-token-not-registered') {
+        stale.push(tokens[i]);
+      }
+    }
+    if (stale.length) {
+      await client.query('DELETE FROM user_push_tokens WHERE token = ANY($1::text[])', [stale]);
+    }
+    return {
+      ok: resp.successCount > 0,
+      tokens: tokens.length,
+      successCount: resp.successCount,
+      failureCount: resp.failureCount,
+      staleCount: stale.length,
+    };
+  } finally { client.release(); }
+};
+
+app.post('/notifications/register-token', auth, async (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  const platform = String(req.body?.platform || '').trim();
+  const appVersion = String(req.body?.app_version || req.body?.appVersion || '').trim();
+  if (!token || token.length < 16) return res.status(400).json({ error: 'invalid_token' });
+  const userId = Number(req.user?.sub);
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+  const client = await pool.connect();
+  try {
+    await ensurePushTokenTable(client);
+    await client.query(
+      "INSERT INTO user_push_tokens(token, user_id, platform, app_version, updated_at) VALUES ($1,$2,$3,$4,NOW()) " +
+      "ON CONFLICT(token) DO UPDATE SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform, app_version = EXCLUDED.app_version, updated_at = NOW()",
+      [token, userId, platform, appVersion],
+    );
+    return res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/notifications/reminder-preview', auth, async (req, res) => {
+  const userId = Number(req.user?.sub);
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+  const title = String(req.body?.title || '').trim() || 'Pending test reminder';
+  const body = String(req.body?.body || '').trim() || 'Continue your test';
+  const data = toStringMap(req.body?.data || req.body?.payload || {});
+  try {
+    const sent = await sendPushToUser({ userId, title, body, data });
+    if (!sent.ok) {
+      const status = sent.error === 'fcm_not_configured' ? 503 : (sent.error === 'no_tokens' ? 404 : 502);
+      return res.status(status).json({ error: sent.error, ...sent });
+    }
+    return res.json({ ok: true, ...sent });
+  } catch (e) {
+    console.error('reminder-preview failed:', e);
+    return res.status(500).json({ error: 'failed' });
+  }
 });
 
 // Content version
@@ -745,6 +886,28 @@ app.get('/admin/users', adminGuard, async (req, res) => {
     await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
     const rows = await client.query('SELECT id, email, role FROM users ORDER BY id DESC');
     return res.json(rows.rows);
+  } finally { client.release(); }
+});
+
+// Admin: change user role (admin <-> user)
+app.put('/admin/users/:id/role', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const role = String(req.body?.role || '').trim().toLowerCase();
+  if (!id || !['admin', 'user'].includes(role)) {
+    return res.status(400).json({ error: 'invalid_input' });
+  }
+  if (req.user?.sub && Number(req.user.sub) === id && role !== 'admin') {
+    return res.status(400).json({ error: 'cannot_demote_self' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    const updated = await client.query(
+      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, role',
+      [role, id],
+    );
+    if (updated.rowCount === 0) return res.status(404).json({ error: 'not_found' });
+    return res.json(updated.rows[0]);
   } finally { client.release(); }
 });
 

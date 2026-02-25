@@ -135,13 +135,37 @@ Future<bool> _ensureAndroidPermissions() async {
         AndroidFlutterLocalNotificationsPlugin
       >();
   if (androidPlugin == null) return true;
-  await androidPlugin.requestNotificationsPermission();
+  final notifEnabledBefore = await androidPlugin.areNotificationsEnabled();
+  final canExactBefore = await androidPlugin.canScheduleExactNotifications();
+  debugPrint(
+    '[reminder notifications] pre-permission '
+    'notifications=$notifEnabledBefore exact=$canExactBefore',
+  );
+
+  final notifRequestResult = await androidPlugin
+      .requestNotificationsPermission();
+  debugPrint(
+    '[reminder notifications] requestNotificationsPermission '
+    'result=$notifRequestResult',
+  );
+
   try {
-    await androidPlugin.requestExactAlarmsPermission();
+    if (canExactBefore == false) {
+      final exactResult = await androidPlugin.requestExactAlarmsPermission();
+      debugPrint(
+        '[reminder notifications] requestExactAlarmsPermission '
+        'result=$exactResult',
+      );
+    }
   } catch (_) {
     // Exact alarm permission API can be unavailable on some Android versions.
   }
   final enabled = await androidPlugin.areNotificationsEnabled() ?? true;
+  final canExactAfter = await androidPlugin.canScheduleExactNotifications();
+  debugPrint(
+    '[reminder notifications] post-permission '
+    'notifications=$enabled exact=$canExactAfter',
+  );
   if (!enabled) {
     debugPrint(
       '[reminder notifications] blocked: notifications permission denied',

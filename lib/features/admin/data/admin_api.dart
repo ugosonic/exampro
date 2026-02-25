@@ -213,6 +213,13 @@ class AdminApi {
         .toList();
     return list;
   }
+
+  Future<void> updateUserRole({
+    required int userId,
+    required String role,
+  }) async {
+    await _dio.put('/admin/users/$userId/role', data: {'role': role});
+  }
 }
 
 final adminApiProvider = Provider<AdminApi>(

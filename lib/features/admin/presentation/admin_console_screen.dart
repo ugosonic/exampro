@@ -929,6 +929,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                 onPressed: () => setState(() => _selected.clear()),
                 child: const Text('Clear Selection'),
               ),
+              const Text('Tip: tap menu on a user to change privilege.'),
             ],
           ),
         ),
@@ -955,7 +956,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                     }),
                     title: Text(u.email),
                     subtitle: Text(
-                      'Role: ${u.role} • ${u.isPro ? 'Pro' : 'Free'}',
+                      'Role: ${u.role} | ${u.isPro ? 'Pro' : 'Free'}',
                     ),
                     secondary: IconButton(
                       icon: const Icon(Icons.more_vert),
@@ -1043,8 +1044,17 @@ class _ManageUserSheet extends ConsumerStatefulWidget {
 class _ManageUserSheetState extends ConsumerState<_ManageUserSheet> {
   String _currency = 'GBP';
   bool _busy = false;
+  bool _roleBusy = false;
+  late String _role;
   final _subjectCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.user.role.trim().toLowerCase();
+    _role = (r == 'admin') ? 'admin' : 'user';
+  }
 
   Future<int?> _priceMinor(String cur) async {
     final repo = ref.read(adminRepositoryProvider);
@@ -1111,6 +1121,37 @@ class _ManageUserSheetState extends ConsumerState<_ManageUserSheet> {
     setState(() => _busy = false);
   }
 
+  Future<void> _changeRole(String nextRole) async {
+    final role = nextRole.trim().toLowerCase();
+    if (_roleBusy || _busy) return;
+    if (role != 'admin' && role != 'user') return;
+    if (role == _role) return;
+    setState(() => _roleBusy = true);
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .setUserRole(
+            userId: widget.user.id,
+            email: widget.user.email,
+            role: role,
+          );
+      if (!mounted) return;
+      setState(() => _role = role);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Set ${widget.user.email} to ${role.toUpperCase()}'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update role: $e')));
+    } finally {
+      if (mounted) setState(() => _roleBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final maxW = MediaQuery.of(context).size.width;
@@ -1134,6 +1175,27 @@ class _ManageUserSheetState extends ConsumerState<_ManageUserSheet> {
               ),
               const SizedBox(height: 8),
               Text('Current: ${widget.user.isPro ? 'Pro' : 'Free'}'),
+              const SizedBox(height: 12),
+              const Text('Privilege'),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                key: ValueKey(_role),
+                initialValue: _role,
+                items: const [
+                  DropdownMenuItem(value: 'user', child: Text('User')),
+                  DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                ],
+                onChanged: (_busy || _roleBusy)
+                    ? null
+                    : (v) {
+                        if (v == null) return;
+                        _changeRole(v);
+                      },
+              ),
+              if (_roleBusy) ...[
+                const SizedBox(height: 8),
+                const LinearProgressIndicator(minHeight: 2),
+              ],
               const SizedBox(height: 12),
               const Text('Currency'),
               RadioGroup<String>(

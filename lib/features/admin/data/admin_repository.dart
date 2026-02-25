@@ -10,7 +10,21 @@ class AdminRepository {
   final AppDatabase _db;
   final AdminApi? _adminApi;
   final ContentApi? _contentApi;
+  List<DbUser> _cachedApiUsers = const [];
   AdminRepository(this._db, [this._adminApi, this._contentApi]);
+
+  List<DbUser> _mapApiUsers(List<Map<String, dynamic>> rows) {
+    return [
+      for (final m in rows)
+        DbUser(
+          id: (m['id'] as num).toInt(),
+          email: (m['email'] as String?) ?? '',
+          password: '',
+          role: (m['role'] as String?) ?? 'user',
+          isPro: false,
+        ),
+    ];
+  }
 
   Future<int> createCategory(
     String name, {
@@ -367,21 +381,13 @@ class AdminRepository {
         while (true) {
           try {
             final rows = await _adminApi.users();
-            yield [
-              for (final m in rows)
-                DbUser(
-                  id: (m['id'] as num).toInt(),
-                  email: (m['email'] as String?) ?? '',
-                  password: '',
-                  role: (m['role'] as String?) ?? 'user',
-                  isPro: false,
-                ),
-            ];
+            _cachedApiUsers = _mapApiUsers(rows);
+            yield _cachedApiUsers;
           } catch (_) {
-            // Fall back to local snapshot on error
-            yield await _db.select(_db.users).get();
+            // Keep last known server list; do not swap to local IDs.
+            yield _cachedApiUsers;
           }
-          await Future.delayed(const Duration(seconds: 10));
+          await Future.delayed(const Duration(seconds: 5));
         }
       }();
     }
@@ -392,18 +398,10 @@ class AdminRepository {
     if (_adminApi != null) {
       try {
         final rows = await _adminApi.users();
-        return [
-          for (final m in rows)
-            DbUser(
-              id: (m['id'] as num).toInt(),
-              email: (m['email'] as String?) ?? '',
-              password: '',
-              role: (m['role'] as String?) ?? 'user',
-              isPro: false,
-            ),
-        ];
+        _cachedApiUsers = _mapApiUsers(rows);
+        return _cachedApiUsers;
       } catch (_) {
-        return _db.select(_db.users).get();
+        return _cachedApiUsers;
       }
     }
     return _db.select(_db.users).get();
@@ -929,6 +927,21 @@ class AdminRepository {
   Future<void> setUserPro(String email, bool isPro) async {
     await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(
       UsersCompanion(isPro: drift.Value(isPro)),
+    );
+  }
+
+  Future<void> setUserRole({
+    required int userId,
+    required String email,
+    required String role,
+  }) async {
+    final nextRole = role.trim().toLowerCase();
+    if (nextRole != 'admin' && nextRole != 'user') return;
+    if (_adminApi != null) {
+      await _adminApi.updateUserRole(userId: userId, role: nextRole);
+    }
+    await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(
+      UsersCompanion(role: drift.Value(nextRole)),
     );
   }
 

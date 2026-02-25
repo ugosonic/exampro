@@ -379,13 +379,26 @@ class ExamRepository {
     try {
       final row = await _db
           .customSelect(
-            'SELECT "index" AS idx FROM practice_progress WHERE category_id = ? AND user_email = ? LIMIT 1',
+            'SELECT progress_index AS idx FROM practice_progress WHERE category_id = ? AND user_email = ? LIMIT 1',
             variables: [drift.Variable(categoryId), drift.Variable(userEmail)],
           )
           .getSingleOrNull();
       return (row == null) ? 0 : (((row.data['idx'] as num?) ?? 0).toInt());
     } catch (_) {
-      return 0;
+      try {
+        final row = await _db
+            .customSelect(
+              'SELECT "index" AS idx FROM practice_progress WHERE category_id = ? AND user_email = ? LIMIT 1',
+              variables: [
+                drift.Variable(categoryId),
+                drift.Variable(userEmail),
+              ],
+            )
+            .getSingleOrNull();
+        return (row == null) ? 0 : (((row.data['idx'] as num?) ?? 0).toInt());
+      } catch (_) {
+        return 0;
+      }
     }
   }
 
@@ -396,11 +409,19 @@ class ExamRepository {
   }) async {
     try {
       await _db.customStatement(
-        'INSERT INTO practice_progress(category_id, user_email, "index", updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) '
-        'ON CONFLICT(user_email, category_id) DO UPDATE SET "index" = excluded."index", updated_at = excluded.updated_at',
+        'INSERT INTO practice_progress(category_id, user_email, progress_index, updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) '
+        'ON CONFLICT(user_email, category_id) DO UPDATE SET progress_index = excluded.progress_index, updated_at = excluded.updated_at',
         [categoryId, userEmail, index],
       );
-    } catch (_) {}
+    } catch (_) {
+      try {
+        await _db.customStatement(
+          'INSERT INTO practice_progress(category_id, user_email, "index", updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP) '
+          'ON CONFLICT(user_email, category_id) DO UPDATE SET "index" = excluded."index", updated_at = excluded.updated_at',
+          [categoryId, userEmail, index],
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> resetPracticeProgress({

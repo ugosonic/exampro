@@ -3,12 +3,22 @@ services:
     build:
       context: ./server/express
     restart: unless-stopped
-    network_mode: "host"
+    ports:
+      - "${API_BIND_ADDR:-127.0.0.1}:${API_BIND_PORT:-18000}:8000"
     environment:
       - PORT=8000
       - DATABASE_URL=${DATABASE_URL}
       - SYNC_ADMIN_TOKEN=${SYNC_ADMIN_TOKEN}
       - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_SUCCESS_URL=${STRIPE_SUCCESS_URL}
+      - STRIPE_CANCEL_URL=${STRIPE_CANCEL_URL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - FROM_EMAIL=${FROM_EMAIL}
       - UPLOAD_DIR=/data/uploads
       - FCM_SERVICE_ACCOUNT_FILE=${FCM_SERVICE_ACCOUNT_FILE}
       - FCM_SERVICE_ACCOUNT_JSON=${FCM_SERVICE_ACCOUNT_JSON}

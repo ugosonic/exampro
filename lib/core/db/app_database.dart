@@ -194,7 +194,7 @@ class Payments extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openConnection());
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -315,7 +315,7 @@ class AppDatabase extends _$AppDatabase {
             'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             'category_id INTEGER NOT NULL, '
             'user_email TEXT NOT NULL, '
-            '"index" INTEGER NOT NULL DEFAULT 0, '
+            'progress_index INTEGER NOT NULL DEFAULT 0, '
             'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
             'UNIQUE(user_email, category_id)'
             ')',
@@ -337,6 +337,9 @@ class AppDatabase extends _$AppDatabase {
             ')',
           );
         }
+      }
+      if (from < 17) {
+        await _ensurePracticeProgressCompat();
       }
     },
     beforeOpen: (details) async {
@@ -375,11 +378,12 @@ class AppDatabase extends _$AppDatabase {
       'id INTEGER PRIMARY KEY AUTOINCREMENT, '
       'category_id INTEGER NOT NULL, '
       'user_email TEXT NOT NULL, '
-      '"index" INTEGER NOT NULL DEFAULT 0, '
+      'progress_index INTEGER NOT NULL DEFAULT 0, '
       'updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
       'UNIQUE(user_email, category_id)'
       ')',
     );
+    await _ensurePracticeProgressCompat();
     await customStatement(
       'CREATE TABLE IF NOT EXISTS practice_answers ('
       'id INTEGER PRIMARY KEY AUTOINCREMENT, '
@@ -391,6 +395,23 @@ class AppDatabase extends _$AppDatabase {
       'UNIQUE(user_email, question_id)'
       ')',
     );
+  }
+
+  Future<void> _ensurePracticeProgressCompat() async {
+    if (!await _tableExists('practice_progress')) return;
+
+    if (!await _columnExists('practice_progress', 'progress_index')) {
+      await customStatement(
+        'ALTER TABLE practice_progress ADD COLUMN progress_index INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+
+    // Migrate legacy reserved-word column data when present.
+    if (await _columnExists('practice_progress', 'index')) {
+      await customStatement(
+        'UPDATE practice_progress SET progress_index = "index" WHERE progress_index = 0',
+      );
+    }
   }
 
   Future<bool> _columnExists(String table, String column) async {

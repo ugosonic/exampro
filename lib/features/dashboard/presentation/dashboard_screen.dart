@@ -642,8 +642,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           showTitles: true,
                           getTitlesWidget: (v, meta) {
                             final i = v.toInt();
-                            if (i < 0 || i >= items.length)
+                            if (i < 0 || i >= items.length) {
                               return const SizedBox.shrink();
+                            }
                             final d = items[i].startedAt;
                             return Padding(
                               padding: const EdgeInsets.only(top: 6),
@@ -766,11 +767,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             return (exams: exams, cats: cats, subs: subs);
           }(),
           builder: (context, snap2) {
-            if (snap2.hasError)
+            if (snap2.hasError) {
               return Text('Failed to load exam info: ${snap2.error}');
+            }
             final extras = snap2.data;
-            if (attempts.isEmpty)
+            if (attempts.isEmpty) {
               return const Text('No attempts yet. Start from Categories.');
+            }
             final exams = (extras?.exams ?? const <Exam>[]);
             final cats = (extras?.cats ?? const <Category>[]);
             final subs = (extras?.subs ?? const <Subcategory>[]);
@@ -964,8 +967,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             }
             return;
           }
-          if (context.mounted)
+          if (context.mounted) {
             context.go('/player/${attempt.examId}?aid=${attempt.id}');
+          }
         },
       ),
       (label: 'Saved', icon: Icons.bookmark, onTap: () => context.go('/saved')),

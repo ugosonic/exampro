@@ -1,5 +1,6 @@
 import 'package:citizentest/features/auth/presentation/sign_up_state.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
+import 'package:citizentest/core/notifications/push_notifications.dart';
 import 'package:citizentest/core/sync/content_sync_bootstrap.dart';
 import 'package:flutter/material.dart';
 import 'package:citizentest/common/widgets/neon_glass.dart';
@@ -215,6 +216,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     await ref
                                         .read(contentSyncBootstrapProvider)
                                         .syncNow(force: true);
+                                    await ref
+                                        .read(pushNotificationsProvider)
+                                        .syncTokenWithBackend();
+                                    if (!context.mounted) return;
                                     final user = ref.read(currentUserProvider);
                                     if (user?.role == 'admin') {
                                       context.go('/admin');

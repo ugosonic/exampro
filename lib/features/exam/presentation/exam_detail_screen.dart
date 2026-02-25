@@ -57,8 +57,9 @@ class ExamDetailScreen extends ConsumerWidget {
           future: repo.getExam(id),
           builder: (context, snap) {
             final ex = snap.data;
-            if (ex == null)
+            if (ex == null) {
               return const Center(child: CircularProgressIndicator());
+            }
             // Gate if locked and user is not pro
             return FutureBuilder(
               future: () async {
@@ -99,8 +100,9 @@ class ExamDetailScreen extends ConsumerWidget {
               }(),
               builder: (context, gateSnap) {
                 final g = gateSnap.data;
-                if (g == null)
+                if (g == null) {
                   return const Center(child: CircularProgressIndicator());
+                }
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(

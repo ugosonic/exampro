@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:citizentest/core/auth/token_store.dart';
 import 'package:citizentest/core/db/db_provider.dart';
+import 'package:citizentest/core/notifications/push_notifications.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:citizentest/features/auth/domain/models.dart';
 import 'package:citizentest/features/sync/data/sync_repository.dart';
@@ -23,6 +24,12 @@ final sessionInitializerProvider = FutureProvider<void>((ref) async {
 
   if (sessionUser == null) return;
   ref.read(currentUserProvider.notifier).state = sessionUser;
+
+  try {
+    await ref.read(pushNotificationsProvider).syncTokenWithBackend();
+  } catch (_) {
+    // Keep session init non-blocking if notifications backend is unreachable.
+  }
 
   // Auto-sync content and user progress so devices are consistent.
   try {
