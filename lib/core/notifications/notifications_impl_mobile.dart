@@ -1,6 +1,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
 
@@ -23,6 +24,7 @@ Future<void> init({void Function(String? payload)? onNotificationTap}) async {
         _tapHandler?.call(details.payload),
   );
   tzdata.initializeTimeZones();
+  await _configureLocalTimezone();
   await _ensureAndroidPermissions();
   debugPrint('[reminder notifications] initialized');
   _initialized = true;
@@ -127,6 +129,19 @@ Future<void> cancelAll() async => _plugin.cancelAll();
 Future<void> _ensureReady() async {
   if (_initialized) return;
   await init();
+}
+
+Future<void> _configureLocalTimezone() async {
+  try {
+    final zoneName = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(zoneName));
+    debugPrint('[reminder notifications] timezone=$zoneName');
+  } catch (e) {
+    debugPrint(
+      '[reminder notifications] timezone detection failed: $e; using UTC',
+    );
+    tz.setLocalLocation(tz.getLocation('UTC'));
+  }
 }
 
 Future<bool> _ensureAndroidPermissions() async {

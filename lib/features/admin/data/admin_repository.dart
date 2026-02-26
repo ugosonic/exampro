@@ -11,18 +11,42 @@ class AdminRepository {
   final AdminApi? _adminApi;
   final ContentApi? _contentApi;
   List<DbUser> _cachedApiUsers = const [];
+  final Map<int, String> _apiUserServerIdsByLocalId = <int, String>{};
   AdminRepository(this._db, [this._adminApi, this._contentApi]);
 
+  int _localUserIdFor(dynamic rawId, String fallbackEmail) {
+    if (rawId is num) return rawId.toInt();
+    final raw = (rawId ?? '').toString().trim();
+    if (raw.isNotEmpty) {
+      final parsed = int.tryParse(raw);
+      if (parsed != null) return parsed;
+      final hash = raw.hashCode & 0x7fffffff;
+      return hash == 0 ? -1 : -hash;
+    }
+    final emailHash = fallbackEmail.trim().toLowerCase().hashCode & 0x7fffffff;
+    return emailHash == 0 ? -1 : -emailHash;
+  }
+
   List<DbUser> _mapApiUsers(List<Map<String, dynamic>> rows) {
+    _apiUserServerIdsByLocalId.clear();
     return [
-      for (final m in rows)
-        DbUser(
-          id: (m['id'] as num).toInt(),
-          email: (m['email'] as String?) ?? '',
-          password: '',
-          role: (m['role'] as String?) ?? 'user',
-          isPro: false,
-        ),
+      for (final m in rows) ...[
+        (() {
+          final email = (m['email'] as String?) ?? '';
+          final localId = _localUserIdFor(m['id'], email);
+          final serverId = (m['id'] ?? '').toString().trim();
+          if (serverId.isNotEmpty) {
+            _apiUserServerIdsByLocalId[localId] = serverId;
+          }
+          return DbUser(
+            id: localId,
+            email: email,
+            password: '',
+            role: (m['role'] as String?) ?? 'user',
+            isPro: false,
+          );
+        })(),
+      ],
     ];
   }
 
@@ -938,7 +962,8 @@ class AdminRepository {
     final nextRole = role.trim().toLowerCase();
     if (nextRole != 'admin' && nextRole != 'user') return;
     if (_adminApi != null) {
-      await _adminApi.updateUserRole(userId: userId, role: nextRole);
+      final serverId = _apiUserServerIdsByLocalId[userId] ?? userId.toString();
+      await _adminApi.updateUserRole(userId: serverId, role: nextRole);
     }
     await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(
       UsersCompanion(role: drift.Value(nextRole)),

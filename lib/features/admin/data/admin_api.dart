@@ -215,10 +215,11 @@ class AdminApi {
   }
 
   Future<void> updateUserRole({
-    required int userId,
+    required String userId,
     required String role,
   }) async {
-    await _dio.put('/admin/users/$userId/role', data: {'role': role});
+    final encodedUserId = Uri.encodeComponent(userId);
+    await _dio.put('/admin/users/$encodedUserId/role', data: {'role': role});
   }
 }
 

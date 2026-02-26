@@ -314,6 +314,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         .map((o) => o.id)
         .toSet();
     final allowsMultiple = _allowsMultiple(q, options);
+    final maxSelections = _maxSelectableAnswers(options, allowsMultiple);
     final selected = selections[q.id] ?? <int>{};
     final hasSelection = selected.isNotEmpty;
 
@@ -406,8 +407,17 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                             o,
                             correctIds.contains(o.id),
                             allowsMultiple,
+                            maxSelections,
                           ),
                         ),
+                        if (allowsMultiple)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Text(
+                              'Select up to $maxSelections answers.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
                         if (mode == 'practice' && revealed.contains(q.id))
                           Padding(
                             padding: const EdgeInsets.only(top: 8.0),
@@ -474,6 +484,16 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                               const SnackBar(
                                 content: Text(
                                   'Select at least one option before continuing.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          if (allowsMultiple && selected.length > maxSelections) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'You can select up to $maxSelections answers for this question.',
                                 ),
                               ),
                             );
@@ -617,6 +637,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
     Choice o,
     bool isCorrect,
     bool allowsMultiple,
+    int maxSelections,
   ) {
     final q = questions0[index];
     final selected = selections[q.id] ?? <int>{};
@@ -650,6 +671,18 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
         onTap: () async {
           if (mode == 'practice' && revealed.contains(q.id)) {
             return; // lock changes after reveal
+          }
+          final current = selections[q.id] ?? <int>{};
+          final isAdding = allowsMultiple && !current.contains(o.id);
+          if (isAdding && current.length >= maxSelections) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'You can select up to $maxSelections answers for this question.',
+                ),
+              ),
+            );
+            return;
           }
           setState(() {
             final sel = selections.putIfAbsent(q.id, () => <int>{});
@@ -752,6 +785,13 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
   bool _allowsMultiple(Question q, List<Choice> options) {
     final correctCount = options.where((o) => o.isCorrect).length;
     return q.multiple || correctCount > 1;
+  }
+
+  int _maxSelectableAnswers(List<Choice> options, bool allowsMultiple) {
+    if (!allowsMultiple) return 1;
+    final correctCount = options.where((o) => o.isCorrect).length;
+    if (correctCount <= 0) return options.length.clamp(1, options.length);
+    return correctCount.clamp(1, options.length);
   }
 
   String _formatTime(int seconds) {

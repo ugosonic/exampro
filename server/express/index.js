@@ -975,19 +975,19 @@ app.get('/admin/users', adminGuard, async (req, res) => {
 
 // Admin: change user role (admin <-> user)
 app.put('/admin/users/:id/role', adminGuard, async (req, res) => {
-  const id = Number(req.params.id);
+  const id = String(req.params.id || '').trim();
   const role = String(req.body?.role || '').trim().toLowerCase();
   if (!id || !['admin', 'user'].includes(role)) {
     return res.status(400).json({ error: 'invalid_input' });
   }
-  if (req.user?.sub && Number(req.user.sub) === id && role !== 'admin') {
+  if (req.user?.sub && String(req.user.sub) === id && role !== 'admin') {
     return res.status(400).json({ error: 'cannot_demote_self' });
   }
   const client = await pool.connect();
   try {
     await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
     const updated = await client.query(
-      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, role',
+      'UPDATE users SET role = $1 WHERE id::text = $2 RETURNING id, email, role',
       [role, id],
     );
     if (updated.rowCount === 0) return res.status(404).json({ error: 'not_found' });
