@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -12,6 +13,13 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
+val hasInjectedSigning =
+    !providers.gradleProperty("android.injected.signing.store.file").orNull.isNullOrBlank()
+val isReleaseTaskRequested =
+    gradle.startParameter.taskNames.any { task ->
+        task.contains("release", ignoreCase = true) ||
+            task.contains("bundle", ignoreCase = true)
+    }
 
 
 android {
@@ -51,11 +59,16 @@ android {
 
     buildTypes {
         release {
-            // Use upload key when available; keep debug fallback for local-only release runs.
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            if (isReleaseTaskRequested && !keystorePropertiesFile.exists() && !hasInjectedSigning) {
+                throw GradleException(
+                    "Missing android/key.properties. Provide your Play upload key in android/key.properties " +
+                        "or build from Android Studio's Generate Signed Bundle flow with a selected keystore.",
+                )
+            }
+            signingConfig = when {
+                keystorePropertiesFile.exists() -> signingConfigs.getByName("release")
+                isReleaseTaskRequested -> null
+                else -> signingConfigs.getByName("debug")
             }
             isMinifyEnabled = true
             proguardFiles(

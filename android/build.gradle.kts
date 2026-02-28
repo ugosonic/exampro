@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.Delete
+
 allprojects {
     repositories {
         google()
@@ -5,7 +7,7 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory =
+val newBuildDir =
     rootProject.layout.buildDirectory
         .dir("../../build")
         .get()

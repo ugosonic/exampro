@@ -56,6 +56,45 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
 }
 
 const app = express();
+const defaultCorsOrigins = [
+  'https://citizentest.zenovtech.com',
+  'https://www.citizentest.zenovtech.com',
+];
+const configuredCorsOrigins = String(process.env.CORS_ALLOW_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const explicitCorsOrigins = new Set([...defaultCorsOrigins, ...configuredCorsOrigins]);
+const isAllowedCorsOrigin = (origin) => {
+  if (!origin) return false;
+  if (explicitCorsOrigins.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    }
+  } catch (_) {}
+  return false;
+};
+app.use((req, res, next) => {
+  const origin = req.get('Origin');
+  if (isAllowedCorsOrigin(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+    res.set(
+      'Access-Control-Allow-Headers',
+      'Authorization, Content-Type, X-Requested-With',
+    );
+    res.set(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    );
+  }
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  return next();
+});
 app.use(express.json({ limit: '25mb' }));
 
 const isDbConnectivityError = (e) =>
