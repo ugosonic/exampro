@@ -3,6 +3,7 @@ import 'package:citizentest/core/db/db_provider.dart';
 import 'package:citizentest/core/notifications/notification_settings.dart';
 import 'package:citizentest/core/notifications/notifications.dart';
 import 'package:citizentest/core/notifications/pending_test_reminder.dart';
+import 'package:citizentest/core/notifications/push_notifications.dart';
 import 'package:citizentest/features/auth/application/auth_session.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -192,6 +193,13 @@ class _NotificationSettingsCardState
       await PendingTestReminderService.sync(db);
     } catch (_) {
       // Keep settings responsive even if schedule APIs are restricted.
+    }
+    try {
+      await ref
+          .read(pushNotificationsProvider)
+          .syncReminderSettingsWithBackend();
+    } catch (_) {
+      // Local settings should still save even if backend sync is unavailable.
     }
   }
 

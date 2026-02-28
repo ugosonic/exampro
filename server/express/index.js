@@ -38,6 +38,8 @@ const {
   FROM_EMAIL = '',
   FCM_SERVICE_ACCOUNT_JSON = '',
   FCM_SERVICE_ACCOUNT_FILE = '',
+  REMINDER_SCHEDULER_ENABLED = '1',
+  REMINDER_SCHEDULER_POLL_MS = '60000',
 } = process.env;
 const ADMIN_SET = new Set(String(ADMIN_EMAILS).split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
 if (!DATABASE_URL) { throw new Error('DATABASE_URL not set'); }
@@ -286,6 +288,80 @@ const ensurePushTokenTable = async (client) => {
   );
 };
 
+const ensureReminderPreferencesTable = async (client) => {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS user_notification_preferences (" +
+      "user_id TEXT PRIMARY KEY, " +
+      "user_email TEXT NOT NULL DEFAULT '', " +
+      "enabled BOOLEAN NOT NULL DEFAULT TRUE, " +
+      "reminder_hour INT NOT NULL DEFAULT 19, " +
+      "reminder_minute INT NOT NULL DEFAULT 0, " +
+      "timezone TEXT NOT NULL DEFAULT 'UTC', " +
+      "last_sent_local_date TEXT NOT NULL DEFAULT '', " +
+      "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" +
+    ")"
+  );
+  await client.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_notification_preferences_enabled ON user_notification_preferences(enabled)'
+  );
+};
+
+const getUserLocalClock = (timeZone) => {
+  const safeTimeZone = String(timeZone || 'UTC').trim() || 'UTC';
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: safeTimeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    return {
+      timeZone: safeTimeZone,
+      date: `${values.year}-${values.month}-${values.day}`,
+      hour: Number(values.hour),
+      minute: Number(values.minute),
+    };
+  } catch (_) {
+    if (safeTimeZone !== 'UTC') {
+      return getUserLocalClock('UTC');
+    }
+    const now = new Date();
+    return {
+      timeZone: 'UTC',
+      date: now.toISOString().slice(0, 10),
+      hour: now.getUTCHours(),
+      minute: now.getUTCMinutes(),
+    };
+  }
+};
+
+const getPendingAttemptReminder = async (client, userEmail) => {
+  const tableCheck = await client.query(
+    "SELECT to_regclass('public.user_attempts') AS table_name"
+  );
+  if (!tableCheck.rows[0]?.table_name) return null;
+  const attempt = await client.query(
+    'SELECT local_id, exam_id, mode FROM user_attempts WHERE user_email = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1',
+    [userEmail],
+  );
+  if (attempt.rowCount === 0) return null;
+  const row = attempt.rows[0];
+  return {
+    title: 'Pending test reminder',
+    body: 'Continue your unfinished test',
+    data: {
+      type: 'pending_test',
+      attemptId: row.local_id,
+      examId: row.exam_id,
+      mode: row.mode || 'exam',
+    },
+  };
+};
+
 const toStringMap = (obj) => {
   const out = {};
   for (const [k, v] of Object.entries(obj || {})) {
@@ -367,6 +443,43 @@ app.post('/notifications/register-token', auth, async (req, res) => {
   } finally { client.release(); }
 });
 
+app.post('/notifications/settings', auth, async (req, res) => {
+  const userId = String(req.user?.sub || '').trim();
+  const userEmail = String(req.user?.email || '').trim().toLowerCase();
+  if (!userId || !userEmail) return res.status(401).json({ error: 'unauthorized' });
+
+  const enabled = Boolean(req.body?.enabled);
+  const hour = Number(req.body?.hour);
+  const minute = Number(req.body?.minute);
+  const timeZoneRaw = String(req.body?.timezone || 'UTC').trim() || 'UTC';
+  const localClock = getUserLocalClock(timeZoneRaw);
+
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+    return res.status(400).json({ error: 'invalid_hour' });
+  }
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+    return res.status(400).json({ error: 'invalid_minute' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await ensureReminderPreferencesTable(client);
+    await client.query(
+      "INSERT INTO user_notification_preferences(user_id, user_email, enabled, reminder_hour, reminder_minute, timezone, updated_at) " +
+      "VALUES ($1,$2,$3,$4,$5,$6,NOW()) " +
+      "ON CONFLICT(user_id) DO UPDATE SET user_email = EXCLUDED.user_email, enabled = EXCLUDED.enabled, reminder_hour = EXCLUDED.reminder_hour, reminder_minute = EXCLUDED.reminder_minute, timezone = EXCLUDED.timezone, updated_at = NOW()",
+      [userId, userEmail, enabled, hour, minute, localClock.timeZone],
+    );
+    return res.json({
+      ok: true,
+      enabled,
+      hour,
+      minute,
+      timezone: localClock.timeZone,
+    });
+  } finally { client.release(); }
+});
+
 app.post('/notifications/reminder-preview', auth, async (req, res) => {
   const userId = String(req.user?.sub || '').trim();
   if (!userId) return res.status(401).json({ error: 'unauthorized' });
@@ -385,6 +498,63 @@ app.post('/notifications/reminder-preview', auth, async (req, res) => {
     return res.status(500).json({ error: 'failed' });
   }
 });
+
+let reminderSchedulerRunning = false;
+const reminderSchedulerEnabled =
+  String(REMINDER_SCHEDULER_ENABLED).trim() !== '0';
+const reminderSchedulerPollMs = Math.max(
+  15000,
+  Number.parseInt(String(REMINDER_SCHEDULER_POLL_MS || '60000'), 10) || 60000,
+);
+
+const runReminderSchedulerTick = async () => {
+  if (!reminderSchedulerEnabled || reminderSchedulerRunning) return;
+  reminderSchedulerRunning = true;
+  const client = await pool.connect();
+  try {
+    await ensureReminderPreferencesTable(client);
+    await ensurePushTokenTable(client);
+    const prefs = await client.query(
+      'SELECT user_id, user_email, reminder_hour, reminder_minute, timezone, last_sent_local_date FROM user_notification_preferences WHERE enabled = TRUE'
+    );
+    for (const pref of prefs.rows) {
+      const localClock = getUserLocalClock(pref.timezone);
+      if (
+        Number(pref.reminder_hour) !== localClock.hour ||
+        Number(pref.reminder_minute) !== localClock.minute
+      ) {
+        continue;
+      }
+      if (String(pref.last_sent_local_date || '') === localClock.date) {
+        continue;
+      }
+      const reminder = await getPendingAttemptReminder(client, pref.user_email);
+      if (!reminder) {
+        continue;
+      }
+      const sent = await sendPushToUser({
+        userId: pref.user_id,
+        title: reminder.title,
+        body: reminder.body,
+        data: reminder.data,
+      });
+      if (sent.ok) {
+        await client.query(
+          'UPDATE user_notification_preferences SET last_sent_local_date = $2, updated_at = NOW() WHERE user_id = $1',
+          [pref.user_id, localClock.date],
+        );
+        console.log(
+          `[fcm] scheduled-reminder user=${pref.user_id} date=${localClock.date} tz=${localClock.timeZone}`,
+        );
+      }
+    }
+  } catch (e) {
+    console.error('[fcm] scheduler tick failed:', e?.message || e);
+  } finally {
+    reminderSchedulerRunning = false;
+    client.release();
+  }
+};
 
 // Content version
 app.get('/sync/version', async (req, res) => {
@@ -1035,4 +1205,17 @@ app.put('/admin/users/:id/role', adminGuard, async (req, res) => {
 });
 
 // Bind explicitly on IPv4 so clients that use IPv4 addresses can connect even if the OS reports '::'
-app.listen(PORT, '0.0.0.0', () => console.log(`API listening on ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`API listening on ${PORT}`);
+  if (reminderSchedulerEnabled) {
+    console.log(
+      `[fcm] reminder scheduler enabled interval_ms=${reminderSchedulerPollMs}`,
+    );
+    void runReminderSchedulerTick();
+    setInterval(() => {
+      void runReminderSchedulerTick();
+    }, reminderSchedulerPollMs);
+  } else {
+    console.log('[fcm] reminder scheduler disabled');
+  }
+});

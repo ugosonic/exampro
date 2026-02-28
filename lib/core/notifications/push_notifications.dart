@@ -12,6 +12,7 @@ import 'package:firebase_messaging/firebase_messaging.dart'
     hide NotificationSettings;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -143,8 +144,31 @@ class PushNotificationsService {
       if (token != null && token.isNotEmpty) {
         await _uploadTokenIfPossible(token, force: true);
       }
+      await syncReminderSettingsWithBackend();
     } catch (e) {
       debugPrint('[push notifications] syncTokenWithBackend failed: $e');
+    }
+  }
+
+  Future<void> syncReminderSettingsWithBackend() async {
+    if (kIsWeb || _isFlutterTest) return;
+    try {
+      final enabled = await NotificationSettings.getEnabled(_db);
+      final hour = await NotificationSettings.getReminderHour(_db);
+      final minute = await NotificationSettings.getReminderMinute(_db);
+      final timezone = await _deviceTimezoneForBackend();
+      await _api.syncReminderSettings(
+        enabled: enabled,
+        hour: hour,
+        minute: minute,
+        timezone: timezone,
+      );
+      debugPrint(
+        '[push notifications] reminder settings synced '
+        'enabled=$enabled time=${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} tz=$timezone',
+      );
+    } catch (e) {
+      debugPrint('[push notifications] reminder settings sync failed: $e');
     }
   }
 
@@ -188,6 +212,18 @@ class PushNotificationsService {
     } catch (e) {
       debugPrint('[push notifications] token register failed: $e');
     }
+  }
+
+  Future<String> _deviceTimezoneForBackend() async {
+    try {
+      final zone = await FlutterTimezone.getLocalTimezone();
+      if (zone.trim().isNotEmpty) {
+        return zone.trim();
+      }
+    } catch (_) {
+      // Fall through to UTC fallback below.
+    }
+    return 'UTC';
   }
 
   void _handleLocalTap(String? payload) {

@@ -29,6 +29,23 @@ class NotificationsApi {
       data: {'title': title, 'body': body, 'payload': payload.toJson()},
     );
   }
+
+  Future<void> syncReminderSettings({
+    required bool enabled,
+    required int hour,
+    required int minute,
+    required String timezone,
+  }) async {
+    await _dio.post(
+      '/notifications/settings',
+      data: {
+        'enabled': enabled,
+        'hour': hour,
+        'minute': minute,
+        'timezone': timezone,
+      },
+    );
+  }
 }
 
 final notificationsApiProvider = Provider<NotificationsApi>(
