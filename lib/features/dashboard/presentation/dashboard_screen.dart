@@ -1,4 +1,5 @@
 import 'package:citizentest/app/theme/theme_controller.dart';
+import 'package:citizentest/common/widgets/zenov_footer.dart';
 import 'package:citizentest/common/widgets/tap_scale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1154,20 +1155,5 @@ Widget _zenovFooter(BuildContext context) {
   final on = Theme.of(context).brightness == Brightness.dark
       ? Colors.white
       : Colors.black87;
-  final sub = on.withValues(alpha: 0.75);
-  return Column(
-    children: [
-      Text(
-        'Developed by ZenovTech (c) 2025',
-        style: TextStyle(color: sub, fontWeight: FontWeight.w600),
-      ),
-      const SizedBox(height: 4),
-      Text('info@zenovtech.com', style: TextStyle(color: sub)),
-      const SizedBox(height: 4),
-      Text(
-        'Contact for websites and mobile app development',
-        style: TextStyle(color: sub),
-      ),
-    ],
-  );
+  return ZenovFooter(color: on);
 }

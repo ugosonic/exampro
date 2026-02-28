@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:citizentest/core/analytics/analytics.dart';
+import 'package:citizentest/common/widgets/zenov_footer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -54,122 +55,142 @@ class OnboardingScreen extends ConsumerWidget {
               const Positioned(top: 12, left: 12, child: LanguagePicker()),
               const Positioned(bottom: 24, right: 16, child: _FlagCycler()),
               // Main content
-              SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.symmetric(
-                  horizontal: basePaddingH,
-                  vertical: basePaddingV,
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(height: bigGap),
-                        _HeroTitle(isDark: isDark, fontSize: titleSize),
-                        SizedBox(height: 12),
-                        Opacity(
-                          opacity: 0.88,
-                          child: Text(
-                            'Practice for UK, US, Canada, Australia and more.',
-                            style: TextStyle(
-                              color: isDark
-                                  ? Colors.white
-                                  : const Color(0xFF0B2540),
-                              fontSize: subSize,
-                              fontWeight: FontWeight.w600,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: hugeGap),
-                        const _ZenovFooter(),
-                        Divider(
-                          color: (isDark ? Colors.white : Colors.black)
-                              .withValues(alpha: 0.20),
-                          thickness: 1,
-                        ),
-                        SizedBox(height: bigGap),
-
-                        // Ticker
-                        const _PracticeTestsTicker(),
-
-                        SizedBox(height: hugeGap),
-
-                        // Sign in
-                        SizedBox(
-                          width: double.infinity,
-                          height: buttonHeight,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFFCC33),
-                              foregroundColor: const Color(0xFF0B2540),
-                              elevation: 3,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(32),
-                              ),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                            ),
-                            onPressed: () {
-                              analytics.event('cta_sign_in');
-                              context.go('/auth');
-                            },
-                            child: const Text(
-                              'SIGN IN',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        SizedBox(height: 16),
-
-                        // Create account
-                        SizedBox(
-                          width: double.infinity,
-                          height: buttonHeight,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: isDark
-                                  ? Colors.white
-                                  : const Color(0xFF0B2540),
-                              side: BorderSide(
-                                color: (isDark ? Colors.white : Colors.black)
-                                    .withValues(alpha: 0.18),
-                              ),
-                              backgroundColor: isDark
-                                  ? Colors.white.withValues(alpha: 0.08)
-                                  : Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(32),
-                              ),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                            ),
-                            onPressed: () {
-                              analytics.event('cta_create_account');
-                              context.go('/register');
-                            },
-                            child: const Text(
-                              'CREATE AN ACCOUNT',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // Big breathing space at the bottom on tall phones
-                        SizedBox(height: hugeGap),
-                      ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final contentMinHeight =
+                      (constraints.maxHeight - (basePaddingV * 2)).clamp(
+                        0.0,
+                        double.infinity,
+                      );
+                  final footerColor = isDark
+                      ? Colors.white
+                      : const Color(0xFF0B2540);
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: basePaddingH,
+                      vertical: basePaddingV,
                     ),
-                  ),
-                ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: contentMaxWidth,
+                          minHeight: contentMinHeight,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(height: bigGap),
+                                _HeroTitle(isDark: isDark, fontSize: titleSize),
+                                const SizedBox(height: 12),
+                                Opacity(
+                                  opacity: 0.88,
+                                  child: Text(
+                                    'Practice for UK, US, Canada, Australia and more.',
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF0B2540),
+                                      fontSize: subSize,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: bigGap),
+                                Divider(
+                                  color: (isDark ? Colors.white : Colors.black)
+                                      .withValues(alpha: 0.20),
+                                  thickness: 1,
+                                ),
+                                SizedBox(height: bigGap),
+                                const _PracticeTestsTicker(),
+                                SizedBox(height: hugeGap),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: buttonHeight,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFFCC33),
+                                      foregroundColor: const Color(0xFF0B2540),
+                                      elevation: 3,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(32),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      analytics.event('cta_sign_in');
+                                      context.go('/auth');
+                                    },
+                                    child: const Text(
+                                      'SIGN IN',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: buttonHeight,
+                                  child: OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF0B2540),
+                                      side: BorderSide(
+                                        color:
+                                            (isDark
+                                                    ? Colors.white
+                                                    : Colors.black)
+                                                .withValues(alpha: 0.18),
+                                      ),
+                                      backgroundColor: isDark
+                                          ? Colors.white.withValues(alpha: 0.08)
+                                          : Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(32),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      analytics.event('cta_create_account');
+                                      context.go('/register');
+                                    },
+                                    child: const Text(
+                                      'CREATE AN ACCOUNT',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Padding(
+                              padding: EdgeInsets.only(top: hugeGap),
+                              child: Center(
+                                child: ZenovFooter(color: footerColor),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -186,107 +207,102 @@ class OnboardingScreen extends ConsumerWidget {
 class _HeroHeader extends StatelessWidget {
   final VoidCallback onCreateAccount;
   final VoidCallback onSignIn;
-  const _HeroHeader({
-    required this.onCreateAccount,
-    required this.onSignIn,
-  });
+  const _HeroHeader({required this.onCreateAccount, required this.onSignIn});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return LayoutBuilder(builder: (context, constraints) {
-      final isNarrow = constraints.maxWidth < 640;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 640;
 
-      final left = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Discover the best\nCitizenship tests',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              height: 1.1,
+        final left = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Discover the best\nCitizenship tests',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Study smart. Practice more. Sure pass.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _Pill(text: 'Timed mocks'),
+                _Pill(text: 'Official topics'),
+                _Pill(text: 'Progress insights'),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                FilledButton(
+                  onPressed: onCreateAccount,
+                  child: const Text('Create Account'),
+                ),
+                const SizedBox(width: 14),
+                OutlinedButton(
+                  onPressed: onSignIn,
+                  child: const Text('Sign In'),
+                ),
+              ],
+            ),
+          ],
+        );
+
+        final right = ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: SvgPicture.asset(
+              'assets/images/uk_hero.svg',
+              fit: BoxFit.cover,
+              placeholderBuilder: (context) => Container(color: Colors.white),
             ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Study smart. Practice more. Sure pass.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-              height: 1.35,
+        );
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary.withValues(alpha: 0.14),
+                theme.colorScheme.secondary.withValues(alpha: 0.10),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
           ),
-          const SizedBox(height: 18),
-          const Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _Pill(text: 'Timed mocks'),
-              _Pill(text: 'Official topics'),
-              _Pill(text: 'Progress insights'),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              FilledButton(
-                onPressed: onCreateAccount,
-                child: const Text('Create Account'),
-              ),
-              const SizedBox(width: 14),
-              OutlinedButton(
-                onPressed: onSignIn,
-                child: const Text('Sign In'),
-              ),
-            ],
-          )
-        ],
-      );
-
-      final right = ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: SvgPicture.asset(
-            'assets/images/uk_hero.svg',
-            fit: BoxFit.cover,
-            placeholderBuilder: (context) => Container(color: Colors.white),
-          ),
-        ),
-      );
-
-      return Container(
-        margin: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-        padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(
-            colors: [
-              theme.colorScheme.primary.withValues(alpha: 0.14),
-              theme.colorScheme.secondary.withValues(alpha: 0.10),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: isNarrow
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  left,
-                  const SizedBox(height: 14),
-                  right,
-                ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: left),
-                  const SizedBox(width: 14),
-                  Expanded(child: right),
-                ],
-              ),
-      );
-    });
+          child: isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [left, const SizedBox(height: 14), right],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: left),
+                    const SizedBox(width: 14),
+                    Expanded(child: right),
+                  ],
+                ),
+        );
+      },
+    );
   }
 }
 
@@ -356,7 +372,7 @@ class _FeatureGrid extends StatelessWidget {
               for (var i = 0; i < items.length; i++) ...[
                 Expanded(child: items[i]),
                 if (i != items.length - 1) const SizedBox(width: spacing),
-              ]
+              ],
             ],
           );
         }
@@ -365,7 +381,7 @@ class _FeatureGrid extends StatelessWidget {
             for (var i = 0; i < items.length; i++) ...[
               items[i],
               if (i != items.length - 1) const SizedBox(height: spacing),
-            ]
+            ],
           ],
         );
       },
@@ -389,7 +405,13 @@ class _DotsPattern extends StatelessWidget {
       size: const Size(120, 140),
       painter: _DotsPainter(color.withValues(alpha: 0.8)),
     );
-    return Positioned(top: top, right: right, bottom: bottom, left: left, child: child);
+    return Positioned(
+      top: top,
+      right: right,
+      bottom: bottom,
+      left: left,
+      child: child,
+    );
   }
 }
 
@@ -423,10 +445,10 @@ class _HeroTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context).textTheme.headlineMedium?.copyWith(
-          fontWeight: FontWeight.w900,
-          height: 1.05,
-          fontSize: fontSize,
-        );
+      fontWeight: FontWeight.w900,
+      height: 1.05,
+      fontSize: fontSize,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -452,13 +474,18 @@ class _GradientWord extends StatelessWidget {
   const _GradientWord(this.text, {this.style});
   @override
   Widget build(BuildContext context) {
-    const gradient =
-        LinearGradient(colors: [Color(0xFF22D3EE), Color(0xFF2EA5FF)]);
+    const gradient = LinearGradient(
+      colors: [Color(0xFF22D3EE), Color(0xFF2EA5FF)],
+    );
     return ShaderMask(
       shaderCallback: (bounds) {
         // Guard against zero/negative sizes that can cause CoreGraphics NaNs
-        final w = bounds.width.isFinite && bounds.width > 0 ? bounds.width : 1.0;
-        final h = bounds.height.isFinite && bounds.height > 0 ? bounds.height : 1.0;
+        final w = bounds.width.isFinite && bounds.width > 0
+            ? bounds.width
+            : 1.0;
+        final h = bounds.height.isFinite && bounds.height > 0
+            ? bounds.height
+            : 1.0;
         return gradient.createShader(Rect.fromLTWH(0, 0, w, h));
       },
       child: Text(
@@ -566,8 +593,10 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
     ),
   ];
 
-  late final AnimationController ac =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
+  late final AnimationController ac = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+  );
   int index = 0;
   Timer? timer;
 
@@ -639,10 +668,7 @@ class _PracticeTestsTickerState extends State<_PracticeTestsTicker>
                           const SizedBox(height: 6),
                           Text(
                             item.desc,
-                            style: TextStyle(
-                              color: sub,
-                              height: 1.35,
-                            ),
+                            style: TextStyle(color: sub, height: 1.35),
                           ),
                         ],
                       ),
@@ -673,7 +699,9 @@ class _HowItWorks extends StatelessWidget {
     ];
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.all(16),
@@ -682,34 +710,37 @@ class _HowItWorks extends StatelessWidget {
         children: [
           Text(
             'How it works',
-            style:
-                theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 14),
-          LayoutBuilder(builder: (context, c) {
-            final isWide = c.maxWidth > 640;
-            final children = [
-              for (final s in steps) _HowItem(title: s.$1, text: s.$2),
-            ];
-            if (isWide) {
-              return Row(
+          LayoutBuilder(
+            builder: (context, c) {
+              final isWide = c.maxWidth > 640;
+              final children = [
+                for (final s in steps) _HowItem(title: s.$1, text: s.$2),
+              ];
+              if (isWide) {
+                return Row(
+                  children: [
+                    for (var i = 0; i < children.length; i++) ...[
+                      Expanded(child: children[i]),
+                      if (i != children.length - 1) const SizedBox(width: 12),
+                    ],
+                  ],
+                );
+              }
+              return Column(
                 children: [
                   for (var i = 0; i < children.length; i++) ...[
-                    Expanded(child: children[i]),
-                    if (i != children.length - 1) const SizedBox(width: 12),
-                  ]
+                    children[i],
+                    if (i != children.length - 1) const SizedBox(height: 12),
+                  ],
                 ],
               );
-            }
-            return Column(
-              children: [
-                for (var i = 0; i < children.length; i++) ...[
-                  children[i],
-                  if (i != children.length - 1) const SizedBox(height: 12),
-                ]
-              ],
-            );
-          })
+            },
+          ),
         ],
       ),
     );
@@ -745,9 +776,12 @@ class _HowItem extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w800)),
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Text(
                   text,
@@ -758,27 +792,6 @@ class _HowItem extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ZenovFooter extends StatelessWidget {
-  const _ZenovFooter();
-  @override
-  Widget build(BuildContext context) {
-    final on = Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFF0B2540);
-    final sub = on.withValues(alpha: 0.75);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const SizedBox(height: 12),
-        Text('Developed by ZenovTech (c) 2025', style: TextStyle(color: sub, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        Text('info@zenovtech.com', style: TextStyle(color: sub)),
-        const SizedBox(height: 4),
-        Text('Contact for websites and mobile app development', textAlign: TextAlign.center, style: TextStyle(color: sub)),
-        const SizedBox(height: 8),
-      ],
     );
   }
 }
@@ -799,8 +812,10 @@ class _FeatureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      decoration:
-          BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(16),
+      ),
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
@@ -826,9 +841,12 @@ class _FeatureCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800)),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   subtitle,
@@ -836,7 +854,7 @@ class _FeatureCard extends StatelessWidget {
                 ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
