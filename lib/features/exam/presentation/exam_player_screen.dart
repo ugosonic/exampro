@@ -174,6 +174,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                 categoryId: widget.categoryId!,
                 userEmail: email,
               );
+              queueSync(email);
               await _syncPendingReminder();
               setState(() => index = 0);
             }
@@ -489,7 +490,8 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                             );
                             return;
                           }
-                          if (allowsMultiple && selected.length > maxSelections) {
+                          if (allowsMultiple &&
+                              selected.length > maxSelections) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
@@ -573,6 +575,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                                       userEmail: email,
                                       index: i,
                                     );
+                                queueSync(email);
                                 await _syncPendingReminder();
                               }
                             }
@@ -598,6 +601,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                                       userEmail: email,
                                       index: questions0.length,
                                     );
+                                queueSync(email);
                                 await _syncPendingReminder();
                               }
                               await autoSubmit();
@@ -744,6 +748,7 @@ class _ExamPlayerScreenState extends ConsumerState<ExamPlayerScreen> {
                   userEmail: email,
                   index: index,
                 );
+            queueSync(email);
             await _syncPendingReminder();
             ref.read(progressTickProvider.notifier).state++;
           }

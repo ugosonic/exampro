@@ -388,6 +388,47 @@ const getPendingAttemptReminder = async (client, userEmail) => {
   };
 };
 
+const ensureUserPracticeProgressTable = async (client) => {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS user_practice_progress (" +
+      "user_email TEXT NOT NULL, " +
+      "category_id INT NOT NULL, " +
+      "progress_index INT NOT NULL DEFAULT 0, " +
+      "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), " +
+      "PRIMARY KEY(user_email, category_id)" +
+    ")"
+  );
+  await client.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_practice_progress_user_email ON user_practice_progress(user_email)'
+  );
+};
+
+const getPendingPracticeReminder = async (client, userEmail) => {
+  await ensureUserPracticeProgressTable(client);
+  const row = await client.query(
+    'SELECT p.category_id, p.progress_index, COALESCE(COUNT(DISTINCT eq.question_id), 0) AS total ' +
+    'FROM user_practice_progress p ' +
+    'LEFT JOIN exams e ON e.category_id = p.category_id ' +
+    'LEFT JOIN exam_questions eq ON eq.exam_id = e.id ' +
+    'WHERE p.user_email = $1 ' +
+    'GROUP BY p.category_id, p.progress_index, p.updated_at ' +
+    'HAVING p.progress_index > 0 AND p.progress_index < COALESCE(COUNT(DISTINCT eq.question_id), 0) ' +
+    'ORDER BY p.updated_at DESC LIMIT 1',
+    [userEmail],
+  );
+  if (row.rowCount === 0) return null;
+  return {
+    title: 'Pending practice reminder',
+    body: 'Continue your practice',
+    data: {
+      type: 'pending_test',
+      examId: 0,
+      categoryId: row.rows[0].category_id,
+      mode: 'practice',
+    },
+  };
+};
+
 const toStringMap = (obj) => {
   const out = {};
   for (const [k, v] of Object.entries(obj || {})) {
@@ -589,7 +630,10 @@ const runReminderSchedulerTick = async () => {
       if (String(pref.last_sent_local_date || '') === localClock.date) {
         continue;
       }
-      const reminder = await getPendingAttemptReminder(client, pref.user_email);
+      let reminder = await getPendingAttemptReminder(client, pref.user_email);
+      if (!reminder) {
+        reminder = await getPendingPracticeReminder(client, pref.user_email);
+      }
       if (!reminder) {
         continue;
       }
@@ -666,6 +710,7 @@ app.post('/sync/user-progress', async (req, res) => {
     await client.query("CREATE TABLE IF NOT EXISTS user_attempts (user_email TEXT NOT NULL, local_id INT NOT NULL, exam_id INT NOT NULL, mode TEXT NOT NULL, started_at TIMESTAMPTZ NOT NULL, ended_at TIMESTAMPTZ NULL, score INT NULL, score_percent INT NOT NULL DEFAULT 0, grade_label TEXT NOT NULL DEFAULT '' , PRIMARY KEY(user_email, local_id))");
     await client.query("CREATE TABLE IF NOT EXISTS user_attempt_answers (user_email TEXT NOT NULL, local_attempt_id INT NOT NULL, question_id INT NOT NULL, selected TEXT NOT NULL, time_ms INT NOT NULL DEFAULT 0, is_correct BOOLEAN NOT NULL DEFAULT FALSE, points INT NOT NULL DEFAULT 0, PRIMARY KEY(user_email, local_attempt_id, question_id))");
     await client.query("CREATE TABLE IF NOT EXISTS user_saved_questions (user_email TEXT NOT NULL, question_id INT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(user_email, question_id))");
+    await ensureUserPracticeProgressTable(client);
     for (const m of (data.attempts || [])) {
       await client.query('INSERT INTO user_attempts(user_email, local_id, exam_id, mode, started_at, ended_at, score, score_percent, grade_label) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(user_email, local_id) DO UPDATE SET exam_id=EXCLUDED.exam_id, mode=EXCLUDED.mode, started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at, score=EXCLUDED.score, score_percent=EXCLUDED.score_percent, grade_label=EXCLUDED.grade_label', [email, m.id, m.exam_id, m.mode, m.started_at, m.ended_at, m.score, m.score_percent, m.grade_label]);
     }
@@ -674,6 +719,21 @@ app.post('/sync/user-progress', async (req, res) => {
     }
     for (const m of (data.saved || [])) {
       await client.query('INSERT INTO user_saved_questions(user_email, question_id, created_at) VALUES ($1,$2,$3) ON CONFLICT(user_email, question_id) DO UPDATE SET created_at=EXCLUDED.created_at', [email, m.question_id, m.created_at]);
+    }
+    if (Object.prototype.hasOwnProperty.call(data, 'practice_progress')) {
+      await client.query('DELETE FROM user_practice_progress WHERE user_email = $1', [email]);
+      for (const m of (data.practice_progress || [])) {
+        await client.query(
+          'INSERT INTO user_practice_progress(user_email, category_id, progress_index, updated_at) VALUES ($1,$2,$3,$4) ' +
+          'ON CONFLICT(user_email, category_id) DO UPDATE SET progress_index=EXCLUDED.progress_index, updated_at=EXCLUDED.updated_at',
+          [
+            email,
+            m.category_id,
+            m.progress_index,
+            m.updated_at || new Date().toISOString(),
+          ],
+        );
+      }
     }
     await client.query('COMMIT');
     return res.json({ ok: true });
@@ -688,10 +748,15 @@ app.get('/sync/user-progress', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'invalid_input' });
   const client = await pool.connect();
   try {
+    await ensureUserPracticeProgressTable(client);
     const attempts = (await client.query('SELECT local_id AS id, exam_id, mode, started_at, ended_at, score, score_percent, grade_label FROM user_attempts WHERE user_email = $1 ORDER BY started_at', [email])).rows;
     const answers = (await client.query('SELECT local_attempt_id AS attempt_id, question_id, selected, time_ms, is_correct, points FROM user_attempt_answers WHERE user_email = $1 ORDER BY local_attempt_id, question_id', [email])).rows;
     const saved = (await client.query('SELECT question_id, created_at FROM user_saved_questions WHERE user_email = $1', [email])).rows;
-    return res.json({ attempts, answers, saved });
+    const practiceProgress = (await client.query(
+      'SELECT category_id, progress_index, updated_at FROM user_practice_progress WHERE user_email = $1 ORDER BY updated_at',
+      [email],
+    )).rows;
+    return res.json({ attempts, answers, saved, practice_progress: practiceProgress });
   } finally { client.release(); }
 });
 

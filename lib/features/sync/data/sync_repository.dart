@@ -391,6 +391,12 @@ class SyncRepository {
           variables: [drift.Variable(userEmail)],
         )
         .get();
+    final practiceProgressRows = await _db
+        .customSelect(
+          'SELECT category_id, progress_index, updated_at FROM practice_progress WHERE user_email = ? AND progress_index > 0 ORDER BY updated_at',
+          variables: [drift.Variable(userEmail)],
+        )
+        .get();
     final payload = {
       'attempts': [
         for (final r in attemptsRows)
@@ -423,6 +429,14 @@ class SyncRepository {
             'created_at': s.data['created_at'],
           },
       ],
+      'practice_progress': [
+        for (final p in practiceProgressRows)
+          {
+            'category_id': p.data['category_id'],
+            'progress_index': p.data['progress_index'],
+            'updated_at': p.data['updated_at'],
+          },
+      ],
     };
     await _api.upsertUserProgress(userEmail, payload);
   }
@@ -439,6 +453,11 @@ class SyncRepository {
     ];
     final saved = [
       for (final m in ((data['saved'] as List?) ?? const []))
+        (m as Map).cast<String, dynamic>(),
+    ];
+    final hasPracticeProgress = data.containsKey('practice_progress');
+    final practiceProgress = [
+      for (final m in ((data['practice_progress'] as List?) ?? const []))
         (m as Map).cast<String, dynamic>(),
     ];
     await _db.transaction(() async {
@@ -492,6 +511,24 @@ class SyncRepository {
               ),
               mode: InsertMode.insertOrIgnore,
             );
+      }
+      if (hasPracticeProgress) {
+        await _db.customStatement(
+          'DELETE FROM practice_progress WHERE user_email = ?',
+          [userEmail],
+        );
+        for (final m in practiceProgress) {
+          await _db.customStatement(
+            'INSERT INTO practice_progress(category_id, user_email, progress_index, updated_at) VALUES (?,?,?,?) '
+            'ON CONFLICT(user_email, category_id) DO UPDATE SET progress_index = excluded.progress_index, updated_at = excluded.updated_at',
+            [
+              (m['category_id'] as num).toInt(),
+              userEmail,
+              (m['progress_index'] as num?)?.toInt() ?? 0,
+              (m['updated_at'] ?? DateTime.now().toIso8601String()).toString(),
+            ],
+          );
+        }
       }
     });
   }
