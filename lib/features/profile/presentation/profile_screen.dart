@@ -195,9 +195,7 @@ class _NotificationSettingsCardState
       // Keep settings responsive even if schedule APIs are restricted.
     }
     try {
-      await ref
-          .read(pushNotificationsProvider)
-          .syncReminderSettingsWithBackend();
+      await ref.read(pushNotificationsProvider).syncTokenWithBackend();
     } catch (_) {
       // Local settings should still save even if backend sync is unavailable.
     }

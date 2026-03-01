@@ -207,10 +207,20 @@ class AdminApi {
   // Users
   Future<List<Map<String, dynamic>>> users() async {
     final res = await _dio.get('/admin/users');
-    final list = (res.data as List? ?? const [])
-        .cast<Map>()
-        .map((m) => (m).cast<String, dynamic>())
-        .toList();
+    final data = res.data;
+    final rawList = data is List
+        ? data
+        : data is Map
+        ? (data['users'] is List
+              ? data['users']
+              : data['data'] is List
+              ? data['data']
+              : const [])
+        : const [];
+    final list = rawList
+        .whereType<Map>()
+        .map((m) => m.cast<String, dynamic>())
+        .toList(growable: false);
     return list;
   }
 

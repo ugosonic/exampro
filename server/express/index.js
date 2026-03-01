@@ -191,6 +191,15 @@ const adminGuard = async (req, res, next) => {
   return res.status(401).json({ error: 'unauthorized' });
 };
 
+const ensureUsersTable = async (client) => {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', is_pro BOOLEAN NOT NULL DEFAULT FALSE)",
+  );
+  await client.query(
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pro BOOLEAN NOT NULL DEFAULT FALSE",
+  );
+};
+
 // Auth endpoints
 app.post('/auth/register', async (req, res) => {
   const { email, password } = req.body || {};
@@ -198,7 +207,7 @@ app.post('/auth/register', async (req, res) => {
   const client = await pool.connect();
   try {
     // Ensure table exists
-    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    await ensureUsersTable(client);
     const hash = await bcrypt.hash(password, 10);
     const role = ADMIN_SET.has(String(email).toLowerCase()) ? 'admin' : 'user';
     const r = await client.query('INSERT INTO users(email, password_hash, role) VALUES($1,$2,$3) ON CONFLICT (email) DO NOTHING RETURNING id', [email, hash, role]);
@@ -262,6 +271,13 @@ const ensurePushTokenTable = async (client) => {
       "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" +
     ")"
   );
+  await client.query(
+    "ALTER TABLE user_push_tokens " +
+      "ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '', " +
+      "ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT '', " +
+      "ADD COLUMN IF NOT EXISTS app_version TEXT NOT NULL DEFAULT '', " +
+      "ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+  );
   // Support both numeric and UUID user IDs by normalizing to TEXT.
   await client.query(
     "DO $$ " +
@@ -300,6 +316,16 @@ const ensureReminderPreferencesTable = async (client) => {
       "last_sent_local_date TEXT NOT NULL DEFAULT '', " +
       "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()" +
     ")"
+  );
+  await client.query(
+    "ALTER TABLE user_notification_preferences " +
+      "ADD COLUMN IF NOT EXISTS user_email TEXT NOT NULL DEFAULT '', " +
+      "ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE, " +
+      "ADD COLUMN IF NOT EXISTS reminder_hour INT NOT NULL DEFAULT 19, " +
+      "ADD COLUMN IF NOT EXISTS reminder_minute INT NOT NULL DEFAULT 0, " +
+      "ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC', " +
+      "ADD COLUMN IF NOT EXISTS last_sent_local_date TEXT NOT NULL DEFAULT '', " +
+      "ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"
   );
   await client.query(
     'CREATE INDEX IF NOT EXISTS idx_user_notification_preferences_enabled ON user_notification_preferences(enabled)'
@@ -389,6 +415,20 @@ const sendPushToUser = async ({ userId, title, body, data }) => {
       tokens,
       notification: { title, body },
       data: toStringMap(data),
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        headers: {
+          'apns-priority': '10',
+        },
+        payload: {
+          aps: {
+            sound: 'default',
+            contentAvailable: true,
+          },
+        },
+      },
     });
     const stale = [];
     const failureCodes = {};
@@ -506,6 +546,19 @@ const reminderSchedulerPollMs = Math.max(
   15000,
   Number.parseInt(String(REMINDER_SCHEDULER_POLL_MS || '60000'), 10) || 60000,
 );
+const reminderSchedulerWindowMinutes = Math.max(
+  1,
+  Math.ceil(reminderSchedulerPollMs / 60000),
+);
+
+const isWithinReminderWindow = (scheduledHour, scheduledMinute, localClock) => {
+  const scheduledTotal = (Number(scheduledHour) * 60) + Number(scheduledMinute);
+  const currentTotal = (Number(localClock.hour) * 60) + Number(localClock.minute);
+  return (
+    currentTotal >= scheduledTotal &&
+    currentTotal <= (scheduledTotal + reminderSchedulerWindowMinutes)
+  );
+};
 
 const runReminderSchedulerTick = async () => {
   if (!reminderSchedulerEnabled || reminderSchedulerRunning) return;
@@ -515,13 +568,21 @@ const runReminderSchedulerTick = async () => {
     await ensureReminderPreferencesTable(client);
     await ensurePushTokenTable(client);
     const prefs = await client.query(
-      'SELECT user_id, user_email, reminder_hour, reminder_minute, timezone, last_sent_local_date FROM user_notification_preferences WHERE enabled = TRUE'
+      'SELECT p.user_id, ' +
+      "COALESCE(NULLIF(p.user_email, ''), u.email, '') AS user_email, " +
+      'p.reminder_hour, p.reminder_minute, p.timezone, p.last_sent_local_date ' +
+      'FROM user_notification_preferences p ' +
+      'LEFT JOIN users u ON u.id::text = p.user_id ' +
+      'WHERE p.enabled = TRUE'
     );
     for (const pref of prefs.rows) {
       const localClock = getUserLocalClock(pref.timezone);
       if (
-        Number(pref.reminder_hour) !== localClock.hour ||
-        Number(pref.reminder_minute) !== localClock.minute
+        !isWithinReminderWindow(
+          pref.reminder_hour,
+          pref.reminder_minute,
+          localClock,
+        )
       ) {
         continue;
       }
@@ -1172,8 +1233,10 @@ app.get('/admin/users', adminGuard, async (req, res) => {
   let client;
   try {
     client = await pool.connect();
-    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
-    const rows = await client.query('SELECT id, email, role FROM users ORDER BY id DESC');
+    await ensureUsersTable(client);
+    const rows = await client.query(
+      'SELECT id, email, role, is_pro FROM users ORDER BY id DESC',
+    );
     return res.json(rows.rows);
   } catch (e) {
     return sendApiError(res, e, 'admin/users');
@@ -1194,9 +1257,9 @@ app.put('/admin/users/:id/role', adminGuard, async (req, res) => {
   }
   const client = await pool.connect();
   try {
-    await client.query("CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user')");
+    await ensureUsersTable(client);
     const updated = await client.query(
-      'UPDATE users SET role = $1 WHERE id::text = $2 RETURNING id, email, role',
+      'UPDATE users SET role = $1 WHERE id::text = $2 RETURNING id, email, role, is_pro',
       [role, id],
     );
     if (updated.rowCount === 0) return res.status(404).json({ error: 'not_found' });

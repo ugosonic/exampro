@@ -27,27 +27,136 @@ class AdminRepository {
     return emailHash == 0 ? -1 : -emailHash;
   }
 
-  List<DbUser> _mapApiUsers(List<Map<String, dynamic>> rows) {
+  bool _readBoolValue(dynamic raw, {bool fallback = false}) {
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final text = (raw ?? '').toString().trim().toLowerCase();
+    if (text == 'true' || text == '1' || text == 'yes') return true;
+    if (text == 'false' || text == '0' || text == 'no') return false;
+    return fallback;
+  }
+
+  Map<String, DbUser> _usersByEmail(Iterable<DbUser> users) {
+    return {for (final user in users) user.email.trim().toLowerCase(): user};
+  }
+
+  List<DbUser> _mapApiUsers(
+    List<Map<String, dynamic>> rows, {
+    Map<String, DbUser> localUsersByEmail = const <String, DbUser>{},
+  }) {
     _apiUserServerIdsByLocalId.clear();
     return [
       for (final m in rows) ...[
         (() {
-          final email = (m['email'] as String?) ?? '';
+          final email = m['email']?.toString() ?? '';
+          final localUser = localUsersByEmail[email.trim().toLowerCase()];
           final localId = _localUserIdFor(m['id'], email);
           final serverId = (m['id'] ?? '').toString().trim();
+          final hasIsPro = m.containsKey('is_pro') || m.containsKey('isPro');
           if (serverId.isNotEmpty) {
             _apiUserServerIdsByLocalId[localId] = serverId;
           }
           return DbUser(
             id: localId,
             email: email,
-            password: '',
-            role: (m['role'] as String?) ?? 'user',
-            isPro: false,
+            password: localUser?.password ?? '',
+            role: (m['role'] ?? localUser?.role ?? 'user').toString().trim(),
+            isPro: hasIsPro
+                ? _readBoolValue(m['is_pro'] ?? m['isPro'])
+                : (localUser?.isPro ?? false),
           );
         })(),
       ],
     ];
+  }
+
+  List<DbUser> _mergeUsers(
+    Iterable<DbUser> primary,
+    Iterable<DbUser> secondary,
+  ) {
+    final byEmail = <String, DbUser>{};
+    for (final user in secondary) {
+      byEmail[user.email.trim().toLowerCase()] = user;
+    }
+    for (final user in primary) {
+      byEmail[user.email.trim().toLowerCase()] = user;
+    }
+    final merged = byEmail.values.toList();
+    merged.sort((a, b) {
+      final byId = b.id.compareTo(a.id);
+      if (byId != 0) return byId;
+      return a.email.toLowerCase().compareTo(b.email.toLowerCase());
+    });
+    return merged;
+  }
+
+  void _updateCachedUser(String email, {String? role, bool? isPro}) {
+    final normalizedEmail = email.trim().toLowerCase();
+    _cachedApiUsers = [
+      for (final user in _cachedApiUsers)
+        if (user.email.trim().toLowerCase() == normalizedEmail)
+          DbUser(
+            id: user.id,
+            email: user.email,
+            password: user.password,
+            role: role ?? user.role,
+            isPro: isPro ?? user.isPro,
+          )
+        else
+          user,
+    ];
+  }
+
+  Future<void> _syncApiUsersToLocal(List<DbUser> users) async {
+    final existingByEmail = _usersByEmail(await _db.select(_db.users).get());
+    await _db.batch((batch) {
+      for (final user in users) {
+        final existing = existingByEmail[user.email.trim().toLowerCase()];
+        if (existing == null) {
+          batch.insert(
+            _db.users,
+            UsersCompanion.insert(
+              email: user.email,
+              password: user.password,
+              role: drift.Value(user.role),
+              isPro: drift.Value(user.isPro),
+            ),
+            mode: drift.InsertMode.insertOrIgnore,
+          );
+          continue;
+        }
+        batch.update(
+          _db.users,
+          UsersCompanion(
+            password: user.password == existing.password
+                ? const drift.Value.absent()
+                : drift.Value(user.password),
+            role: drift.Value(user.role),
+            isPro: drift.Value(user.isPro),
+          ),
+          where: (tbl) => tbl.id.equals(existing.id),
+        );
+      }
+    });
+  }
+
+  Future<List<DbUser>> _loadApiUsers() async {
+    final localUsers = await _db.select(_db.users).get();
+    final apiUsers = _mapApiUsers(
+      await _adminApi!.users(),
+      localUsersByEmail: _usersByEmail(localUsers),
+    );
+    await _syncApiUsersToLocal(apiUsers);
+    final merged = _mergeUsers(apiUsers, localUsers);
+    _cachedApiUsers = merged;
+    return merged;
+  }
+
+  Future<List<DbUser>> _fallbackUsers() async {
+    final localUsers = await _db.select(_db.users).get();
+    final merged = _mergeUsers(_cachedApiUsers, localUsers);
+    _cachedApiUsers = merged;
+    return merged;
   }
 
   Future<int> createCategory(
@@ -404,12 +513,9 @@ class AdminRepository {
       return () async* {
         while (true) {
           try {
-            final rows = await _adminApi.users();
-            _cachedApiUsers = _mapApiUsers(rows);
-            yield _cachedApiUsers;
+            yield await _loadApiUsers();
           } catch (_) {
-            // Keep last known server list; do not swap to local IDs.
-            yield _cachedApiUsers;
+            yield await _fallbackUsers();
           }
           await Future.delayed(const Duration(seconds: 5));
         }
@@ -421,11 +527,9 @@ class AdminRepository {
   Future<List<DbUser>> allUsers() async {
     if (_adminApi != null) {
       try {
-        final rows = await _adminApi.users();
-        _cachedApiUsers = _mapApiUsers(rows);
-        return _cachedApiUsers;
+        return await _loadApiUsers();
       } catch (_) {
-        return _cachedApiUsers;
+        return await _fallbackUsers();
       }
     }
     return _db.select(_db.users).get();
@@ -952,6 +1056,7 @@ class AdminRepository {
     await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(
       UsersCompanion(isPro: drift.Value(isPro)),
     );
+    _updateCachedUser(email, isPro: isPro);
   }
 
   Future<void> setUserRole({
@@ -968,6 +1073,7 @@ class AdminRepository {
     await (_db.update(_db.users)..where((u) => u.email.equals(email))).write(
       UsersCompanion(role: drift.Value(nextRole)),
     );
+    _updateCachedUser(email, role: nextRole);
   }
 
   // Exam flags stored in app_settings to avoid codegen: key = 'exam_readonly_<id>' value '1'/'0'
