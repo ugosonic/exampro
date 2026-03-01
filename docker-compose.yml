@@ -1,5 +1,8 @@
+name: citizentest
+
 services:
   api:
+    image: citizentest-api
     build:
       context: ./server/express
     restart: unless-stopped
