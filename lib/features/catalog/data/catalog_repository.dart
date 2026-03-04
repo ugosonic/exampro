@@ -75,24 +75,42 @@ class CatalogRepository {
   }
 
   Future<List<models.ExamSummary>> exams({int? categoryId}) async {
-    final query = (categoryId == null)
-        ? _db.select(_db.exams)
-        : (_db.select(_db.exams)
-            ..where((tbl) => tbl.categoryId.equals(categoryId)));
-    query.where((e) => e.published.equals(true));
-    final rows = await query.get();
-    return [
-      for (final r in rows)
+    final rows = await _db
+        .customSelect(
+          'SELECT e.id, e.title, e.category_id, e.subcategory_id, e.question_count, '
+          'e.published, e.theme_key FROM exams e '
+          'LEFT JOIN categories c ON c.id = e.category_id '
+          'WHERE e.published = 1 '
+          '${categoryId == null ? '' : 'AND e.category_id = ? '}'
+          'ORDER BY COALESCE(c."order", 0), e.category_id, COALESCE(e.sort_order, e.id), e.id',
+          variables: [if (categoryId != null) drift.Variable<int>(categoryId)],
+        )
+        .get();
+    final exams = <models.ExamSummary>[];
+    for (final r in rows) {
+      final rawPublished = r.data['published'];
+      final published =
+          (rawPublished as bool?) ??
+          ((rawPublished as num?)?.toInt() ?? 0) != 0;
+      final id = (r.data['id'] as num).toInt();
+      exams.add(
         models.ExamSummary(
-          id: r.id,
-          title: await translate('exams', r.id, 'title', r.title),
-          categoryId: r.categoryId,
-          subcategoryId: r.subcategoryId,
-          questionCount: r.questionCount,
-          published: r.published,
-          themeKey: r.themeKey,
+          id: id,
+          title: await translate(
+            'exams',
+            id,
+            'title',
+            r.data['title'] as String,
+          ),
+          categoryId: (r.data['category_id'] as num).toInt(),
+          subcategoryId: (r.data['subcategory_id'] as num?)?.toInt(),
+          questionCount: (r.data['question_count'] as num?)?.toInt() ?? 0,
+          published: published,
+          themeKey: (r.data['theme_key'] as num?)?.toInt() ?? 0,
         ),
-    ];
+      );
+    }
+    return exams;
   }
 
   Stream<List<models.Category>> watchCategories() {

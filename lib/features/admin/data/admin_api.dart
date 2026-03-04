@@ -152,6 +152,20 @@ class AdminApi {
 
   Future<void> deleteExam(int id) async => _dio.delete('/admin/exams/$id');
 
+  Future<void> reorderExam(int id, {required bool moveUp}) async {
+    await _dio.post(
+      '/admin/exams/$id/reorder',
+      data: {'direction': moveUp ? 'up' : 'down'},
+    );
+  }
+
+  Future<void> reorderExamsInCategory(int categoryId, List<int> examIds) async {
+    await _dio.post(
+      '/admin/exams/reorder-sequence',
+      data: {'category_id': categoryId, 'exam_ids': examIds},
+    );
+  }
+
   Future<int> addQuestionWithOptions({
     required int examId,
     required String text,

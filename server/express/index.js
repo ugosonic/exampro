@@ -200,6 +200,18 @@ const ensureUsersTable = async (client) => {
   );
 };
 
+const ensureExamSortOrderColumn = async (client) => {
+  await client.query(
+    'ALTER TABLE exams ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 0',
+  );
+  await client.query(
+    'UPDATE exams SET sort_order = id WHERE sort_order <= 0',
+  );
+  await client.query(
+    'CREATE INDEX IF NOT EXISTS idx_exams_category_sort ON exams(category_id, sort_order, id)',
+  );
+};
+
 // Auth endpoints
 app.post('/auth/register', async (req, res) => {
   const { email, password } = req.body || {};
@@ -686,10 +698,17 @@ app.get('/sync/snapshot', async (req, res) => {
   let client;
   try {
     client = await pool.connect();
+    await ensureExamSortOrderColumn(client);
     const ver = await client.query('SELECT version FROM content_meta WHERE id = 1');
     const data = { version: ver.rows[0]?.version };
     for (const t of TABLES) {
-      const rows = await client.query(`SELECT * FROM ${t}`);
+      const rows = t === 'exams'
+        ? await client.query(
+            'SELECT e.* FROM exams e ' +
+            'LEFT JOIN categories c ON c.id = e.category_id ' +
+            'ORDER BY COALESCE(c."order", 0), e.category_id, COALESCE(e.sort_order, e.id), e.id',
+          )
+        : await client.query(`SELECT * FROM ${t}`);
       data[t] = rows.rows;
     }
     return res.json(data);
@@ -795,11 +814,19 @@ app.get('/catalog/exams', async (req, res) => {
   let client;
   try {
     client = await pool.connect();
+    await ensureExamSortOrderColumn(client);
     const where = [];
     const params = [];
-    if (category_id) { params.push(category_id); where.push(`category_id = $${params.length}`); }
-    if (subcategory_id) { params.push(subcategory_id); where.push(`subcategory_id = $${params.length}`); }
-    const sql = `SELECT id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key FROM exams ${where.length ? ('WHERE ' + where.join(' AND ')) : ''} ORDER BY id`;
+    if (category_id) { params.push(category_id); where.push(`e.category_id = $${params.length}`); }
+    if (subcategory_id) { params.push(subcategory_id); where.push(`e.subcategory_id = $${params.length}`); }
+    const sql =
+      'SELECT e.id, e.title, e.description, e.category_id, e.subcategory_id, e.question_count, ' +
+      'e.published, e.time_limit_minutes, e.shuffle_options, e.negative_marking, e.pass_percent, ' +
+      'e.theme_key, e.pdf_url, COALESCE(e.sort_order, e.id) AS sort_order ' +
+      'FROM exams e ' +
+      'LEFT JOIN categories c ON c.id = e.category_id ' +
+      `${where.length ? ('WHERE ' + where.join(' AND ')) : ''} ` +
+      'ORDER BY COALESCE(c."order", 0), e.category_id, COALESCE(e.sort_order, e.id), e.id';
     const r = await client.query(sql, params);
     return res.json(r.rows);
   } catch (e) {
@@ -869,6 +896,7 @@ app.post('/admin/import-snapshot', adminGuard, async (req, res) => {
       // Ensure content_meta exists so we can bump version at the end
       await client.query("CREATE TABLE IF NOT EXISTS content_meta (id INT PRIMARY KEY, version TIMESTAMPTZ NOT NULL DEFAULT now())");
       await client.query("INSERT INTO content_meta(id) VALUES (1) ON CONFLICT (id) DO NOTHING");
+      await ensureExamSortOrderColumn(client);
       await client.query('BEGIN');
       // Clear existing content tables in dependency order
       await client.query('DELETE FROM exam_grade_bands');
@@ -898,7 +926,7 @@ app.post('/admin/import-snapshot', adminGuard, async (req, res) => {
       }
       const exams = snap.exams || [];
       for (const e of exams) {
-        await client.query('INSERT INTO exams(id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, pdf_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, \'\')) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, category_id=EXCLUDED.category_id, subcategory_id=EXCLUDED.subcategory_id, question_count=EXCLUDED.question_count, published=EXCLUDED.published, time_limit_minutes=EXCLUDED.time_limit_minutes, shuffle_options=EXCLUDED.shuffle_options, negative_marking=EXCLUDED.negative_marking, pass_percent=EXCLUDED.pass_percent, theme_key=EXCLUDED.theme_key, pdf_url=EXCLUDED.pdf_url', [e.id, e.title, e.description || '', e.category_id, e.subcategory_id, e.question_count || 0, e.published || false, e.time_limit_minutes || 0, e.shuffle_options ?? true, e.negative_marking || false, e.pass_percent || 60, e.theme_key || 0, e.pdf_url || '']);
+        await client.query('INSERT INTO exams(id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, pdf_url, sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, \'\'),$14) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, category_id=EXCLUDED.category_id, subcategory_id=EXCLUDED.subcategory_id, question_count=EXCLUDED.question_count, published=EXCLUDED.published, time_limit_minutes=EXCLUDED.time_limit_minutes, shuffle_options=EXCLUDED.shuffle_options, negative_marking=EXCLUDED.negative_marking, pass_percent=EXCLUDED.pass_percent, theme_key=EXCLUDED.theme_key, pdf_url=EXCLUDED.pdf_url, sort_order=EXCLUDED.sort_order', [e.id, e.title, e.description || '', e.category_id, e.subcategory_id, e.question_count || 0, e.published || false, e.time_limit_minutes || 0, e.shuffle_options ?? true, e.negative_marking || false, e.pass_percent || 60, e.theme_key || 0, e.pdf_url || '', e.sort_order || e.id]);
       }
       const qs = snap.questions || [];
       for (const q of qs) {
@@ -1185,7 +1213,13 @@ app.post('/admin/exams', adminGuard, async (req, res) => {
   if (!title || !category_id) return res.status(400).json({ error: 'invalid_input' });
   const client = await pool.connect();
   try {
-    const r = await client.query('INSERT INTO exams(title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id', [title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url]);
+    await ensureExamSortOrderColumn(client);
+    const nextOrder = await client.query(
+      'SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM exams WHERE category_id = $1',
+      [category_id],
+    );
+    const sortOrder = nextOrder.rows[0]?.next_order || 1;
+    const r = await client.query('INSERT INTO exams(title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id', [title, description, category_id, subcategory_id, time_limit_minutes, pass_percent, shuffle_options, negative_marking, published, theme_key, pdf_url, sortOrder]);
     const id = r.rows[0].id;
     await client.query("INSERT INTO exam_grade_bands(exam_id, min_percent, label) VALUES ($1,90,'Distinction'), ($1,75,'Merit'), ($1,$2,'Pass')", [id, pass_percent]);
     await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
@@ -1203,9 +1237,106 @@ app.put('/admin/exams/:id', adminGuard, async (req, res) => {
   }
   const client = await pool.connect();
   try {
+    await ensureExamSortOrderColumn(client);
+    const current = await client.query('SELECT category_id FROM exams WHERE id = $1', [id]);
+    if (current.rowCount === 0) return res.status(404).json({ error: 'not_found' });
     if (sets.length) await client.query(`UPDATE exams SET ${sets.join(', ')} WHERE id = $${vals.length + 1}`, [...vals, id]);
+    if (
+      Object.prototype.hasOwnProperty.call(req.body || {}, 'category_id') &&
+      Number(req.body.category_id) &&
+      Number(req.body.category_id) !== Number(current.rows[0].category_id)
+    ) {
+      const nextOrder = await client.query(
+        'SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM exams WHERE category_id = $1',
+        [Number(req.body.category_id)],
+      );
+      await client.query(
+        'UPDATE exams SET sort_order = $1 WHERE id = $2',
+        [nextOrder.rows[0]?.next_order || 1, id],
+      );
+    }
     await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
     res.json({ ok: true });
+  } finally { client.release(); }
+});
+
+app.post('/admin/exams/:id/reorder', adminGuard, async (req, res) => {
+  const id = Number(req.params.id);
+  const direction = String(req.body?.direction || '').trim().toLowerCase();
+  if (!id || !['up', 'down'].includes(direction)) {
+    return res.status(400).json({ error: 'invalid_input' });
+  }
+  const client = await pool.connect();
+  try {
+    await ensureExamSortOrderColumn(client);
+    await client.query('BEGIN');
+    const current = await client.query(
+      'SELECT id, category_id, sort_order FROM exams WHERE id = $1',
+      [id],
+    );
+    if (current.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'not_found' });
+    }
+    const row = current.rows[0];
+    const neighbor = await client.query(
+      'SELECT id, sort_order FROM exams ' +
+      `WHERE category_id = $1 AND sort_order ${direction === 'up' ? '<' : '>'} $2 ` +
+      `ORDER BY sort_order ${direction === 'up' ? 'DESC' : 'ASC'}, id ${direction === 'up' ? 'DESC' : 'ASC'} LIMIT 1`,
+      [row.category_id, row.sort_order],
+    );
+    if (neighbor.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: true });
+    }
+    const other = neighbor.rows[0];
+    await client.query('UPDATE exams SET sort_order = $1 WHERE id = $2', [other.sort_order, row.id]);
+    await client.query('UPDATE exams SET sort_order = $1 WHERE id = $2', [row.sort_order, other.id]);
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    await client.query('COMMIT');
+    return res.json({ ok: true });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    return sendApiError(res, e, 'admin/exams/reorder');
+  } finally { client.release(); }
+});
+
+app.post('/admin/exams/reorder-sequence', adminGuard, async (req, res) => {
+  const categoryId = Number(req.body?.category_id);
+  const examIds = Array.isArray(req.body?.exam_ids)
+    ? req.body.exam_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+    : [];
+  if (!categoryId || examIds.length === 0) {
+    return res.status(400).json({ error: 'invalid_input' });
+  }
+  const client = await pool.connect();
+  try {
+    await ensureExamSortOrderColumn(client);
+    await client.query('BEGIN');
+    const existing = await client.query(
+      'SELECT id FROM exams WHERE category_id = $1 ORDER BY COALESCE(sort_order, id), id',
+      [categoryId],
+    );
+    const existingIds = existing.rows.map((row) => Number(row.id));
+    if (
+      existingIds.length !== examIds.length ||
+      existingIds.some((id) => !examIds.includes(id))
+    ) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'invalid_exam_ids' });
+    }
+    for (let i = 0; i < examIds.length; i += 1) {
+      await client.query(
+        'UPDATE exams SET sort_order = $1 WHERE id = $2 AND category_id = $3',
+        [i + 1, examIds[i], categoryId],
+      );
+    }
+    await client.query('UPDATE content_meta SET version = now() WHERE id = 1');
+    await client.query('COMMIT');
+    return res.json({ ok: true });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
+    return sendApiError(res, e, 'admin/exams/reorder-sequence');
   } finally { client.release(); }
 });
 

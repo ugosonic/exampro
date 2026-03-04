@@ -78,23 +78,45 @@ class ContentApi {
     try {
       final res = await _dio.get(
         '/catalog/subcategories',
-        queryParameters: { if (categoryId != null) 'category_id': categoryId },
+        queryParameters: {if (categoryId != null) 'category_id': categoryId},
       );
       final list = _asListOfMap(res.data);
       if (categoryId == null) return list;
-      return [ for (final m in list) if (_asInt(m['category_id']) == categoryId) m ];
+      return [
+        for (final m in list)
+          if (_asInt(m['category_id']) == categoryId) m,
+      ];
     } on DioException catch (e) {
       if (_shouldFallbackToSnapshot(e)) {
         final snap = await _snapshotOrThrow();
         final list = _asListOfMap(snap['subcategories']);
         if (categoryId == null) return list;
-        return [ for (final m in list) if (_asInt(m['category_id']) == categoryId) m ];
+        return [
+          for (final m in list)
+            if (_asInt(m['category_id']) == categoryId) m,
+        ];
       }
       rethrow;
     }
   }
 
-  Future<List<Map<String, dynamic>>> exams({int? categoryId, int? subcategoryId}) async {
+  Future<List<Map<String, dynamic>>> exams({
+    int? categoryId,
+    int? subcategoryId,
+  }) async {
+    int sortOrderOf(Map<String, dynamic> row) =>
+        _asInt(row['sort_order']) ?? _asInt(row['id']) ?? 0;
+
+    int compareRows(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final catCompare = (_asInt(a['category_id']) ?? 0).compareTo(
+        _asInt(b['category_id']) ?? 0,
+      );
+      if (catCompare != 0) return catCompare;
+      final orderCompare = sortOrderOf(a).compareTo(sortOrderOf(b));
+      if (orderCompare != 0) return orderCompare;
+      return (_asInt(a['id']) ?? 0).compareTo(_asInt(b['id']) ?? 0);
+    }
+
     try {
       final res = await _dio.get(
         '/catalog/exams',
@@ -105,22 +127,33 @@ class ContentApi {
       );
       final list = _asListOfMap(res.data);
       // keep local filtering defensive
-      return [
+      final filtered = [
         for (final m in list)
           if ((categoryId == null || _asInt(m['category_id']) == categoryId) &&
-              (subcategoryId == null || _asInt(m['subcategory_id']) == subcategoryId))
-            m
+              (subcategoryId == null ||
+                  _asInt(m['subcategory_id']) == subcategoryId))
+            m,
       ];
+      if (categoryId != null || subcategoryId != null) {
+        filtered.sort(compareRows);
+      }
+      return filtered;
     } on DioException catch (e) {
       if (_shouldFallbackToSnapshot(e)) {
         final snap = await _snapshotOrThrow();
         final list = _asListOfMap(snap['exams']);
-        return [
+        final filtered = [
           for (final m in list)
-            if ((categoryId == null || _asInt(m['category_id']) == categoryId) &&
-                (subcategoryId == null || _asInt(m['subcategory_id']) == subcategoryId))
-              m
+            if ((categoryId == null ||
+                    _asInt(m['category_id']) == categoryId) &&
+                (subcategoryId == null ||
+                    _asInt(m['subcategory_id']) == subcategoryId))
+              m,
         ];
+        if (categoryId != null || subcategoryId != null) {
+          filtered.sort(compareRows);
+        }
+        return filtered;
       }
       rethrow;
     }
@@ -145,9 +178,7 @@ class ContentApi {
   /// Prefer calling this method instead of faking examId==0.
   Future<Map<String, dynamic>> categoryQuestions(int categoryId) async {
     try {
-      final res = await _dio.get(
-        '/catalog/category/$categoryId/questions',
-      );
+      final res = await _dio.get('/catalog/category/$categoryId/questions');
       // backend might return the same bundle shape
       return _asMap(res.data);
     } on DioException catch (e) {
@@ -161,59 +192,61 @@ class ContentApi {
   }
 
   // ---------- snapshot helpers ----------
-  Map<String, dynamic> _snapshotExamBundle(Map<String, dynamic> snap, {required int examId}) {
+  Map<String, dynamic> _snapshotExamBundle(
+    Map<String, dynamic> snap, {
+    required int examId,
+  }) {
     final joins = _asListOfMap(snap['exam_questions'])
       ..retainWhere((m) => _asInt(m['exam_id']) == examId)
-      ..sort((a, b) => (_asInt(a['order']) ?? 0).compareTo(_asInt(b['order']) ?? 0));
+      ..sort(
+        (a, b) => (_asInt(a['order']) ?? 0).compareTo(_asInt(b['order']) ?? 0),
+      );
 
-    final qids = {
-      for (final j in joins) _asInt(j['question_id'])
-    }..remove(null);
+    final qids = {for (final j in joins) _asInt(j['question_id'])}
+      ..remove(null);
 
-    final questions = _asListOfMap(snap['questions'])
-        .where((m) => qids.contains(_asInt(m['id'])))
-        .toList();
+    final questions = _asListOfMap(
+      snap['questions'],
+    ).where((m) => qids.contains(_asInt(m['id']))).toList();
 
-    final choices = _asListOfMap(snap['choices'])
-        .where((m) => qids.contains(_asInt(m['question_id'])))
-        .toList();
+    final choices = _asListOfMap(
+      snap['choices'],
+    ).where((m) => qids.contains(_asInt(m['question_id']))).toList();
 
-    return {
-      'order': joins,
-      'questions': questions,
-      'choices': choices,
-    };
+    return {'order': joins, 'questions': questions, 'choices': choices};
   }
 
-  Map<String, dynamic> _snapshotCategoryBundle(Map<String, dynamic> snap, {required int categoryId}) {
+  Map<String, dynamic> _snapshotCategoryBundle(
+    Map<String, dynamic> snap, {
+    required int categoryId,
+  }) {
     final examsInCategory = _asListOfMap(snap['exams'])
         .where((e) => _asInt(e['category_id']) == categoryId)
         .map((e) => _asInt(e['id']))
         .whereType<int>()
         .toSet();
 
-    final joins = _asListOfMap(snap['exam_questions'])
-        .where((j) => examsInCategory.contains(_asInt(j['exam_id'])))
-        .toList()
-      ..sort((a, b) => (_asInt(a['order']) ?? 0).compareTo(_asInt(b['order']) ?? 0));
+    final joins =
+        _asListOfMap(snap['exam_questions'])
+            .where((j) => examsInCategory.contains(_asInt(j['exam_id'])))
+            .toList()
+          ..sort(
+            (a, b) =>
+                (_asInt(a['order']) ?? 0).compareTo(_asInt(b['order']) ?? 0),
+          );
 
-    final qids = {
-      for (final j in joins) _asInt(j['question_id'])
-    }..remove(null);
+    final qids = {for (final j in joins) _asInt(j['question_id'])}
+      ..remove(null);
 
-    final questions = _asListOfMap(snap['questions'])
-        .where((m) => qids.contains(_asInt(m['id'])))
-        .toList();
+    final questions = _asListOfMap(
+      snap['questions'],
+    ).where((m) => qids.contains(_asInt(m['id']))).toList();
 
-    final choices = _asListOfMap(snap['choices'])
-        .where((m) => qids.contains(_asInt(m['question_id'])))
-        .toList();
+    final choices = _asListOfMap(
+      snap['choices'],
+    ).where((m) => qids.contains(_asInt(m['question_id']))).toList();
 
-    return {
-      'order': joins,
-      'questions': questions,
-      'choices': choices,
-    };
+    return {'order': joins, 'questions': questions, 'choices': choices};
   }
 }
 

@@ -36,6 +36,7 @@ class SyncRepository {
   }
 
   Future<void> pullAndImport({Progress? onProgress}) async {
+    await _db.ensureClientSchema();
     onProgress?.call(0.02, 'Downloading...');
     final snap = await _api.snapshot();
     onProgress?.call(0.08, 'Preparing database...');
@@ -125,6 +126,13 @@ class SyncRepository {
               ),
               mode: InsertMode.insertOrReplace,
             );
+        await _db.customStatement(
+          'UPDATE exams SET sort_order = ? WHERE id = ?',
+          [
+            (m['sort_order'] as num?)?.toInt() ?? (m['id'] as int),
+            m['id'] as int,
+          ],
+        );
       }
 
       onProgress?.call(0.60, 'Importing questions...');
@@ -269,6 +277,7 @@ class SyncRepository {
   }
 
   Future<Map<String, dynamic>> dumpLocalSnapshot() async {
+    await _db.ensureClientSchema();
     Future<List<Map<String, dynamic>>> all<T>(Selectable<T> sel) async {
       final rows = await sel.get();
       return rows
@@ -276,12 +285,38 @@ class SyncRepository {
           .toList();
     }
 
+    Future<List<Map<String, dynamic>>> allExams() async {
+      final rows = await _db
+          .customSelect(
+            'SELECT id, title, description, category_id, subcategory_id, question_count, '
+            'published, time_limit_minutes, shuffle_options, negative_marking, '
+            'pass_percent, theme_key, pdf_url, COALESCE(sort_order, id) AS sort_order '
+            'FROM exams ORDER BY category_id, COALESCE(sort_order, id), id',
+          )
+          .get();
+      return [
+        for (final row in rows)
+          () {
+            final data = Map<String, dynamic>.from(row.data);
+            for (final key in const [
+              'published',
+              'shuffle_options',
+              'negative_marking',
+            ]) {
+              final raw = data[key];
+              data[key] = (raw as bool?) ?? ((raw as num?)?.toInt() ?? 0) != 0;
+            }
+            return data;
+          }(),
+      ];
+    }
+
     return {
       'version':
           await localVersion() ?? DateTime.now().toUtc().toIso8601String(),
       'categories': await all(_db.select(_db.categories)),
       'subcategories': await all(_db.select(_db.subcategories)),
-      'exams': await all(_db.select(_db.exams)),
+      'exams': await allExams(),
       'questions': await all(_db.select(_db.questions)),
       'choices': await all(_db.select(_db.choices)),
       'exam_questions': await all(_db.select(_db.examQuestions)),

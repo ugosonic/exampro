@@ -27,6 +27,126 @@ class AdminRepository {
     return emailHash == 0 ? -1 : -emailHash;
   }
 
+  Future<void> _ensureExamSortOrderCompat() async {
+    if (!await _db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'exams'",
+        )
+        .get()
+        .then((rows) => rows.isNotEmpty)) {
+      return;
+    }
+    final hasSortOrder = await _db
+        .customSelect('PRAGMA table_info("exams")')
+        .get()
+        .then((rows) => rows.any((row) => row.data['name'] == 'sort_order'));
+    if (!hasSortOrder) {
+      await _db.customStatement(
+        'ALTER TABLE exams ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    await _db.customStatement(
+      'UPDATE exams SET sort_order = id WHERE sort_order <= 0',
+    );
+  }
+
+  Future<int> _nextExamSortOrderForCategory(int categoryId) async {
+    await _ensureExamSortOrderCompat();
+    final row = await _db
+        .customSelect(
+          'SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order '
+          'FROM exams WHERE category_id = ?',
+          variables: [drift.Variable<int>(categoryId)],
+        )
+        .getSingle();
+    return (row.data['next_order'] as int?) ?? 1;
+  }
+
+  Future<void> _setExamSortOrder(int examId, int sortOrder) async {
+    await _ensureExamSortOrderCompat();
+    await _db.customStatement('UPDATE exams SET sort_order = ? WHERE id = ?', [
+      sortOrder,
+      examId,
+    ]);
+  }
+
+  Future<void> _moveExamLocally(int examId, {required bool moveUp}) async {
+    await _ensureExamSortOrderCompat();
+    await _db.transaction(() async {
+      final current = await _db
+          .customSelect(
+            'SELECT id, category_id, sort_order FROM exams WHERE id = ?',
+            variables: [drift.Variable<int>(examId)],
+          )
+          .getSingleOrNull();
+      if (current == null) return;
+      final categoryId = (current.data['category_id'] as num).toInt();
+      final currentOrder =
+          (current.data['sort_order'] as num?)?.toInt() ?? examId;
+      final target = await _db
+          .customSelect(
+            'SELECT id, sort_order FROM exams '
+            'WHERE category_id = ? AND '
+            '${moveUp ? 'sort_order < ?' : 'sort_order > ?'} '
+            'ORDER BY sort_order ${moveUp ? 'DESC' : 'ASC'}, id ${moveUp ? 'DESC' : 'ASC'} '
+            'LIMIT 1',
+            variables: [
+              drift.Variable<int>(categoryId),
+              drift.Variable<int>(currentOrder),
+            ],
+          )
+          .getSingleOrNull();
+      if (target == null) return;
+      final targetId = (target.data['id'] as num).toInt();
+      final targetOrder =
+          (target.data['sort_order'] as num?)?.toInt() ?? targetId;
+      await _setExamSortOrder(examId, targetOrder);
+      await _setExamSortOrder(targetId, currentOrder);
+    });
+  }
+
+  Exam _mapApiExam(Map<String, dynamic> m) => Exam(
+    id: (m['id'] as num).toInt(),
+    title: m['title'] as String,
+    description: (m['description'] as String?) ?? '',
+    categoryId: (m['category_id'] as num).toInt(),
+    subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
+    questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
+    published: (m['published'] as bool?) ?? false,
+    timeLimitMinutes: (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
+    shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
+    negativeMarking: (m['negative_marking'] as bool?) ?? false,
+    passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
+    themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
+    pdfUrl: (m['pdf_url'] as String?) ?? '',
+  );
+
+  Stream<List<Exam>> _watchOrderedLocalExams({
+    int? categoryId,
+    bool localized = false,
+  }) {
+    final where = categoryId == null ? '' : 'WHERE e.category_id = ? ';
+    final sql =
+        'SELECT e.id, '
+        "${localized ? "COALESCE(NULLIF(t.v, ''), e.title)" : 'e.title'} AS title, "
+        'e.description, e.category_id, e.subcategory_id, e.question_count, e.published, '
+        'e.time_limit_minutes, e.shuffle_options, e.negative_marking, e.pass_percent, e.theme_key, e.pdf_url '
+        'FROM exams e '
+        'LEFT JOIN categories c ON c.id = e.category_id '
+        "${localized ? "LEFT JOIN app_settings s ON s.key = 'lang_code' " : ''}"
+        "${localized ? "LEFT JOIN translations t ON t.entity = 'exams' AND t.entity_id = e.id AND t.k = 'title' AND t.lang = COALESCE(s.value, 'en') " : ''}"
+        '$where'
+        'ORDER BY COALESCE(c."order", 0), e.category_id, COALESCE(e.sort_order, e.id), e.id';
+    return _db
+        .customSelect(
+          sql,
+          variables: [if (categoryId != null) drift.Variable<int>(categoryId)],
+          readsFrom: {_db.exams, _db.categories, _db.appSettings},
+        )
+        .watch()
+        .map((rows) => [for (final row in rows) _db.exams.map(row.data)]);
+  }
+
   bool _readBoolValue(dynamic raw, {bool fallback = false}) {
     if (raw is bool) return raw;
     if (raw is num) return raw != 0;
@@ -263,6 +383,7 @@ class AdminRepository {
         pdfUrl: pdfUrl,
       );
     }
+    final sortOrder = await _nextExamSortOrderForCategory(categoryId);
     final id = await _db
         .into(_db.exams)
         .insert(
@@ -280,6 +401,7 @@ class AdminRepository {
             pdfUrl: drift.Value(pdfUrl),
           ),
         );
+    await _setExamSortOrder(id, sortOrder);
     // default grade bands
     await _db.batch((b) {
       b.insertAll(_db.examGradeBands, [
@@ -334,6 +456,9 @@ class AdminRepository {
       );
       return;
     }
+    final current = await (_db.select(
+      _db.exams,
+    )..where((e) => e.id.equals(examId))).getSingleOrNull();
     await (_db.update(_db.exams)..where((e) => e.id.equals(examId))).write(
       ExamsCompanion(
         title: title != null ? drift.Value(title) : const drift.Value.absent(),
@@ -369,6 +494,12 @@ class AdminRepository {
             : const drift.Value.absent(),
       ),
     );
+    if (categoryId != null &&
+        current != null &&
+        current.categoryId != categoryId) {
+      final nextSortOrder = await _nextExamSortOrderForCategory(categoryId);
+      await _setExamSortOrder(examId, nextSortOrder);
+    }
   }
 
   Future<void> setCategoryLocked(int id, bool locked) async {
@@ -767,69 +898,21 @@ class AdminRepository {
   Stream<List<Exam>> watchExams() => _contentApi != null
       ? Stream.fromFuture(
           _contentApi.exams().then(
-            (rows) => [
-              for (final m in rows)
-                Exam(
-                  id: (m['id'] as num).toInt(),
-                  title: m['title'] as String,
-                  description: (m['description'] as String?) ?? '',
-                  categoryId: (m['category_id'] as num).toInt(),
-                  subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
-                  questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
-                  published: (m['published'] as bool?) ?? false,
-                  timeLimitMinutes:
-                      (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
-                  shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
-                  negativeMarking: (m['negative_marking'] as bool?) ?? false,
-                  passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
-                  themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
-                  pdfUrl: (m['pdf_url'] as String?) ?? '',
-                ),
-            ],
+            (rows) => [for (final m in rows) _mapApiExam(m)],
           ),
         )
-      : _db.select(_db.exams).watch();
+      : _watchOrderedLocalExams();
 
   // Localized exams stream: reacts to language and translation changes immediately
-  Stream<List<Exam>> watchExamsLocalized() {
+  Stream<List<Exam>> watchExamsLocalized({int? categoryId}) {
     if (_contentApi != null) {
       return Stream.fromFuture(
-        _contentApi.exams().then(
-          (rows) => [
-            for (final m in rows)
-              Exam(
-                id: (m['id'] as num).toInt(),
-                title: m['title'] as String,
-                description: (m['description'] as String?) ?? '',
-                categoryId: (m['category_id'] as num).toInt(),
-                subcategoryId: (m['subcategory_id'] as num?)?.toInt(),
-                questionCount: (m['question_count'] as num?)?.toInt() ?? 0,
-                published: (m['published'] as bool?) ?? false,
-                timeLimitMinutes:
-                    (m['time_limit_minutes'] as num?)?.toInt() ?? 0,
-                shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
-                negativeMarking: (m['negative_marking'] as bool?) ?? false,
-                passPercent: (m['pass_percent'] as num?)?.toInt() ?? 60,
-                themeKey: (m['theme_key'] as num?)?.toInt() ?? 0,
-                pdfUrl: (m['pdf_url'] as String?) ?? '',
-              ),
-          ],
-        ),
+        _contentApi
+            .exams(categoryId: categoryId)
+            .then((rows) => [for (final m in rows) _mapApiExam(m)]),
       );
     }
-    const sql =
-        'SELECT e.id, '
-        "COALESCE(NULLIF(t.v, ''), e.title) AS title, "
-        'e.description, e.category_id, e.subcategory_id, e.question_count, e.published, '
-        'e.time_limit_minutes, e.shuffle_options, e.negative_marking, e.pass_percent, e.theme_key, e.pdf_url '
-        'FROM exams e '
-        "LEFT JOIN app_settings s ON s.key = 'lang_code' "
-        "LEFT JOIN translations t ON t.entity = 'exams' AND t.entity_id = e.id AND t.k = 'title' AND t.lang = COALESCE(s.value, 'en') "
-        'ORDER BY e.id DESC';
-    return _db
-        .customSelect(sql, readsFrom: {_db.exams, _db.appSettings})
-        .watch()
-        .map((rows) => [for (final r in rows) _db.exams.map(r.data)]);
+    return _watchOrderedLocalExams(categoryId: categoryId, localized: true);
   }
 
   Future<void> setExamPublished(int examId, bool published) async {
@@ -867,6 +950,31 @@ class AdminRepository {
         _db.reports,
       )..where((r) => r.examId.equals(examId))).go();
       await (_db.delete(_db.exams)..where((e) => e.id.equals(examId))).go();
+    });
+  }
+
+  Future<void> moveExam(int examId, {required bool moveUp}) async {
+    if (_adminApi != null) {
+      await _adminApi.reorderExam(examId, moveUp: moveUp);
+      return;
+    }
+    await _moveExamLocally(examId, moveUp: moveUp);
+  }
+
+  Future<void> reorderExamsInCategory(int categoryId, List<int> examIds) async {
+    if (examIds.isEmpty) return;
+    if (_adminApi != null) {
+      await _adminApi.reorderExamsInCategory(categoryId, examIds);
+      return;
+    }
+    await _ensureExamSortOrderCompat();
+    await _db.transaction(() async {
+      for (var i = 0; i < examIds.length; i++) {
+        await _db.customStatement(
+          'UPDATE exams SET sort_order = ? WHERE id = ? AND category_id = ?',
+          [i + 1, examIds[i], categoryId],
+        );
+      }
     });
   }
 

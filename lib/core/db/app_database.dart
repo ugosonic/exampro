@@ -395,6 +395,7 @@ class AppDatabase extends _$AppDatabase {
       'UNIQUE(user_email, question_id)'
       ')',
     );
+    await _ensureExamSortOrderCompat();
   }
 
   Future<void> _ensurePracticeProgressCompat() async {
@@ -412,6 +413,18 @@ class AppDatabase extends _$AppDatabase {
         'UPDATE practice_progress SET progress_index = "index" WHERE progress_index = 0',
       );
     }
+  }
+
+  Future<void> _ensureExamSortOrderCompat() async {
+    if (!await _tableExists('exams')) return;
+    if (!await _columnExists('exams', 'sort_order')) {
+      await customStatement(
+        'ALTER TABLE exams ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    await customStatement(
+      'UPDATE exams SET sort_order = id WHERE sort_order <= 0',
+    );
   }
 
   Future<bool> _columnExists(String table, String column) async {

@@ -256,6 +256,7 @@ class PgContentService {
       }
 
       final version = await _contentVersion(conn);
+      final hasExamSortOrder = await hasColumn('exams', 'sort_order');
       final result = {
         'version': version,
         'categories': await all(
@@ -265,7 +266,9 @@ class PgContentService {
           'SELECT id, category_id, name, "order", image_url, locked FROM subcategories ORDER BY id',
         ),
         'exams': await all(
-          'SELECT id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key FROM exams ORDER BY id',
+          hasExamSortOrder
+              ? 'SELECT id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, COALESCE(sort_order, id) AS sort_order FROM exams ORDER BY category_id, COALESCE(sort_order, id), id'
+              : 'SELECT id, title, description, category_id, subcategory_id, question_count, published, time_limit_minutes, shuffle_options, negative_marking, pass_percent, theme_key, id AS sort_order FROM exams ORDER BY category_id, id',
         ),
         'questions': await all(
           'SELECT id, body, explanation, multiple, locked FROM questions ORDER BY id',

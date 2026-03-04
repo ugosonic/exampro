@@ -61,7 +61,7 @@ class _AdminConsoleScreenState extends ConsumerState<AdminConsoleScreen>
               width: double.infinity,
               color: Colors.amber.withValues(alpha: 0.2),
               padding: const EdgeInsets.all(8),
-              child: const Text('Admins only — limited view'),
+              child: const Text('Admins only - limited view'),
             ),
           _AdminCardsBar(controller: _tabController),
           Expanded(
@@ -785,103 +785,249 @@ Future<String> _ensureRemoteUrl(
   }
 }
 
-class _ExamsTab extends ConsumerWidget {
+class _ExamsTab extends ConsumerStatefulWidget {
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(adminRepositoryProvider);
-    return Column(
-      children: [
-        Expanded(
-          child: StreamBuilder(
-            stream: repo.watchExamsLocalized(),
-            builder: (context, snap) {
-              final list = snap.data ?? const [];
-              if (list.isEmpty) {
-                return const Center(child: Text('No exams yet'));
-              }
-              return ListView.separated(
-                itemCount: list.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
-                itemBuilder: (_, i) {
-                  final e = list[i];
-                  return ListTile(
-                    title: Text(
-                      e.title.isEmpty ? 'Untitled' : e.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      '${e.questionCount} questions · ${e.published ? 'Published' : 'Draft'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Wrap(
-                      spacing: 8,
-                      children: [
-                        IconButton(
-                          tooltip: 'Edit',
-                          icon: const Icon(Icons.edit),
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ExamEditorScreen(examId: e.id),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Delete',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () async {
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Delete exam?'),
-                                content: const Text(
-                                  'This will delete attempts and related data.',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(true),
-                                    child: const Text('Delete'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (ok == true) await repo.deleteExam(e.id);
-                          },
-                        ),
-                      ],
-                    ),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ExamEditorScreen(examId: e.id),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
+  ConsumerState<_ExamsTab> createState() => _ExamsTabState();
+}
+
+class _ExamsTabState extends ConsumerState<_ExamsTab> {
+  int? _selectedCategoryId;
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openEditor(BuildContext context, int examId) async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ExamEditorScreen(examId: examId)));
+    _refresh();
+  }
+
+  Future<void> _reorderExams(
+    BuildContext context,
+    List<Exam> exams,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (_selectedCategoryId == null) return;
+    final repo = ref.read(adminRepositoryProvider);
+    final reordered = List<Exam>.from(exams);
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+    if (oldIndex == newIndex) return;
+    final moved = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, moved);
+    try {
+      await repo.reorderExamsInCategory(_selectedCategoryId!, [
+        for (final exam in reordered) exam.id,
+      ]);
+      _refresh();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Reorder failed: $e')));
+    }
+  }
+
+  Widget _examTile(
+    BuildContext context,
+    Exam e, {
+    String? subtitlePrefix,
+    int? dragIndex,
+    Key? key,
+  }) {
+    final status =
+        '${e.questionCount} questions - ${e.published ? 'Published' : 'Draft'}';
+    final subtitle = subtitlePrefix == null
+        ? status
+        : '$subtitlePrefix - $status';
+    return ListTile(
+      key: key,
+      title: Text(
+        e.title.isEmpty ? 'Untitled' : e.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: Wrap(
+        spacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          IconButton(
+            tooltip: 'Edit',
+            icon: const Icon(Icons.edit),
+            onPressed: () => _openEditor(context, e.id),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('New Exam'),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ExamBuilderScreen()),
+          IconButton(
+            tooltip: 'Delete',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _deleteExam(context, e.id),
+          ),
+          if (dragIndex != null)
+            ReorderableDragStartListener(
+              index: dragIndex,
+              child: const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Icon(Icons.drag_handle),
               ),
             ),
+        ],
+      ),
+      onTap: () => _openEditor(context, e.id),
+    );
+  }
+
+  Future<void> _deleteExam(BuildContext context, int examId) async {
+    final repo = ref.read(adminRepositoryProvider);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete exam?'),
+        content: const Text('This will delete attempts and related data.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
           ),
-        ),
-      ],
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await repo.deleteExam(examId);
+      _refresh();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = ref.watch(adminRepositoryProvider);
+    return StreamBuilder<List<Category>>(
+      stream: repo.watchCategories(),
+      builder: (context, categoriesSnap) {
+        final categories = categoriesSnap.data ?? const <Category>[];
+        final categoryNames = <int, String>{
+          for (final category in categories) category.id: category.name,
+        };
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: DropdownButtonFormField<int?>(
+                initialValue: _selectedCategoryId,
+                decoration: const InputDecoration(
+                  labelText: 'Filter By Category',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('All categories'),
+                  ),
+                  for (final category in categories)
+                    DropdownMenuItem<int?>(
+                      value: category.id,
+                      child: Text(category.name),
+                    ),
+                ],
+                onChanged: (value) {
+                  setState(() => _selectedCategoryId = value);
+                },
+              ),
+            ),
+            if (_selectedCategoryId == null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Select a category to drag and reorder exams.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
+            Expanded(
+              child: StreamBuilder<List<Exam>>(
+                stream: repo.watchExamsLocalized(
+                  categoryId: _selectedCategoryId,
+                ),
+                builder: (context, snap) {
+                  final list = snap.data ?? const <Exam>[];
+                  if (list.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _selectedCategoryId == null
+                            ? 'No exams yet'
+                            : 'No exams in this category',
+                      ),
+                    );
+                  }
+                  if (_selectedCategoryId == null) {
+                    return ListView.separated(
+                      itemCount: list.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final e = list[i];
+                        return _examTile(
+                          context,
+                          e,
+                          subtitlePrefix: categoryNames[e.categoryId],
+                        );
+                      },
+                    );
+                  }
+                  return ReorderableListView.builder(
+                    buildDefaultDragHandles: false,
+                    itemCount: list.length,
+                    onReorder: (oldIndex, newIndex) =>
+                        _reorderExams(context, list, oldIndex, newIndex),
+                    itemBuilder: (context, i) {
+                      final e = list[i];
+                      return _examTile(
+                        context,
+                        e,
+                        key: ValueKey('exam-${e.id}'),
+                        dragIndex: i,
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('New Exam'),
+                  onPressed: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ExamBuilderScreen(),
+                      ),
+                    );
+                    _refresh();
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1563,7 +1709,7 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration: const InputDecoration(labelText: 'GBP (£)'),
+                  decoration: const InputDecoration(labelText: 'GBP'),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1598,10 +1744,10 @@ class _PaymentsTabState extends ConsumerState<_PaymentsTab> {
               return Card(
                 child: ListTile(
                   title: Text(
-                    '${p.userEmail} • ${p.currency} ${(p.amountMinor / 100).toStringAsFixed(2)}',
+                    '${p.userEmail} - ${p.currency} ${(p.amountMinor / 100).toStringAsFixed(2)}',
                   ),
                   subtitle: Text(
-                    '${p.status} • ${p.createdAt.toLocal()}'.split('.').first,
+                    '${p.status} - ${p.createdAt.toLocal()}'.split('.').first,
                   ),
                   trailing: p.refunded
                       ? const Text('Refunded')
