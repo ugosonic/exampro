@@ -34,6 +34,15 @@ class ExamRepository {
     if (v is String) return int.tryParse(v);
     return null;
   }
+
+  bool _asBool(dynamic v, {bool fallback = false}) {
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    final text = v?.toString().trim().toLowerCase();
+    if (text == 'true' || text == '1') return true;
+    if (text == 'false' || text == '0') return false;
+    return fallback;
+  }
   // -------------------------------------------------------------------
 
   Future<Exam?> getExam(int id) async {
@@ -58,10 +67,10 @@ class ExamRepository {
         categoryId: _asInt(m['category_id']) ?? 0,
         subcategoryId: _asInt(m['subcategory_id']),
         questionCount: _asInt(m['question_count']) ?? 0,
-        published: (m['published'] as bool?) ?? false,
+        published: _asBool(m['published']),
         timeLimitMinutes: _asInt(m['time_limit_minutes']) ?? 0,
-        shuffleOptions: (m['shuffle_options'] as bool?) ?? true,
-        negativeMarking: (m['negative_marking'] as bool?) ?? false,
+        shuffleOptions: _asBool(m['shuffle_options'], fallback: true),
+        negativeMarking: _asBool(m['negative_marking']),
         passPercent: _asInt(m['pass_percent']) ?? 60,
         themeKey: _asInt(m['theme_key']) ?? 0,
         pdfUrl: (m['pdf_url'] as String?) ?? '',
@@ -133,8 +142,8 @@ class ExamRepository {
           id: _asInt(m['id']) ?? qid,
           body: sanitizeDisplayText((m['body'] as String?) ?? ''),
           explanation: sanitizeDisplayText((m['explanation'] as String?) ?? ''),
-          multiple: (m['multiple'] as bool?) ?? false,
-          locked: (m['locked'] as bool?) ?? false,
+          multiple: _asBool(m['multiple']),
+          locked: _asBool(m['locked']),
         );
       }
 
@@ -164,7 +173,7 @@ class ExamRepository {
                     id: _asInt(o['id']) ?? 0,
                     questionId: _asInt(o['question_id']) ?? 0,
                     label: sanitizeDisplayText((o['label'] as String?) ?? ''),
-                    isCorrect: (o['is_correct'] as bool?) ?? false,
+                    isCorrect: _asBool(o['is_correct']),
                     order: _asInt(o['order']) ?? 0,
                   ),
                   lang,

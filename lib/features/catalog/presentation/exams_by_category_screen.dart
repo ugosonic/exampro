@@ -14,6 +14,13 @@ class ExamsByCategoryScreen extends ConsumerWidget {
   final String categoryId;
   const ExamsByCategoryScreen({super.key, required this.categoryId});
 
+  bool _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final text = value?.toString().trim().toLowerCase();
+    return text == 'true' || text == '1';
+  }
+
   IconData _iconForExam(int examId) {
     const icons = [
       Icons.menu_book,
@@ -68,11 +75,11 @@ class ExamsByCategoryScreen extends ConsumerWidget {
                 .toSet()
                 .toList();
             Future<List<Map<String, dynamic>>> loadLocalSubs() async => [
-                  for (final s in await (db.select(
-                    db.subcategories,
-                  )..where((s) => s.id.isIn(subIds))).get())
-                    {'id': s.id, 'name': s.name, 'locked': s.locked},
-                ];
+              for (final s in await (db.select(
+                db.subcategories,
+              )..where((s) => s.id.isIn(subIds))).get())
+                {'id': s.id, 'name': s.name, 'locked': s.locked},
+            ];
             final List<Map<String, dynamic>> subs = subIds.isEmpty
                 ? const <Map<String, dynamic>>[]
                 : hasApi
@@ -92,7 +99,7 @@ class ExamsByCategoryScreen extends ConsumerWidget {
                 : await loadLocalSubs();
             final subLocked = {
               for (final m in subs)
-                (m['id'] as int): ((m['locked'] as bool?) ?? false),
+                (m['id'] as num).toInt(): _asBool(m['locked']),
             };
             // Completed exams set
             final completedRows =
