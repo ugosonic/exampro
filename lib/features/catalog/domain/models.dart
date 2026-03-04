@@ -1,18 +1,39 @@
+bool _asBool(dynamic value, {bool fallback = false}) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  final text = value?.toString().trim().toLowerCase();
+  if (text == 'true' || text == '1') return true;
+  if (text == 'false' || text == '0') return false;
+  return fallback;
+}
+
 class Category {
   final int id;
   final String name;
   final int order;
   final String imageUrl;
   final bool locked;
-  const Category({required this.id, required this.name, required this.order, this.imageUrl = '', this.locked = false});
+  const Category({
+    required this.id,
+    required this.name,
+    required this.order,
+    this.imageUrl = '',
+    this.locked = false,
+  });
   factory Category.fromJson(Map<String, dynamic> json) => Category(
-        id: json['id'] as int,
-        name: json['name'] as String,
-        order: (json['order'] as num?)?.toInt() ?? 0,
-        imageUrl: json['imageUrl'] as String? ?? '',
-        locked: json['locked'] as bool? ?? false,
-      );
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'order': order, 'imageUrl': imageUrl, 'locked': locked};
+    id: (json['id'] as num).toInt(),
+    name: json['name'] as String,
+    order: (json['order'] as num?)?.toInt() ?? 0,
+    imageUrl: json['imageUrl'] as String? ?? '',
+    locked: _asBool(json['locked']),
+  );
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'order': order,
+    'imageUrl': imageUrl,
+    'locked': locked,
+  };
 }
 
 class ExamSummary {
@@ -23,23 +44,31 @@ class ExamSummary {
   final int questionCount;
   final bool published;
   final int themeKey;
-  const ExamSummary({required this.id, required this.title, required this.categoryId, this.subcategoryId, required this.questionCount, required this.published, this.themeKey = 0});
+  const ExamSummary({
+    required this.id,
+    required this.title,
+    required this.categoryId,
+    this.subcategoryId,
+    required this.questionCount,
+    required this.published,
+    this.themeKey = 0,
+  });
   factory ExamSummary.fromJson(Map<String, dynamic> json) => ExamSummary(
-        id: json['id'] as int,
-        title: json['title'] as String,
-        categoryId: json['categoryId'] as int,
-        subcategoryId: (json['subcategoryId'] as num?)?.toInt(),
-        questionCount: (json['questionCount'] as num?)?.toInt() ?? 0,
-        published: json['published'] as bool? ?? false,
-        themeKey: (json['themeKey'] as num?)?.toInt() ?? 0,
-      );
+    id: (json['id'] as num).toInt(),
+    title: json['title'] as String,
+    categoryId: (json['categoryId'] as num).toInt(),
+    subcategoryId: (json['subcategoryId'] as num?)?.toInt(),
+    questionCount: (json['questionCount'] as num?)?.toInt() ?? 0,
+    published: _asBool(json['published']),
+    themeKey: (json['themeKey'] as num?)?.toInt() ?? 0,
+  );
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'categoryId': categoryId,
-        'subcategoryId': subcategoryId,
-        'questionCount': questionCount,
-        'published': published,
-        'themeKey': themeKey,
-      };
+    'id': id,
+    'title': title,
+    'categoryId': categoryId,
+    'subcategoryId': subcategoryId,
+    'questionCount': questionCount,
+    'published': published,
+    'themeKey': themeKey,
+  };
 }
