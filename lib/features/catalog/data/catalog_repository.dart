@@ -88,10 +88,7 @@ class CatalogRepository {
         .get();
     final exams = <models.ExamSummary>[];
     for (final r in rows) {
-      final rawPublished = r.data['published'];
-      final published =
-          (rawPublished as bool?) ??
-          ((rawPublished as num?)?.toInt() ?? 0) != 0;
+      final published = _asBool(r.data['published']);
       final id = (r.data['id'] as num).toInt();
       exams.add(
         models.ExamSummary(
