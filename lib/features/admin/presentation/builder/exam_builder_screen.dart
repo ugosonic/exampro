@@ -34,6 +34,145 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
   int? categoryId;
   int? subcategoryId;
 
+  String _questionFingerprint(String body) =>
+      body.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  List<Map<String, dynamic>> _normalizeImportedQuestions(
+    List<Map<String, dynamic>> imported,
+  ) {
+    return imported.map((m) {
+      final options = (m['options'] as List).cast<String>();
+      final answers = (m['answers'] as List).cast<int>();
+      final multiple = (m['multiple'] as bool?) ?? (answers.length > 1);
+      return <String, dynamic>{
+        'body': (m['body'] as String?) ?? (m['text'] as String? ?? ''),
+        'explanation': (m['explanation'] as String?) ?? '',
+        'multiple': multiple,
+        'options': [
+          for (var i = 0; i < options.length; i++)
+            {'label': options[i], 'correct': answers.contains(i + 1)},
+        ],
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>?> _resolveImportedDuplicates(
+    List<Map<String, dynamic>> normalized,
+  ) async {
+    final existingFingerprints = <String>{};
+    for (final q in questions) {
+      final fingerprint = _questionFingerprint((q['body'] as String?) ?? '');
+      if (fingerprint.isNotEmpty) {
+        existingFingerprints.add(fingerprint);
+      }
+    }
+    final importedFingerprints = <String>{};
+    final duplicates = <String>[];
+    final filtered = <Map<String, dynamic>>[];
+
+    for (final q in normalized) {
+      final body = ((q['body'] as String?) ?? '').trim();
+      final fingerprint = _questionFingerprint(body);
+      final isDuplicate =
+          fingerprint.isNotEmpty &&
+          (existingFingerprints.contains(fingerprint) ||
+              importedFingerprints.contains(fingerprint));
+      if (isDuplicate) {
+        if (!duplicates.contains(body)) {
+          duplicates.add(body.isEmpty ? '(Empty question text)' : body);
+        }
+        continue;
+      }
+      if (fingerprint.isNotEmpty) {
+        importedFingerprints.add(fingerprint);
+      }
+      filtered.add(q);
+    }
+
+    if (duplicates.isEmpty || !mounted) {
+      return normalized;
+    }
+
+    final decision = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Duplicate Questions Found'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'These imported questions already exist in this exam draft or are duplicated in the import batch:',
+              ),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final duplicate in duplicates)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text('- $duplicate'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Choose whether to skip all duplicate questions and import the rest, or import everything as-is.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('skip'),
+            child: const Text('Skip Duplicates'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('import'),
+            child: const Text('Import All'),
+          ),
+        ],
+      ),
+    );
+
+    if (decision == null) return null;
+    if (decision == 'skip') return filtered;
+    return normalized;
+  }
+
+  Future<void> _applyImportedQuestions(
+    List<Map<String, dynamic>> normalized, {
+    required String successPrefix,
+  }) async {
+    final resolved = await _resolveImportedDuplicates(normalized);
+    if (!mounted || resolved == null) return;
+
+    final skipped = normalized.length - resolved.length;
+    if (resolved.isNotEmpty) {
+      setState(() => questions.addAll(resolved));
+    }
+
+    final message = resolved.isEmpty
+        ? 'All imported questions were duplicates. Nothing was added.'
+        : skipped > 0
+        ? '$successPrefix ${resolved.length} questions. Skipped $skipped duplicates.'
+        : '$successPrefix ${resolved.length} questions.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -524,22 +663,8 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
       } else {
         imported = parseJsonQuestions(jsonDecode(raw));
       }
-      // Normalize into local builder shape
-      final normalized = imported.map((m) {
-        final options = (m['options'] as List).cast<String>();
-        final answers = (m['answers'] as List).cast<int>();
-        final multiple = (m['multiple'] as bool?) ?? (answers.length > 1);
-        return <String, dynamic>{
-          'body': (m['body'] as String?) ?? (m['text'] as String? ?? ''),
-          'explanation': (m['explanation'] as String?) ?? '',
-          'multiple': multiple,
-          'options': [
-            for (var i = 0; i < options.length; i++)
-              {'label': options[i], 'correct': answers.contains(i + 1)},
-          ],
-        };
-      }).toList();
-      setState(() => questions.addAll(normalized));
+      final normalized = _normalizeImportedQuestions(imported);
+      await _applyImportedQuestions(normalized, successPrefix: 'Imported');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -565,26 +690,8 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
         throw Exception('Unable to read selected file');
       }
       final imported = parseCsvQuestions(contents);
-      final normalized = imported.map((m) {
-        final options = (m['options'] as List).cast<String>();
-        final answers = (m['answers'] as List).cast<int>();
-        final multiple = (m['multiple'] as bool?) ?? (answers.length > 1);
-        return <String, dynamic>{
-          'body': (m['body'] as String?) ?? (m['text'] as String? ?? ''),
-          'explanation': (m['explanation'] as String?) ?? '',
-          'multiple': multiple,
-          'options': [
-            for (var i = 0; i < options.length; i++)
-              {'label': options[i], 'correct': answers.contains(i + 1)},
-          ],
-        };
-      }).toList();
-      if (mounted) setState(() => questions.addAll(normalized));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('CSV imported successfully')),
-        );
-      }
+      final normalized = _normalizeImportedQuestions(imported);
+      await _applyImportedQuestions(normalized, successPrefix: 'Imported');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
