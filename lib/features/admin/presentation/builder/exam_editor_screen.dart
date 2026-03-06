@@ -140,15 +140,26 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                               final pick = await FilePicker.platform.pickFiles(
                                 type: FileType.custom,
                                 allowedExtensions: ['pdf'],
+                                withData: true,
                               );
                               if (pick == null || pick.files.isEmpty) return;
                               final f = pick.files.single;
                               final dio = ref.read(dioProvider);
+                              final multipart = f.bytes != null
+                                  ? MultipartFile.fromBytes(
+                                      f.bytes!,
+                                      filename: f.name,
+                                    )
+                                  : (f.path != null && f.path!.isNotEmpty
+                                        ? await MultipartFile.fromFile(
+                                            f.path!,
+                                            filename: f.name,
+                                          )
+                                        : throw Exception(
+                                            'Unable to read selected PDF file',
+                                          ));
                               final form = FormData.fromMap({
-                                'file': await MultipartFile.fromFile(
-                                  f.path!,
-                                  filename: f.name,
-                                ),
+                                'file': multipart,
                               });
                               final res = await dio.post(
                                 '/admin/upload/pdf',

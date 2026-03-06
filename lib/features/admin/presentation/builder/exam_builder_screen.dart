@@ -31,6 +31,7 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
   int passPercent = 60;
   int themeKey = 0; // 0 = None, 1..5 = gradients
   final List<Map<String, dynamic>> questions = [];
+  PlatformFile? _pickedPdfFile;
   int? categoryId;
   int? subcategoryId;
 
@@ -220,26 +221,46 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                       final res = await FilePicker.platform.pickFiles(
                         type: FileType.custom,
                         allowedExtensions: ['pdf'],
+                        withData: true,
                       );
-                      final path = res?.files.single.path;
-                      if (path != null) setState(() => pdf.text = path);
+                      if (res == null || res.files.isEmpty) return;
+                      final file = res.files.single;
+                      setState(() {
+                        _pickedPdfFile = file;
+                        pdf.text = file.path ?? file.name;
+                      });
                     },
                     label: const Text('Pick PDF file'),
                   ),
                 ),
-                if (pdf.text.trim().isNotEmpty &&
-                    !pdf.text.trim().startsWith('http'))
+                if ((pdf.text.trim().isNotEmpty &&
+                        !pdf.text.trim().startsWith('http')) ||
+                    _pickedPdfFile != null)
                   Align(
                     alignment: Alignment.centerLeft,
                     child: FilledButton.icon(
                       icon: const Icon(Icons.cloud_upload),
                       onPressed: () async {
                         try {
-                          final path = pdf.text.trim();
                           final dio = ref.read(dioProvider);
-                          final form = FormData.fromMap({
-                            'file': await MultipartFile.fromFile(path),
-                          });
+                          final picked = _pickedPdfFile;
+                          final multipart = picked != null
+                              ? (picked.bytes != null
+                                    ? MultipartFile.fromBytes(
+                                        picked.bytes!,
+                                        filename: picked.name,
+                                      )
+                                    : (picked.path != null &&
+                                              picked.path!.isNotEmpty
+                                          ? await MultipartFile.fromFile(
+                                              picked.path!,
+                                              filename: picked.name,
+                                            )
+                                          : throw Exception(
+                                              'Unable to read selected PDF file',
+                                            )))
+                              : await MultipartFile.fromFile(pdf.text.trim());
+                          final form = FormData.fromMap({'file': multipart});
                           final res = await dio.post(
                             '/admin/upload/pdf',
                             data: form,
@@ -250,7 +271,10 @@ class _ExamBuilderScreenState extends ConsumerState<ExamBuilderScreen> {
                           final absolute = url.startsWith('/')
                               ? '${env.apiBaseUrl}$url'
                               : url;
-                          setState(() => pdf.text = absolute);
+                          setState(() {
+                            pdf.text = absolute;
+                            _pickedPdfFile = null;
+                          });
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('PDF uploaded')),
