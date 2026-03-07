@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io' show File;
+
 import 'package:citizentest/core/config/env_loader.dart';
 import 'package:citizentest/core/network/dio_client.dart';
 import 'package:citizentest/features/admin/data/admin_repository.dart';
+import 'package:citizentest/features/admin/utils/import_parser.dart';
 import 'package:citizentest/features/exam/data/exam_repository.dart';
 import 'package:citizentest/features/exam/presentation/pdf_viewer_screen.dart';
 import 'package:dio/dio.dart';
@@ -26,6 +30,236 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   final _pdfCtrl = TextEditingController();
   bool _published = false;
   bool _readonly = false;
+
+  String _questionFingerprint(String body) =>
+      body.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  List<
+    ({
+      String body,
+      String explanation,
+      List<({String text, bool correct})> options,
+    })
+  >
+  _normalizeImportedQuestions(List<Map<String, dynamic>> imported) {
+    final normalized =
+        <
+          ({
+            String body,
+            String explanation,
+            List<({String text, bool correct})> options,
+          })
+        >[];
+    for (final m in imported) {
+      final body = ((m['body'] as String?) ?? (m['text'] as String? ?? ''))
+          .trim();
+      final explanation = ((m['explanation'] as String?) ?? '').trim();
+      final optionsRaw = (m['options'] as List?) ?? const <dynamic>[];
+      final answersRaw = (m['answers'] as List?) ?? const <dynamic>[];
+      final answers = answersRaw
+          .map((e) => (e is num) ? e.toInt() : int.tryParse('$e'))
+          .whereType<int>()
+          .toSet();
+      final options = <({String text, bool correct})>[];
+      for (var i = 0; i < optionsRaw.length; i++) {
+        final label = '${optionsRaw[i]}'.trim();
+        if (label.isEmpty) continue;
+        options.add((text: label, correct: answers.contains(i + 1)));
+      }
+      if (body.isEmpty ||
+          options.length < 2 ||
+          !options.any((o) => o.correct)) {
+        continue;
+      }
+      normalized.add((body: body, explanation: explanation, options: options));
+    }
+    return normalized;
+  }
+
+  Future<
+    List<
+      ({
+        String body,
+        String explanation,
+        List<({String text, bool correct})> options,
+      })
+    >?
+  >
+  _resolveImportedDuplicates(
+    List<
+      ({
+        String body,
+        String explanation,
+        List<({String text, bool correct})> options,
+      })
+    >
+    imported,
+  ) async {
+    final existing = {
+      for (final item in _items) _questionFingerprint(item.body),
+    }..remove('');
+    final seenImport = <String>{};
+    final duplicates = <String>[];
+    final unique =
+        <
+          ({
+            String body,
+            String explanation,
+            List<({String text, bool correct})> options,
+          })
+        >[];
+
+    for (final q in imported) {
+      final fp = _questionFingerprint(q.body);
+      final isDuplicate =
+          fp.isNotEmpty && (existing.contains(fp) || seenImport.contains(fp));
+      if (isDuplicate) {
+        if (!duplicates.contains(q.body)) duplicates.add(q.body);
+        continue;
+      }
+      if (fp.isNotEmpty) seenImport.add(fp);
+      unique.add(q);
+    }
+
+    if (duplicates.isEmpty || !mounted) return imported;
+
+    final decision = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Duplicate Questions Found'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'These questions are duplicates in this exam or in the uploaded file:',
+              ),
+              const SizedBox(height: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final text in duplicates)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text('- $text'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Skip duplicates and import the rest, or import all as-is?',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('skip'),
+            child: const Text('Skip Duplicates'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('all'),
+            child: const Text('Import All'),
+          ),
+        ],
+      ),
+    );
+
+    if (decision == null) return null;
+    if (decision == 'skip') return unique;
+    return imported;
+  }
+
+  Future<void> _importQuestionsFromFile() async {
+    try {
+      final pick = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
+      if (pick == null || pick.files.isEmpty) return;
+      final file = pick.files.single;
+
+      String raw;
+      if (file.bytes != null) {
+        raw = utf8.decode(file.bytes!);
+      } else if (file.path != null && file.path!.isNotEmpty) {
+        raw = await File(file.path!).readAsString();
+      } else {
+        throw Exception('Unable to read selected file');
+      }
+
+      final lowerName = file.name.toLowerCase();
+      List<Map<String, dynamic>> imported;
+      if (lowerName.endsWith('.json')) {
+        imported = parseJsonQuestions(jsonDecode(raw));
+      } else if (lowerName.endsWith('.csv')) {
+        imported = parseCsvQuestions(raw);
+      } else {
+        try {
+          imported = parseJsonQuestions(jsonDecode(raw));
+          if (imported.isEmpty) {
+            imported = parseCsvQuestions(raw);
+          }
+        } catch (_) {
+          imported = parseCsvQuestions(raw);
+        }
+      }
+
+      final normalized = _normalizeImportedQuestions(imported);
+      if (normalized.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No valid questions found in selected file.'),
+          ),
+        );
+        return;
+      }
+
+      final toImport = await _resolveImportedDuplicates(normalized);
+      if (toImport == null || !mounted) return;
+
+      final repo = ref.read(adminRepositoryProvider);
+      final added = <({int id, String body})>[];
+      final baseOrder = _items.length;
+      for (var i = 0; i < toImport.length; i++) {
+        final q = toImport[i];
+        final qId = await repo.addQuestionWithOptions(
+          examId: widget.examId,
+          text: q.body.isEmpty ? 'Question' : q.body,
+          explanation: q.explanation,
+          options: q.options,
+          multiple: q.options.where((o) => o.correct).length > 1,
+          order: baseOrder + i,
+        );
+        added.add((id: qId, body: q.body));
+      }
+
+      if (!mounted) return;
+      setState(() => _items.addAll(added));
+      final skipped = normalized.length - toImport.length;
+      final msg = skipped > 0
+          ? 'Imported ${added.length} questions. Skipped $skipped duplicates.'
+          : 'Imported ${added.length} questions.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+    }
+  }
 
   @override
   void initState() {
@@ -138,12 +372,14 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                           onPressed: () async {
                             try {
                               final pick = await FilePicker.platform.pickFiles(
-                                type: FileType.custom,
-                                allowedExtensions: ['pdf'],
+                                type: FileType.any,
                                 withData: true,
                               );
                               if (pick == null || pick.files.isEmpty) return;
                               final f = pick.files.single;
+                              if (!f.name.toLowerCase().endsWith('.pdf')) {
+                                throw Exception('Please choose a PDF file');
+                              }
                               final dio = ref.read(dioProvider);
                               final multipart = f.bytes != null
                                   ? MultipartFile.fromBytes(
@@ -229,9 +465,20 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                       ),
                     ),
                     const Divider(height: 24),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Reorder, edit, or remove questions'),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('Reorder, edit, or remove questions'),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.file_upload_outlined),
+                          label: const Text('Import CSV/JSON'),
+                          onPressed: _importQuestionsFromFile,
+                        ),
+                      ],
                     ),
                   ],
                 ),
